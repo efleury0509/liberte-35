@@ -1,0 +1,19 @@
+# Dépendances et fichiers fabriqués
+node_modules/
+dist/
+target/
+src-tauri/gen/
+test-results/
+playwright-report/
+
+# Jamais de données ni de secrets dans le dépôt
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db
+*.l35sauvegarde
+.env
+.env.*
+*.pem
+*.key
+client_secret*.json

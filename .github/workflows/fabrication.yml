@@ -1,0 +1,79 @@
+# Vérifie le projet et fabrique les deux installateurs Windows
+# (Essai et officiel) sur une machine Windows de GitHub.
+# Gratuit dans le quota de GitHub ; aucun secret n'est utilisé.
+
+name: Fabrication
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fabrication-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Tests et installateurs Windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Rust (version figée dans rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Installer les dépendances (versions figées)
+        run: npm ci
+
+      - name: Vérifier les types
+        run: npm run verifier
+
+      - name: Tests unitaires de l'interface (dont l'absence de secrets)
+        run: npm test
+
+      - name: Tests de parcours dans un navigateur
+        run: |
+          npx playwright install chromium
+          npm run e2e
+
+      - name: Tests du stockage
+        run: cargo test -p l35-stockage --locked
+
+      - name: Fabriquer l'installateur Essai
+        run: npm run fabriquer:essai
+
+      - name: Fabriquer l'installateur officiel
+        run: npm run fabriquer:officielle
+
+      - name: Publier l'installateur Essai
+        uses: actions/upload-artifact@v4
+        with:
+          name: liberte-35-essai
+          path: target/release/bundle/nsis/*Essai*-setup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publier l'installateur officiel
+        uses: actions/upload-artifact@v4
+        with:
+          name: liberte-35-officiel
+          path: |
+            target/release/bundle/nsis/*-setup.exe
+            !target/release/bundle/nsis/*Essai*-setup.exe
+          if-no-files-found: error
+          retention-days: 30

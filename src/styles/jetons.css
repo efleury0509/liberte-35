@@ -1,0 +1,40 @@
+/*
+  Jetons visuels TEMPORAIRES.
+  Toute l'apparence passe par ces variables : la direction artistique
+  finale remplacera ce fichier sans toucher aux calculs (architecture, section 7).
+  Thème sombre et neutre, volontairement sans identité graphique.
+*/
+:root {
+  color-scheme: dark;
+
+  /* Couleurs */
+  --couleur-fond: #16171a;
+  --couleur-surface: #1f2125;
+  --couleur-surface-active: #2a2d33;
+  --couleur-bordure: #33363c;
+  --couleur-texte: #e6e7ea;
+  --couleur-texte-discret: #a3a7af;
+  --couleur-accent: #8fb3d9;
+  --couleur-accent-texte: #0f141a;
+  --couleur-attention: #e0b45c;
+  --couleur-attention-fond: #2f2717;
+  --couleur-succes: #7cc49a;
+  --couleur-erreur: #e08a7c;
+  --couleur-focus: #f2d27a;
+
+  /* Typographie : polices du système, rien n'est téléchargé. */
+  --police: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  --taille-texte: 15px;
+  --taille-petit: 13px;
+  --taille-titre: 24px;
+
+  /* Espacements et formes */
+  --espace-1: 4px;
+  --espace-2: 8px;
+  --espace-3: 12px;
+  --espace-4: 16px;
+  --espace-6: 24px;
+  --espace-8: 32px;
+  --arrondi: 8px;
+  --largeur-barre: 240px;
+}

@@ -1,0 +1,19 @@
+[package]
+name = "liberte-35"
+description = "Liberté 35 — application de bureau"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "liberte_35_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+serde = { version = "1", features = ["derive"] }
+l35-stockage = { path = "../crates/stockage" }

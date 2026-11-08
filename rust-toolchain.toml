@@ -1,0 +1,4 @@
+# Version de Rust figée : la même partout (ici, sur GitHub, dans 5 ans).
+[toolchain]
+channel = "1.97.0"
+profile = "minimal"

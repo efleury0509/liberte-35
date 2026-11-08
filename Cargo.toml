@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = ["crates/stockage", "src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[profile.release]
+# Application plus petite et plus rapide ; pas d'informations de débogage livrées.
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

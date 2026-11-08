@@ -1,0 +1,53 @@
+# Reconstruire Liberté 35 à long terme
+
+Ce document permet à n'importe quelle personne à l'aise avec un ordinateur
+de refabriquer l'application à partir de ce code, sans Claude. Toutes les
+versions d'outils sont figées dans le dépôt, pour obtenir le même résultat
+dans plusieurs années.
+
+## Où sont les versions figées
+
+| Outil | Fichier | Version |
+| --- | --- | --- |
+| Rust | `rust-toolchain.toml` | 1.97.0 |
+| Bibliothèques Rust | `Cargo.lock` | toutes fixées |
+| Node.js | `package.json` (`engines`) | 22 ou plus récent |
+| Bibliothèques JavaScript | `package-lock.json` | toutes fixées |
+
+## Option A — GitHub Actions (le plus simple)
+
+1. Ouvrir le dépôt sur github.com, onglet **Actions**.
+2. Choisir **Fabrication**, puis **Run workflow** sur la branche `main`.
+3. À la fin (environ 15 à 25 minutes), ouvrir l'exécution : les installateurs
+   sont dans **Artifacts** (`liberte-35-officiel`, `liberte-35-essai`).
+
+## Option B — Sur un ordinateur Windows, sans GitHub
+
+À faire une seule fois :
+
+1. Installer **Node.js 22** (nodejs.org, version LTS).
+2. Installer **Rust** avec `rustup` (rustup.rs). La bonne version sera
+   choisie automatiquement grâce à `rust-toolchain.toml`.
+3. Installer les **Microsoft C++ Build Tools** (gratuits) avec la charge de
+   travail « Développement Desktop en C++ ».
+4. WebView2 est déjà présent sur Windows 10 et 11.
+
+Puis, dans un terminal ouvert dans le dossier du projet :
+
+```
+npm ci
+npm test
+cargo test -p l35-stockage --locked
+npm run fabriquer:officielle
+```
+
+L'installateur se trouve dans `target\release\bundle\nsis\`.
+`npm run fabriquer:essai` fabrique la version d'essai.
+
+## Si un outil a disparu
+
+- Les données ne dépendent pas de l'application : le fichier
+  `liberte-35.sqlite` est au format SQLite, ouvert et documenté, lisible par
+  de nombreux logiciels gratuits (par exemple « DB Browser for SQLite »).
+- Le fichier se trouve dans `%APPDATA%\ca.liberte35.officiel\`.
+- L'export portable (JSON et CSV), prévu à l'étape 6, offrira une autre porte de sortie.

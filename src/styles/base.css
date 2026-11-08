@@ -1,0 +1,33 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--couleur-fond);
+  color: var(--couleur-texte);
+  font-family: var(--police);
+  font-size: var(--taille-texte);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+#app {
+  height: 100%;
+}
+
+:focus-visible {
+  outline: 3px solid var(--couleur-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
