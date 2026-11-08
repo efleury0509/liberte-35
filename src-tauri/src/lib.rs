@@ -28,8 +28,14 @@ struct EtatApplication {
 }
 
 #[tauri::command]
-fn etat_application(app: tauri::AppHandle, etat: tauri::State<'_, EtatApp>) -> Result<EtatApplication, String> {
-    let garde = etat.stockage.lock().map_err(|_| "Stockage indisponible.".to_string())?;
+fn etat_application(
+    app: tauri::AppHandle,
+    etat: tauri::State<'_, EtatApp>,
+) -> Result<EtatApplication, String> {
+    let garde = etat
+        .stockage
+        .lock()
+        .map_err(|_| "Stockage indisponible.".to_string())?;
     let stockage = garde.as_ref().map_err(|m| m.clone())?;
     let e = stockage.etat().map_err(|err| err.to_string())?;
     Ok(EtatApplication {

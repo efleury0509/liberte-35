@@ -27,7 +27,10 @@ pub fn version_schema_attendue() -> u32 {
 
 /// Liste des versions du schéma et de leur description, pour l'affichage.
 pub fn versions_du_schema() -> Vec<(u32, &'static str)> {
-    MIGRATIONS.iter().map(|m| (m.version, m.description)).collect()
+    MIGRATIONS
+        .iter()
+        .map(|m| (m.version, m.description))
+        .collect()
 }
 
 /// Les deux installations possibles. Chacune a son propre fichier.
@@ -71,9 +74,15 @@ pub enum ErreurStockage {
     Sqlite(rusqlite::Error),
     Fichier(std::io::Error),
     /// Le fichier appartient à l'autre installation.
-    ProfilIncompatible { attendu: Profil, trouve: String },
+    ProfilIncompatible {
+        attendu: Profil,
+        trouve: String,
+    },
     /// Le fichier a été créé par une version plus récente de l'application.
-    VersionTropRecente { fichier: u32, application: u32 },
+    VersionTropRecente {
+        fichier: u32,
+        application: u32,
+    },
     /// Le fichier n'est pas un fichier de données de Liberté 35.
     FichierInconnu,
     /// Le contrôle d'intégrité a échoué ; rien n'a été modifié.
@@ -319,7 +328,9 @@ impl Stockage {
     pub fn parametre(&self, cle: &str) -> Resultat<Option<String>> {
         Ok(self
             .conn
-            .query_row("SELECT valeur FROM parametres WHERE cle = ?1", [cle], |r| r.get(0))
+            .query_row("SELECT valeur FROM parametres WHERE cle = ?1", [cle], |r| {
+                r.get(0)
+            })
             .optional()?)
     }
 
@@ -355,7 +366,9 @@ fn rapport_integrite(conn: &Connection) -> Resultat<String> {
 fn verifier_appartenance(conn: &Connection, profil: Profil) -> Resultat<()> {
     let lire = |cle: &str| -> Resultat<Option<String>> {
         Ok(conn
-            .query_row("SELECT valeur FROM meta WHERE cle = ?1", [cle], |r| r.get(0))
+            .query_row("SELECT valeur FROM meta WHERE cle = ?1", [cle], |r| {
+                r.get(0)
+            })
             .optional()?)
     };
     let marque = lire("application").map_err(|_| ErreurStockage::FichierInconnu)?;
@@ -372,8 +385,13 @@ fn verifier_appartenance(conn: &Connection, profil: Profil) -> Resultat<()> {
     Ok(())
 }
 
-fn appliquer_migrations(conn: &mut Connection, depuis: u32, migrations: &[Migration]) -> Resultat<()> {
-    let mut a_appliquer: Vec<&Migration> = migrations.iter().filter(|m| m.version > depuis).collect();
+fn appliquer_migrations(
+    conn: &mut Connection,
+    depuis: u32,
+    migrations: &[Migration],
+) -> Resultat<()> {
+    let mut a_appliquer: Vec<&Migration> =
+        migrations.iter().filter(|m| m.version > depuis).collect();
     a_appliquer.sort_by_key(|m| m.version);
     for m in a_appliquer {
         let tx = conn.transaction()?;
@@ -403,7 +421,9 @@ fn copie_de_precaution(
         .chars()
         .filter(|c| c.is_ascii_digit())
         .collect();
-    let cible = dossier.join(format!("avant-mise-a-niveau-v{depuis}-vers-v{vers}-{horodatage}.sqlite"));
+    let cible = dossier.join(format!(
+        "avant-mise-a-niveau-v{depuis}-vers-v{vers}-{horodatage}.sqlite"
+    ));
     if cible.exists() {
         std::fs::remove_file(&cible)?;
     }
