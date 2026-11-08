@@ -11,13 +11,21 @@
     versNoyau,
     type Proposition,
   } from '../../actions/paie';
-  import { cyclesAffiches } from '../../actions/elements';
+  import { cyclesAffiches, NOMBRE_CYCLES } from '../../actions/elements';
+  import {
+    lireOccurrence,
+    proposerAjustement,
+    proposerRetourRegle,
+    proposerRetrait,
+    type CibleOccurrence,
+  } from '../../actions/occurrences';
+  import { inverser } from '../../lib/appliquer';
   import { versElementStocke } from '../../actions/elementsStockes';
   import { ELEMENTS_ETAPE4, PERIODE_ETAPE4, PROFIL_ETAPE4 } from '../../exemple/scenarioEtape4';
   import { aujourdhui } from '../../lib/aujourdhui';
   import { exempleAutorise } from '../../lib/exemple';
-  import type { DonneesPaie, FrequenceStockee, Plateforme, Profil } from '../../lib/plateforme';
-  import { planifier, type Cycle, type Plan } from '../../noyau/cycles';
+  import type { ChangementPaie, DonneesPaie, EntreeJournal, FrequenceStockee, Plateforme, Profil } from '../../lib/plateforme';
+  import { planifier, type Cycle, type Ligne, type Plan } from '../../noyau/cycles';
   import { dateCivile, formaterDateCourte, formaterDateLongue, type DateCivile } from '../../noyau/dates';
   import { formaterMontant } from '../../noyau/montants';
   import { montantEnVigueur } from '../../noyau/regles';
@@ -44,6 +52,17 @@
   let erreurSaisie: string | null = $state(null);
   let enCours = $state(false);
   let remise = $state(0);
+  let nombreCycles = $state(NOMBRE_CYCLES);
+  /** Dernier enregistrement direct, qu'on peut annuler (C). */
+  let dernier: { titre: string; inverse: ChangementPaie[]; journal: EntreeJournal[] } | null = $state(null);
+  let messageAnnulation: string | null = $state(null);
+  /** Occurrence en cours d'ajustement, dans le détail d'un cycle (A). */
+  let occurrence: CibleOccurrence | null = $state(null);
+  let fOccMontant = $state('');
+  let fOccDate = $state('');
+  let fOccPaie = $state('');
+  /** Élément à ouvrir dans les listes (« Modifier la règle… »). */
+  let aGerer: string | null = $state(null);
 
   // Champs des formulaires
   let fFrequence: FrequenceStockee = $state('deuxSemaines');
@@ -90,30 +109,49 @@
       return { plan, cycles: plan.cycles, courant: null };
     }
     if (!noyau?.profil) return null;
-    return cyclesAffiches(noyau.profil, { exceptions: noyau.exceptions, elements: noyau.elements, seuil: noyau.seuil }, jour);
+    return cyclesAffiches(
+      noyau.profil,
+      { exceptions: noyau.exceptions, elements: noyau.elements, ajustements: noyau.ajustements, seuil: noyau.seuil },
+      jour,
+      nombreCycles,
+    );
   }
 
-  const cycleChoisi = $derived(vue?.cycles.find((c) => c.paie.dateOrigine === choisi) ?? null);
   const salaireActuel = $derived(noyau?.profil ? montantEnVigueur(noyau.profil.montants, jour) : null);
 
+  /**
+   * Étape 4b, C : l'action prépare sa proposition ; si l'aperçu protège
+   * vraiment (effet de bord, passé, suppression…), on le montre ; sinon on
+   * enregistre tout de suite et on offre « Annuler ».
+   */
   function proposer(fabrique: () => Proposition) {
+    messageAnnulation = null;
+    dernier = null;
+    let p: Proposition;
     try {
-      proposition = fabrique();
+      p = fabrique();
       erreurSaisie = null;
     } catch (e) {
       proposition = null;
       erreurSaisie = e instanceof ErreurSaisie || e instanceof Error ? e.message : String(e);
+      return;
     }
+    if (p.apercu) proposition = p;
+    else void enregistrer(p, true);
   }
 
-  async function confirmer() {
-    if (!proposition) return;
+  async function enregistrer(p: Proposition, direct: boolean) {
+    if (!donnees) return;
+    const avant = donnees;
     enCours = true;
     try {
-      donnees = await plateforme.appliquerChangementsPaie(proposition.changements, proposition.journal);
+      donnees = await plateforme.appliquerChangementsPaie(p.changements, p.journal);
+      const inverse = inverser(avant, p.changements);
+      dernier = direct && inverse.length > 0 ? { titre: p.titre, inverse, journal: p.journal } : null;
       proposition = null;
       edition = 'aucune';
       erreurSaisie = null;
+      occurrence = null;
       remise += 1;
       onchangement();
     } catch (e) {
@@ -121,6 +159,40 @@
     } finally {
       enCours = false;
     }
+  }
+
+  async function confirmer() {
+    if (proposition) await enregistrer(proposition, false);
+  }
+
+  /** « Annuler » : un seul niveau, le dernier enregistrement direct. */
+  async function annulerDernier() {
+    if (!dernier) return;
+    const d = dernier;
+    enCours = true;
+    try {
+      donnees = await plateforme.appliquerChangementsPaie(
+        d.inverse,
+        d.journal.map((e) => ({ ...e, champ: `annulation — ${e.champ}`, ancienneValeur: e.nouvelleValeur, nouvelleValeur: e.ancienneValeur })),
+      );
+      dernier = null;
+      messageAnnulation = `Annulé : ${d.titre}.`;
+      onchangement();
+    } catch (e) {
+      erreurSaisie = typeof e === 'string' ? e : 'Annulation impossible.';
+    } finally {
+      enCours = false;
+    }
+  }
+
+  function ouvrirOccurrence(c: Cycle, elementId: string, origine: DateCivile) {
+    if (!donnees) return;
+    occurrence = { elementId, origine };
+    erreurSaisie = null;
+    const etat = lireOccurrence(donnees, occurrence);
+    fOccMontant = etat.ligne?.montant !== null && etat.ligne?.montant !== undefined ? (etat.ligne.montant / 100).toFixed(2).replace('.', ',') : '';
+    fOccDate = etat.ligne?.echeance ?? '';
+    fOccPaie = c.paie.dateOrigine;
   }
 
   function annuler() {
@@ -132,6 +204,7 @@
 
   function choisirCycle(dateOrigine: DateCivile) {
     choisi = choisi === dateOrigine ? null : dateOrigine;
+    occurrence = null;
     proposition = null;
     erreurSaisie = null;
     const c = vue?.cycles.find((x) => x.paie.dateOrigine === dateOrigine);
@@ -217,12 +290,12 @@
         class="formulaire"
         onsubmit={(e) => {
           e.preventDefault();
-          proposer(() => proposerSalaire(donnees!, fSalaireDate, fSalaireMontant));
+          proposer(() => proposerSalaire(donnees!, fSalaireDate, fSalaireMontant, jour));
         }}
       >
         <label>À partir du <input type="date" bind:value={fSalaireDate} required /></label>
         <label>Nouveau salaire net ($) <input inputmode="decimal" bind:value={fSalaireMontant} required /></label>
-        <button type="submit" class="principal">Voir l’aperçu</button>
+        <button type="submit" class="principal">Enregistrer</button>
         <button type="button" onclick={annuler}>Annuler</button>
       </form>
     {:else if edition === 'seuil'}
@@ -234,7 +307,7 @@
         }}
       >
         <label>Seuil d’attention ($, vide pour aucun) <input inputmode="decimal" bind:value={fSeuil} /></label>
-        <button type="submit" class="principal">Voir l’aperçu</button>
+        <button type="submit" class="principal">Enregistrer</button>
         <button type="button" onclick={annuler}>Annuler</button>
       </form>
     {/if}
@@ -250,11 +323,20 @@
     {jour}
     {remise}
     {proposer}
+    {aGerer}
   />
 {/if}
 
 {#if erreurSaisie && !proposition}
   <p role="alert" class="erreur" data-testid="erreur-saisie">{erreurSaisie}</p>
+{/if}
+{#if dernier}
+  <p class="enregistre" role="status" data-testid="enregistre">
+    Enregistré : {dernier.titre}.
+    <button type="button" onclick={annulerDernier} disabled={enCours}>Annuler</button>
+  </p>
+{:else if messageAnnulation}
+  <p class="enregistre" role="status" data-testid="annule">{messageAnnulation}</p>
 {/if}
 {#if proposition}
   <Apercu
@@ -278,14 +360,18 @@
     <p class="discret">La règle « {id} » ne s’applique à aucune paie de cette période.</p>
   {/each}
 
-  <TableauCycles cycles={vue.cycles} {choisi} courant={vue.courant} onchoisir={choisirCycle} />
+  <TableauCycles cycles={vue.cycles} {choisi} courant={vue.courant} onchoisir={choisirCycle} {detail} />
+  {#if !exemple}
+    <p class="boutons">
+      <button type="button" onclick={() => (nombreCycles += NOMBRE_CYCLES)}>Voir les paies suivantes</button>
+      {#if nombreCycles > NOMBRE_CYCLES}
+        <button type="button" onclick={() => (nombreCycles = NOMBRE_CYCLES)}>Revenir au cycle actuel</button>
+      {/if}
+    </p>
+  {/if}
   <p class="discret">
     Le disponible planifié est le résultat de la planification : ce n’est pas le solde de ton compte.
   </p>
-
-  {#if cycleChoisi}
-    {@render detail(cycleChoisi)}
-  {/if}
 {/if}
 
 {#snippet formulaireProfil(creation: boolean)}
@@ -319,8 +405,63 @@
     {#if creation}
       <label>Montant net habituel ($, facultatif) <input inputmode="decimal" bind:value={fMontant} /></label>
     {/if}
-    <button type="submit" class="principal">Voir l’aperçu</button>
+    <button type="submit" class="principal">Enregistrer</button>
     {#if !creation}<button type="button" onclick={annuler}>Annuler</button>{/if}
+  </form>
+{/snippet}
+
+{#snippet marques(l: Ligne)}
+  {#if l.ajuste}<span class="marque" data-testid="ajuste">ajusté</span>{/if}
+  {#if l.manuel}<span class="marque">payée avec cette paie</span>{/if}
+{/snippet}
+
+{#snippet boutonAjuster(c: Cycle, l: Ligne)}
+  {#if !exemple}
+    <button type="button" class="petit" onclick={() => ouvrirOccurrence(c, l.elementId, l.origine)} aria-label={`Ajuster ${l.libelle} pour cette fois`}>
+      Ajuster
+    </button>
+  {/if}
+{/snippet}
+
+{#snippet formulaireOccurrence(c: Cycle)}
+  {@const cible = occurrence!}
+  {@const ligne = c.lignes.find((l) => l.elementId === cible.elementId && l.origine === cible.origine)!}
+  <form
+    class="formulaire occurrence"
+    data-testid="formulaire-occurrence"
+    onsubmit={(e) => {
+      e.preventDefault();
+      proposer(() => proposerAjustement(donnees!, cible, { montant: fOccMontant, date: fOccDate, paie: fOccPaie }, jour));
+    }}
+  >
+    <p class="discret">« {ligne.libelle} », cette fois seulement : la règle ne change pas.</p>
+    <label>Montant cette fois ($) <input inputmode="decimal" bind:value={fOccMontant} /></label>
+    {#if ligne.echeance !== null}
+      <label>Date prévue <input type="date" bind:value={fOccDate} /></label>
+    {/if}
+    <label
+      >Payée avec la paie du
+      <select bind:value={fOccPaie}>
+        {#each vue?.cycles ?? [] as autre (autre.paie.dateOrigine)}
+          <option value={autre.paie.dateOrigine}>{formaterDateCourte(autre.paie.date)} {autre.paie.date.slice(0, 4)}</option>
+        {/each}
+      </select>
+    </label>
+    <button type="submit" class="principal">Enregistrer</button>
+    <button type="button" onclick={() => proposer(() => proposerRetrait(donnees!, cible, !ligne.retiree, jour))}>
+      {ligne.retiree ? 'Remettre cette fois' : 'Retirer cette fois'}
+    </button>
+    {#if ligne.ajuste}
+      <button type="button" onclick={() => proposer(() => proposerRetourRegle(donnees!, cible, jour))}>Revenir à la règle</button>
+    {/if}
+    <button
+      type="button"
+      onclick={() => {
+        aGerer = null;
+        queueMicrotask(() => (aGerer = cible.elementId));
+      }}>Modifier la règle…</button
+    >
+    <button type="button" onclick={() => (occurrence = null)}>Fermer</button>
   </form>
 {/snippet}
 
@@ -329,42 +470,51 @@
     <h2 id="titre-detail">Cycle du {formaterDateLongue(c.debut)} au {formaterDateLongue(c.fin)}</h2>
     <table>
       <tbody>
-        <tr class="groupe"><th scope="rowgroup" colspan="3">Revenus</th></tr>
+        <tr class="groupe"><th scope="rowgroup" colspan="4">Revenus</th></tr>
         <tr>
           <th scope="row">Paie du {formaterDateCourte(c.paie.date)}{c.paie.deplacee ? ` (prévue le ${formaterDateCourte(c.paie.dateOrigine)})` : ''}</th>
           <td class="montant">{c.paie.montant === null ? 'À compléter' : formaterMontant(c.paie.montant)}</td>
           <td>Prévu</td>
+          <td></td>
         </tr>
-        {#each c.lignes.filter((l) => l.nature === 'revenu') as l (`${l.elementId}${l.echeance}`)}
-          <tr class:non-compte={!l.compte}>
+        {#each c.lignes.filter((l) => l.nature === 'revenu') as l (`${l.elementId}|${l.origine}`)}
+          <tr class:non-compte={!l.compte} class:retiree={l.retiree}>
             <th scope="row">
               {l.libelle}{l.echeance ? ` (le ${formaterDateCourte(l.echeance)})` : ''}{l.estimation ? ' — estimation' : ''}
+              {@render marques(l)}
             </th>
             <td class="montant">{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
-            <td>{l.compte ? 'Prévu' : 'non compté (incertain)'}</td>
+            <td>{l.retiree ? 'retirée cette fois' : l.compte ? 'Prévu' : 'non compté (incertain)'}</td>
+            <td>{@render boutonAjuster(c, l)}</td>
           </tr>
         {/each}
-        <tr class="groupe"><th scope="rowgroup" colspan="3">Sorties</th></tr>
-        {#each c.lignes.filter((l) => l.nature === 'depense') as l (`${l.elementId}${l.echeance}`)}
-          <tr>
+        <tr class="groupe"><th scope="rowgroup" colspan="4">Sorties</th></tr>
+        {#each c.lignes.filter((l) => l.nature === 'depense') as l (`${l.elementId}|${l.origine}`)}
+          <tr class:retiree={l.retiree}>
             <th scope="row">
               {l.libelle}{l.echeance ? ` (dû le ${formaterDateCourte(l.echeance)})` : ''}{l.genre === 'enveloppe' ? ' — enveloppe' : ''}{l.estimation
                 ? ' — estimation'
-                : ''}{l.manuel ? ' — déplacé à la main' : ''}
+                : ''}
+              {@render marques(l)}
             </th>
             <td class="montant">−{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
-            <td>Prévu</td>
+            <td>{l.retiree ? 'retirée cette fois' : 'Prévu'}</td>
+            <td>{@render boutonAjuster(c, l)}</td>
           </tr>
         {:else}
-          <tr><td colspan="3" class="discret">Aucune sortie prévue dans ce cycle.</td></tr>
+          <tr><td colspan="4" class="discret">Aucune sortie prévue dans ce cycle.</td></tr>
         {/each}
         <tr class="total">
           <th scope="row">Disponible planifié</th>
           <td class="montant">{c.disponible === null ? 'À compléter' : formaterMontant(c.disponible)}</td>
           <td>{c.estimation ? 'Estimation' : ''}</td>
+          <td></td>
         </tr>
       </tbody>
     </table>
+    {#if occurrence && c.lignes.some((l) => l.elementId === occurrence?.elementId && l.origine === occurrence?.origine)}
+      {@render formulaireOccurrence(c)}
+    {/if}
     {#if c.nonComptes > 0}
       <p class="discret">Non compté : {formaterMontant(c.nonComptes)} de revenus incertains, en attente de confirmation.</p>
     {/if}
@@ -375,12 +525,12 @@
         class="formulaire"
         onsubmit={(e) => {
           e.preventDefault();
-          proposer(() => proposerException(donnees!, c.paie, { dateReelle: fDateReelle, montant: fMontantPaie }));
+          proposer(() => proposerException(donnees!, c.paie, { dateReelle: fDateReelle, montant: fMontantPaie }, undefined, jour));
         }}
       >
         <label>Date réelle de versement <input type="date" bind:value={fDateReelle} /></label>
         <label>Montant de cette paie ($, vide = habituel) <input inputmode="decimal" bind:value={fMontantPaie} /></label>
-        <button type="submit" class="principal">Voir l’aperçu</button>
+        <button type="submit" class="principal">Enregistrer</button>
       </form>
     {/if}
   </section>
@@ -457,6 +607,44 @@
   .non-compte td {
     color: var(--couleur-texte-discret);
     font-style: italic;
+  }
+  .retiree th,
+  .retiree td {
+    color: var(--couleur-texte-discret);
+    text-decoration: line-through;
+  }
+  .marque {
+    display: inline-block;
+    margin-left: var(--espace-2);
+    padding: 0 var(--espace-2);
+    border-radius: var(--arrondi);
+    background: var(--couleur-surface-active);
+    color: var(--couleur-texte-discret);
+    font-size: var(--taille-petit);
+    text-decoration: none;
+  }
+  .petit {
+    min-height: 28px;
+    padding: 0 var(--espace-3);
+  }
+  .occurrence {
+    padding: var(--espace-3);
+    border: 1px solid var(--couleur-bordure);
+    border-radius: var(--arrondi);
+  }
+  .occurrence p {
+    flex-basis: 100%;
+    margin: 0;
+  }
+  .enregistre {
+    display: flex;
+    gap: var(--espace-3);
+    align-items: center;
+    max-width: 1100px;
+    padding: var(--espace-2) var(--espace-4);
+    border-radius: var(--arrondi);
+    background: var(--couleur-surface);
+    border: 1px solid var(--couleur-bordure);
   }
   .total th,
   .total td {

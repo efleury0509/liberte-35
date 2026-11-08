@@ -32,9 +32,9 @@ export type Frequence =
   /** Annuelle (1) ou tous les X ans. */
   | { type: 'annees'; n: number; depart: DateCivile }
   /** À chaque paie. */
-  | { type: 'chaquePaie' }
+  | { type: 'chaquePaie'; depart?: DateCivile }
   /** À la 1re ou à la 2e paie du mois, selon l'ordre chronologique réel (A8). */
-  | { type: 'rangPaie'; rang: 1 | 2 };
+  | { type: 'rangPaie'; rang: 1 | 2; depart?: DateCivile };
 
 export class ErreurFrequence extends Error {}
 
@@ -147,7 +147,9 @@ export function datesDe(
       if (!paies) {
         throw new ErreurFrequence('Cette fréquence dépend de la paie : le calendrier de paie est nécessaire.');
       }
-      const dansPeriode = [...paies].sort().filter((p) => p >= debut && p <= fin);
+      // « À partir du » facultatif (étape 4b) : seulement les paies d'origine ce jour-là ou après.
+      const depuis = f.depart !== undefined && f.depart > debut ? f.depart : debut;
+      const dansPeriode = [...paies].sort().filter((p) => p >= depuis && p <= fin);
       if (f.type === 'chaquePaie') return dansPeriode;
       const rangs = rangsDesPaies(paies);
       return dansPeriode.filter((p) => rangs.get(p) === f.rang);

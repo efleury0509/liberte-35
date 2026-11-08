@@ -3,12 +3,12 @@
 // puis enregistré seulement après confirmation, avec ses entrées de journal
 // (A10). Rien ici ne calcule de montant : le noyau s'en charge.
 
-import { planifier, comparerRattachements, type ElementPlanifie, type Plan } from '../noyau/cycles';
+import { planifier, comparerRattachements, type AjustementOccurrence, type ElementPlanifie, type Plan } from '../noyau/cycles';
 import { ajouterJours, dateCivile, formaterDateCourte, formaterDateLongue, type DateCivile } from '../noyau/dates';
 import { arrondirDecimal, formaterMontant, type Cents } from '../noyau/montants';
 import { paiesEntre, type ExceptionPaie, type Paie, type ProfilPaie } from '../noyau/paie';
 import { montantEnVigueur } from '../noyau/regles';
-import { versElementNoyau } from './elementsStockes';
+import { versAjustementNoyau, versElementNoyau } from './elementsStockes';
 import type {
   ChangementPaie,
   DonneesPaie,
@@ -32,6 +32,12 @@ export interface Proposition {
   consequences: string[];
   changements: ChangementPaie[];
   journal: EntreeJournal[];
+  /**
+   * Étape 4b, C : vrai quand l'aperçu protège vraiment (effet de bord,
+   * passé touché, suppression…) ; sinon l'enregistrement est direct, avec
+   * « Annuler » juste après.
+   */
+  apercu: boolean;
 }
 
 export const SECTION = 'Mes paies';
@@ -52,6 +58,7 @@ export interface DonneesNoyau {
   exceptions: ExceptionPaie[];
   seuil: Cents | null;
   elements: ElementPlanifie[];
+  ajustements: AjustementOccurrence[];
 }
 
 export function versNoyau(d: DonneesPaie): DonneesNoyau {
@@ -73,7 +80,13 @@ export function versNoyau(d: DonneesPaie): DonneesNoyau {
     ...(e.dateReelle ? { dateReelle: dateCivile(e.dateReelle) } : {}),
     ...(e.montant !== null ? { montant: e.montant } : {}),
   }));
-  return { profil, exceptions, seuil: d.seuil, elements: (d.elements ?? []).map(versElementNoyau) };
+  return {
+    profil,
+    exceptions,
+    seuil: d.seuil,
+    elements: (d.elements ?? []).map(versElementNoyau),
+    ajustements: (d.ajustements ?? []).map(versAjustementNoyau),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -162,13 +175,14 @@ export function proposerProfil(d: DonneesPaie, s: SaisieProfil): Proposition {
       );
     }
   }
-  return { titre: d.profil ? 'Modifier le calendrier de paie' : 'Créer le profil de paie', lignes, consequences, changements, journal };
+  // Le calendrier de paie touche tous les cycles : toujours un aperçu.
+  return { titre: d.profil ? 'Modifier le calendrier de paie' : 'Créer le profil de paie', lignes, consequences, changements, journal, apercu: true };
 }
 
 // ---------------------------------------------------------------------------
 // Changement de salaire daté (cahier 4.1)
 
-export function proposerSalaire(d: DonneesPaie, aPartirDuTexte: string, montantTexte: string): Proposition {
+export function proposerSalaire(d: DonneesPaie, aPartirDuTexte: string, montantTexte: string, jour?: DateCivile): Proposition {
   const { profil, exceptions } = versNoyau(d);
   if (!profil) throw new ErreurSaisie('Crée d’abord le profil de paie.');
   const aPartirDu = lireDate(aPartirDuTexte, 'Date du changement');
@@ -189,6 +203,8 @@ export function proposerSalaire(d: DonneesPaie, aPartirDuTexte: string, montantT
     consequences,
     changements: [{ type: 'definirSalaire', salaire: { aPartirDu, montant } }],
     journal: [entree('Salaire net', `à partir du ${aPartirDu}`, montantOuACompleter(actuel), formaterMontant(montant))],
+    // Aperçu si le changement touche des paies déjà passées (ou si on ne sait pas quel jour on est).
+    apercu: jour === undefined || aPartirDu < jour || gardees > 0,
   };
 }
 
@@ -202,7 +218,7 @@ export interface SaisieException {
 
 function planAutour(d: DonneesNoyau, profil: ProfilPaie, paie: Paie, elements: readonly ElementPlanifie[], exceptions: ExceptionPaie[]): Plan {
   return planifier(
-    { profil, exceptions, elements, seuil: d.seuil },
+    { profil, exceptions, elements, ajustements: d.ajustements, seuil: d.seuil },
     ajouterJours(paie.dateOrigine, -70),
     ajouterJours(paie.dateOrigine, 70),
   );
@@ -213,6 +229,7 @@ export function proposerException(
   paie: Paie,
   s: SaisieException,
   elementsFournis?: readonly ElementPlanifie[],
+  jour?: DateCivile,
 ): Proposition {
   const noyau = versNoyau(d);
   const elements = elementsFournis ?? noyau.elements;
@@ -262,7 +279,8 @@ export function proposerException(
 
   const consequences: string[] = [];
   if (deplacee) consequences.push('La règle de paie ne change pas : les paies suivantes gardent leurs dates.');
-  for (const c of comparerRattachements(avant, apres)) {
+  const rattachements = comparerRattachements(avant, apres);
+  for (const c of rattachements) {
     consequences.push(
       `À vérifier : ${c.libelle} (${formaterDateCourte(c.echeance)}) passerait de la paie du ${formaterDateCourte(c.dePaie)} à celle du ${formaterDateCourte(c.versPaie)}`,
     );
@@ -276,7 +294,17 @@ export function proposerException(
   const changements: ChangementPaie[] = nouvelle
     ? [{ type: 'definirException', exception: versStockage(nouvelle) }]
     : [{ type: 'retirerException', dateOrigine: paie.dateOrigine }];
-  return { titre: `Modifier la paie du ${formaterDateLongue(paie.dateOrigine)}`, lignes, consequences, changements, journal };
+  // A11 : un élément qui changerait de paie est montré avant d'enregistrer ;
+  // un cycle déjà terminé aussi.
+  const passe = jour !== undefined && cycleAvant !== undefined && cycleAvant.fin < jour;
+  return {
+    titre: `Modifier la paie du ${formaterDateLongue(paie.dateOrigine)}`,
+    lignes,
+    consequences,
+    changements,
+    journal,
+    apercu: rattachements.length > 0 || passe || jour === undefined,
+  };
 }
 
 function versStockage(e: ExceptionPaie): ExceptionStockee {
@@ -301,5 +329,6 @@ export function proposerSeuil(d: DonneesPaie, texte: string): Proposition {
     ],
     changements: [{ type: 'definirSeuil', seuil }],
     journal: [entree('Seuil d’attention', 'montant', avant, apres)],
+    apercu: false,
   };
 }

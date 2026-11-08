@@ -6,10 +6,12 @@
   interface Props {
     active: IdSection;
     profil: Profil | undefined;
+    /** Numéro de version, visible dès l'ouverture (étape 4b). */
+    version?: string | undefined;
     onchoisir: (id: IdSection) => void;
   }
 
-  let { active, profil, onchoisir }: Props = $props();
+  let { active, profil, version, onchoisir }: Props = $props();
 </script>
 
 <!-- Barre latérale toujours visible (cahier 13.3). -->
@@ -17,6 +19,9 @@
   <p class="nom">{TEXTES.application.nom}</p>
   {#if profil === 'essai'}
     <p class="marque-essai">Essai</p>
+  {/if}
+  {#if version}
+    <p class="version" data-testid="version-barre">Version {version}</p>
   {/if}
   <ul>
     {#each SECTIONS as s (s.id)}
@@ -35,6 +40,11 @@
 </nav>
 
 <style>
+  .version {
+    margin: 0 var(--espace-3) var(--espace-4);
+    font-size: var(--taille-petit);
+    color: var(--couleur-texte-discret);
+  }
   nav {
     background: var(--couleur-surface);
     border-right: 1px solid var(--couleur-bordure);
@@ -49,7 +59,7 @@
   }
 
   .marque-essai {
-    margin: 0 var(--espace-3) var(--espace-4);
+    margin: 0 var(--espace-3) var(--espace-1);
     font-size: var(--taille-petit);
     color: var(--couleur-attention);
   }

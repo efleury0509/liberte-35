@@ -7,7 +7,7 @@
 // - Si aucun montant n'est connu pour une date, l'occurrence porte un montant
 //   nul (null) : rien n'est inventé (décision A6).
 
-import type { DateCivile } from './dates';
+import { ajouterJours, type DateCivile } from './dates';
 import { datesDe, type Frequence } from './frequences';
 import type { Cents } from './montants';
 
@@ -21,11 +21,43 @@ export interface Suspension {
   fin: DateCivile;
 }
 
+/** Nouvelle fréquence « à partir du » (étape 4b, B) : le passé garde l'ancienne. */
+export interface ChangementFrequence {
+  aPartirDu: DateCivile;
+  frequence: Frequence;
+}
+
 export interface Regle {
+  /** Fréquence d'origine, valable jusqu'au premier changement. */
   frequence: Frequence;
   montants: readonly MontantDate[];
   suspensions?: readonly Suspension[] | undefined;
   fin?: DateCivile;
+  /** Changements de fréquence datés, dans n'importe quel ordre. */
+  changements?: readonly ChangementFrequence[] | undefined;
+}
+
+export interface Periode {
+  frequence: Frequence;
+  /** Premier jour de la période ; null : depuis toujours. */
+  debut: DateCivile | null;
+  /** Dernier jour de la période ; null : sans fin prévue. */
+  fin: DateCivile | null;
+}
+
+/** Périodes successives d'une règle : une par fréquence, sans chevauchement. */
+export function periodesDe(r: Regle): Periode[] {
+  const changements = [...(r.changements ?? [])].sort((a, b) => (a.aPartirDu < b.aPartirDu ? -1 : 1));
+  const periodes: Periode[] = [];
+  let debut: DateCivile | null = null;
+  let frequence = r.frequence;
+  for (const c of changements) {
+    periodes.push({ frequence, debut, fin: ajouterJours(c.aPartirDu, -1) });
+    debut = c.aPartirDu;
+    frequence = c.frequence;
+  }
+  periodes.push({ frequence, debut, fin: null });
+  return periodes;
 }
 
 export interface Occurrence {
@@ -46,6 +78,10 @@ function verifier(r: Regle): void {
     if (s.fin < s.debut) {
       throw new ErreurRegle(`Suspension invalide : la fin (${s.fin}) précède le début (${s.debut}).`);
     }
+  }
+  const dates = (r.changements ?? []).map((c) => c.aPartirDu);
+  if (new Set(dates).size !== dates.length) {
+    throw new ErreurRegle('Deux changements de fréquence ne peuvent pas commencer le même jour.');
   }
 }
 
@@ -76,7 +112,12 @@ export function occurrences(
   verifier(r);
   const borne = r.fin !== undefined && r.fin < fin ? r.fin : fin;
   const suspensions = r.suspensions ?? [];
-  return datesDe(r.frequence, debut, borne, paies)
+  return periodesDe(r)
+    .flatMap((p) => {
+      const de = p.debut !== null && p.debut > debut ? p.debut : debut;
+      const a = p.fin !== null && p.fin < borne ? p.fin : borne;
+      return de > a ? [] : datesDe(p.frequence, de, a, paies);
+    })
     .filter((d) => !estSuspendue(d, suspensions))
     .map((d) => ({ date: d, montant: montantEnVigueur(r.montants, d) }));
 }

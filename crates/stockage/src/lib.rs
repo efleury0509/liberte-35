@@ -21,8 +21,8 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 pub use horloge::{formater_utc, Horloge, HorlogeFixe, HorlogeSysteme};
 use migrations::{derniere_version, Migration, MIGRATIONS};
 pub use paie::{
-    ChangementPaie, DonneesPaie, ElementStocke, ExceptionStockee, MontantStocke, ProfilPaieStocke,
-    SalaireStocke, SuspensionStocke,
+    AjustementStocke, ChangementPaie, DonneesPaie, ElementStocke, ExceptionStockee, MontantStocke,
+    PeriodeStockee, ProfilPaieStocke, SalaireStocke, SuspensionStocke,
 };
 
 /// Version du schéma attendue par cette version de l'application.
@@ -460,6 +460,8 @@ fn copie_de_precaution(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_ajustements;
 #[cfg(test)]
 mod tests_elements;
 #[cfg(test)]

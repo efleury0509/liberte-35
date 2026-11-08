@@ -34,6 +34,7 @@ function donnees(elements = ELEMENTS_ETAPE4.map(versStocke)): DonneesPaie {
     exceptions: [],
     seuil: null,
     elements,
+    ajustements: [],
   };
 }
 
@@ -128,9 +129,9 @@ describe('Ajouter', () => {
       troisMois: { type: 'mois', n: 3, depart: '2027-02-12' },
       sixMois: { type: 'mois', n: 6, depart: '2027-02-12' },
       annee: { type: 'annees', n: 1, depart: '2027-02-12' },
-      chaquePaie: { type: 'chaquePaie' },
-      paie1: { type: 'rangPaie', rang: 1 },
-      paie2: { type: 'rangPaie', rang: 2 },
+      chaquePaie: { type: 'chaquePaie', depart: '2027-02-12' },
+      paie1: { type: 'rangPaie', rang: 1, depart: '2027-02-12' },
+      paie2: { type: 'rangPaie', rang: 2, depart: '2027-02-12' },
     };
     for (const [quand, frequence] of Object.entries(attendu)) {
       const c = proposerAjout(donnees(), saisie({ quand: quand as SaisieElement['quand'] }), AUJOURDHUI).changements[0]!;
@@ -143,6 +144,16 @@ describe('Ajouter', () => {
     expect(() => proposerAjout(donnees(), saisie({ nature: 'revenu', quand: 'paie1' }), AUJOURDHUI)).toThrow(ErreurSaisie);
     expect(() => proposerAjout(donnees(), saisie({ nature: 'revenu', quand: 'cycle', cyclePaie: '2027-03-04' }), AUJOURDHUI)).toThrow(ErreurSaisie);
     expect(() => proposerAjout(donnees(), saisie({ nature: 'revenu', quand: 'chaquePaie' }), AUJOURDHUI)).not.toThrow();
+  });
+
+  it('lié à la paie sans date : à partir du cycle actuel, le passé ne change pas', () => {
+    const p = proposerAjout(donnees(), saisie({ quand: 'chaquePaie', date: '' }), AUJOURDHUI);
+    const c = p.changements[0]!;
+    if (c.type !== 'definirElement') throw new Error('type');
+    expect(c.element.frequence).toEqual({ type: 'chaquePaie', depart: '2027-02-04' });
+    expect(c.element.montants).toEqual([{ aPartirDu: '2027-02-04', montant: 2_000 }]);
+    expect(p.apercu).toBe(false);
+    expect(p.lignes).toContainEqual({ libelle: 'Quand', avant: '—', apres: 'À chaque paie, à partir du jeudi 4 février 2027' });
   });
 
   it('une enveloppe est forcément une dépense, et jamais incertaine', () => {

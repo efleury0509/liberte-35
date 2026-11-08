@@ -34,6 +34,11 @@ mise à jour par-dessus ne se ferait pas proprement.
 Une nouvelle version s'installe par-dessus l'ancienne, sans désinstaller ;
 le fichier de données est mis à niveau après une copie de précaution.
 
+Les textes français de l'installateur sont dans `src-tauri/windows/French.nsh`.
+Un test (`tests/installateur.test.ts`) vérifie qu'ils couvrent exactement les
+textes attendus par la version de Tauri utilisée : après une mise à jour de
+Tauri, ce test signale tout texte ajouté ou retiré.
+
 ## Option B — Sur un ordinateur Windows, sans GitHub
 
 À faire une seule fois :

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import type { Cycle } from '../../noyau/cycles';
   import { formaterDateCourte, type DateCivile } from '../../noyau/dates';
   import { formaterMontant } from '../../noyau/montants';
@@ -8,8 +9,10 @@
     choisi: DateCivile | null;
     courant: DateCivile | null;
     onchoisir: (dateOrigine: DateCivile) => void;
+    /** Détail du cycle choisi, affiché juste sous sa ligne. */
+    detail?: Snippet<[Cycle]>;
   }
-  let { cycles, choisi, courant, onchoisir }: Props = $props();
+  let { cycles, choisi, courant, onchoisir, detail }: Props = $props();
 
   const montant = (c: number | null) => (c === null ? 'À compléter' : formaterMontant(c));
   const annee = (d: DateCivile) => d.slice(0, 4);
@@ -59,13 +62,22 @@
             </span>
           {/if}
         </td>
-        <td><button type="button" onclick={() => onchoisir(c.paie.dateOrigine)}>Détails</button></td>
+        <td><button type="button" onclick={() => onchoisir(c.paie.dateOrigine)} aria-expanded={choisi === c.paie.dateOrigine}>Détails</button></td>
       </tr>
+      {#if detail && choisi === c.paie.dateOrigine}
+        <tr class="ligne-detail">
+          <td colspan="8">{@render detail(c)}</td>
+        </tr>
+      {/if}
     {/each}
   </tbody>
 </table>
 
 <style>
+  .ligne-detail > td {
+    padding: 0 0 var(--espace-4);
+    font-variant-numeric: normal;
+  }
   table {
     border-collapse: collapse;
     width: 100%;

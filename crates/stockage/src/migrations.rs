@@ -108,6 +108,29 @@ CREATE TABLE suspensions_element (
 ) STRICT;
 "#;
 
+// Étape 4b : ajouts seulement, aucune donnée existante n'est transformée.
+// La fréquence d'origine reste dans « elements » ; les changements datés
+// s'ajoutent à côté.
+const V4: &str = r#"
+CREATE TABLE ajustements_element (
+    element_id   TEXT NOT NULL REFERENCES elements(id) ON DELETE CASCADE,
+    origine      TEXT NOT NULL CHECK (origine GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    montant      INTEGER CHECK (montant >= 0),
+    date         TEXT CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    paie_origine TEXT CHECK (paie_origine GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    retire       INTEGER NOT NULL CHECK (retire IN (0, 1)),
+    PRIMARY KEY (element_id, origine),
+    CHECK (montant IS NOT NULL OR date IS NOT NULL OR paie_origine IS NOT NULL OR retire = 1)
+) STRICT;
+
+CREATE TABLE periodes_frequence (
+    element_id  TEXT NOT NULL REFERENCES elements(id) ON DELETE CASCADE,
+    a_partir_du TEXT NOT NULL CHECK (a_partir_du GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    frequence   TEXT NOT NULL CHECK (json_valid(frequence) AND json_type(frequence) = 'object'),
+    PRIMARY KEY (element_id, a_partir_du)
+) STRICT;
+"#;
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -123,6 +146,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 3,
         description: "Autres revenus, dépenses fixes, enveloppes et dépenses ponctuelles",
         sql: V3,
+    },
+    Migration {
+        version: 4,
+        description: "Ajustements d'occurrence et changements de fréquence datés",
+        sql: V4,
     },
 ];
 

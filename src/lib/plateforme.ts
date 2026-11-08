@@ -5,6 +5,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { version as VERSION_APPLICATION } from '../../package.json';
+import { appliquerChangements, cloner, donneesVides } from './appliquer';
 
 export type Profil = 'essai' | 'officiel' | 'apercu';
 
@@ -47,6 +48,23 @@ export interface SuspensionStockee {
   fin: string;
 }
 
+/** Changement de fréquence « à partir du » (étape 4b, B). */
+export interface PeriodeStockee {
+  aPartirDu: string;
+  frequence: Record<string, unknown> & { type: string };
+}
+
+/** Ajustement d'une occurrence (étape 4b, A) ; la règle ne change pas. */
+export interface AjustementStocke {
+  elementId: string;
+  /** Date d'origine de l'occurrence : son identité stable. */
+  origine: string;
+  montant: number | null;
+  date: string | null;
+  paieOrigine: string | null;
+  retire: boolean;
+}
+
 /**
  * Autre revenu ou dépense (étape 4). La fréquence garde le format du noyau
  * (par exemple { type: 'mois', n: 1, depart: '2027-01-20' }).
@@ -64,6 +82,8 @@ export interface ElementStocke {
   fin: string | null;
   /** Dépense ponctuelle rattachée à un cycle choisi : date d'origine de sa paie. */
   cyclePaie: string | null;
+  /** Changements de fréquence datés (étape 4b). */
+  changementsFrequence: PeriodeStockee[];
 }
 
 export interface DonneesPaie {
@@ -72,6 +92,7 @@ export interface DonneesPaie {
   exceptions: ExceptionStockee[];
   seuil: number | null;
   elements: ElementStocke[];
+  ajustements: AjustementStocke[];
 }
 
 export type ChangementPaie =
@@ -82,7 +103,9 @@ export type ChangementPaie =
   | { type: 'retirerException'; dateOrigine: string }
   | { type: 'definirSeuil'; seuil: number | null }
   | { type: 'definirElement'; element: ElementStocke }
-  | { type: 'supprimerElement'; id: string };
+  | { type: 'supprimerElement'; id: string }
+  | { type: 'definirAjustement'; ajustement: AjustementStocke }
+  | { type: 'retirerAjustement'; elementId: string; origine: string };
 
 export interface EntreeJournal {
   section: string;
@@ -120,48 +143,8 @@ function simulation(): string | null {
 
 /** Aperçu en mémoire : mêmes règles que le stockage, rien n'est enregistré. */
 export function creerApercu(): Plateforme {
-  let donnees: DonneesPaie = { profil: null, salaires: [], exceptions: [], seuil: null, elements: [] };
+  let donnees: DonneesPaie = donneesVides();
   let journal = 0;
-  // Copie par sérialisation, comme le pont Tauri : les objets réactifs de
-  // l'interface ne peuvent pas être copiés autrement.
-  const cloner = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
-  const copie = (): DonneesPaie => cloner(donnees);
-
-  function appliquer(c: ChangementPaie): void {
-    switch (c.type) {
-      case 'definirProfil':
-        donnees.profil = c.profil;
-        break;
-      case 'definirSalaire':
-        if (c.salaire.montant < 0) throw 'Un salaire ne peut pas être négatif. Rien n’a été enregistré.';
-        donnees.salaires = [...donnees.salaires.filter((s) => s.aPartirDu !== c.salaire.aPartirDu), c.salaire].sort((a, b) =>
-          a.aPartirDu < b.aPartirDu ? -1 : 1,
-        );
-        break;
-      case 'retirerSalaire':
-        donnees.salaires = donnees.salaires.filter((s) => s.aPartirDu !== c.aPartirDu);
-        break;
-      case 'definirException':
-        donnees.exceptions = [...donnees.exceptions.filter((e) => e.dateOrigine !== c.exception.dateOrigine), c.exception].sort(
-          (a, b) => (a.dateOrigine < b.dateOrigine ? -1 : 1),
-        );
-        break;
-      case 'retirerException':
-        donnees.exceptions = donnees.exceptions.filter((e) => e.dateOrigine !== c.dateOrigine);
-        break;
-      case 'definirSeuil':
-        donnees.seuil = c.seuil;
-        break;
-      case 'definirElement':
-        if (c.element.libelle.trim() === '') throw 'Un revenu ou une dépense doit avoir un nom. Rien n’a été enregistré.';
-        if (c.element.montants.some((m) => m.montant < 0)) throw 'Un montant ne peut pas être négatif. Rien n’a été enregistré.';
-        donnees.elements = [...donnees.elements.filter((e) => e.id !== c.element.id), c.element];
-        break;
-      case 'supprimerElement':
-        donnees.elements = donnees.elements.filter((e) => e.id !== c.id);
-        break;
-    }
-  }
 
   return {
     etat: async () => {
@@ -171,24 +154,19 @@ export function creerApercu(): Plateforme {
       return {
         profil: 'apercu',
         versionApplication: VERSION_APPLICATION,
-        versionSchema: 3,
+        versionSchema: 4,
         dossierDonnees: '(aucun : aperçu en mémoire)',
         integriteOk: true,
         nombreEntreesJournal: journal,
       };
     },
-    lirePaie: async () => copie(),
+    lirePaie: async () => cloner(donnees),
     appliquerChangementsPaie: async (changements, entrees) => {
       if (entrees.length === 0) throw 'Un changement de paie doit être consigné au journal. Rien n’a été enregistré.';
-      const avant = copie();
-      try {
-        cloner(changements).forEach(appliquer);
-      } catch (e) {
-        donnees = avant;
-        throw e;
-      }
+      // Tout ou rien : en cas d'erreur, rien n'est modifié.
+      donnees = appliquerChangements(donnees, changements);
       journal += entrees.length;
-      return copie();
+      return cloner(donnees);
     },
   };
 }

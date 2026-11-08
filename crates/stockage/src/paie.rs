@@ -49,6 +49,27 @@ pub struct SuspensionStocke {
     pub fin: String,
 }
 
+/// Changement de fréquence « à partir du » (étape 4b, B).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeriodeStockee {
+    pub a_partir_du: String,
+    pub frequence: serde_json::Value,
+}
+
+/// Ajustement d'une occurrence (étape 4b, A) : la règle ne change pas.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AjustementStocke {
+    pub element_id: String,
+    /// Date d'origine de l'occurrence : son identité stable.
+    pub origine: String,
+    pub montant: Option<i64>,
+    pub date: Option<String>,
+    pub paie_origine: Option<String>,
+    pub retire: bool,
+}
+
 /// Autre revenu ou dépense (étape 4). La fréquence garde le format du noyau
 /// de l'interface ; on vérifie ici seulement qu'elle a un type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +88,9 @@ pub struct ElementStocke {
     pub suspensions: Vec<SuspensionStocke>,
     pub fin: Option<String>,
     pub cycle_paie: Option<String>,
+    /// Absent dans le format de l'étape 4 : aucun changement.
+    #[serde(default)]
+    pub changements_frequence: Vec<PeriodeStockee>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -77,6 +101,8 @@ pub struct DonneesPaie {
     pub exceptions: Vec<ExceptionStockee>,
     pub seuil: Option<i64>,
     pub elements: Vec<ElementStocke>,
+    #[serde(default)]
+    pub ajustements: Vec<AjustementStocke>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,6 +120,8 @@ pub enum ChangementPaie {
     DefinirSeuil { seuil: Option<i64> },
     DefinirElement { element: ElementStocke },
     SupprimerElement { id: String },
+    DefinirAjustement { ajustement: AjustementStocke },
+    RetirerAjustement { element_id: String, origine: String },
 }
 
 fn erreur(message: impl Into<String>) -> ErreurStockage {
@@ -170,6 +198,23 @@ fn verifier(changement: &ChangementPaie) -> Resultat<()> {
             }
             Ok(())
         }
+        ChangementPaie::DefinirAjustement { ajustement: a } => {
+            verifier_date(&a.origine)?;
+            if let Some(d) = &a.date {
+                verifier_date(d)?;
+            }
+            if let Some(d) = &a.paie_origine {
+                verifier_date(d)?;
+            }
+            if a.montant.is_some_and(|m| m < 0) {
+                return Err(erreur("Un montant ne peut pas être négatif."));
+            }
+            if a.montant.is_none() && a.date.is_none() && a.paie_origine.is_none() && !a.retire {
+                return Err(erreur("Un ajustement doit changer quelque chose."));
+            }
+            Ok(())
+        }
+        ChangementPaie::RetirerAjustement { origine, .. } => verifier_date(origine),
     }
 }
 
@@ -210,7 +255,39 @@ fn verifier_element(e: &ElementStocke) -> Resultat<()> {
     if let Some(c) = &e.cycle_paie {
         verifier_date(c)?;
     }
+    let mut dates = std::collections::BTreeSet::new();
+    for p in &e.changements_frequence {
+        verifier_date(&p.a_partir_du)?;
+        if !p.frequence.get("type").is_some_and(|t| t.is_string()) {
+            return Err(erreur("Fréquence invalide."));
+        }
+        if !dates.insert(p.a_partir_du.as_str()) {
+            return Err(erreur(
+                "Deux changements de fréquence ne peuvent pas commencer le même jour.",
+            ));
+        }
+    }
     Ok(())
+}
+
+fn lire_ajustements(conn: &rusqlite::Connection) -> Resultat<Vec<AjustementStocke>> {
+    let mut req = conn.prepare(
+        "SELECT element_id, origine, montant, date, paie_origine, retire
+         FROM ajustements_element ORDER BY element_id, origine",
+    )?;
+    let lignes = req
+        .query_map([], |r| {
+            Ok(AjustementStocke {
+                element_id: r.get(0)?,
+                origine: r.get(1)?,
+                montant: r.get(2)?,
+                date: r.get(3)?,
+                paie_origine: r.get(4)?,
+                retire: r.get::<_, i64>(5)? == 1,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(lignes)
 }
 
 fn lire_elements(conn: &rusqlite::Connection) -> Resultat<Vec<ElementStocke>> {
@@ -233,6 +310,7 @@ fn lire_elements(conn: &rusqlite::Connection) -> Resultat<Vec<ElementStocke>> {
                 suspensions: Vec::new(),
                 fin: r.get(7)?,
                 cycle_paie: r.get(8)?,
+                changements_frequence: Vec::new(),
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -241,6 +319,9 @@ fn lire_elements(conn: &rusqlite::Connection) -> Resultat<Vec<ElementStocke>> {
     )?;
     let mut req_s = conn.prepare(
         "SELECT debut, fin FROM suspensions_element WHERE element_id = ?1 ORDER BY debut, fin",
+    )?;
+    let mut req_p = conn.prepare(
+        "SELECT a_partir_du, frequence FROM periodes_frequence WHERE element_id = ?1 ORDER BY a_partir_du",
     )?;
     for e in &mut elements {
         e.montants = req_m
@@ -256,6 +337,15 @@ fn lire_elements(conn: &rusqlite::Connection) -> Resultat<Vec<ElementStocke>> {
                 Ok(SuspensionStocke {
                     debut: r.get(0)?,
                     fin: r.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        e.changements_frequence = req_p
+            .query_map([&e.id], |r| {
+                let f: String = r.get(1)?;
+                Ok(PeriodeStockee {
+                    a_partir_du: r.get(0)?,
+                    frequence: serde_json::from_str(&f).unwrap_or(serde_json::Value::Null),
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -291,6 +381,17 @@ fn ecrire_element(tx: &rusqlite::Transaction, e: &ElementStocke) -> Resultat<()>
         "DELETE FROM suspensions_element WHERE element_id = ?1",
         [&e.id],
     )?;
+    // Les ajustements de l'élément ne sont pas touchés : jamais d'écrasement.
+    tx.execute(
+        "DELETE FROM periodes_frequence WHERE element_id = ?1",
+        [&e.id],
+    )?;
+    for p in &e.changements_frequence {
+        tx.execute(
+            "INSERT INTO periodes_frequence (element_id, a_partir_du, frequence) VALUES (?1, ?2, ?3)",
+            params![e.id, p.a_partir_du, p.frequence.to_string()],
+        )?;
+    }
     for m in &e.montants {
         tx.execute(
             "INSERT INTO montants_element (element_id, a_partir_du, montant) VALUES (?1, ?2, ?3)",
@@ -351,12 +452,14 @@ impl Stockage {
             .parametre(CLE_SEUIL)?
             .and_then(|s| s.parse::<i64>().ok());
         let elements = lire_elements(&self.conn)?;
+        let ajustements = lire_ajustements(&self.conn)?;
         Ok(DonneesPaie {
             profil,
             salaires,
             exceptions,
             seuil,
             elements,
+            ajustements,
         })
     }
 
@@ -437,7 +540,34 @@ impl Stockage {
                 },
                 ChangementPaie::DefinirElement { element } => ecrire_element(&tx, element)?,
                 ChangementPaie::SupprimerElement { id } => {
+                    // Ses montants, suspensions, périodes et ajustements partent avec lui.
                     tx.execute("DELETE FROM elements WHERE id = ?1", [id])?;
+                }
+                ChangementPaie::DefinirAjustement { ajustement: a } => {
+                    let existe: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM elements WHERE id = ?1)",
+                        [&a.element_id],
+                        |r| r.get(0),
+                    )?;
+                    if !existe {
+                        return Err(erreur("Ce revenu ou cette dépense n'existe plus."));
+                    }
+                    tx.execute(
+                        "INSERT INTO ajustements_element (element_id, origine, montant, date, paie_origine, retire)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                         ON CONFLICT(element_id, origine) DO UPDATE SET montant = excluded.montant,
+                           date = excluded.date, paie_origine = excluded.paie_origine, retire = excluded.retire",
+                        params![a.element_id, a.origine, a.montant, a.date, a.paie_origine, a.retire as i64],
+                    )?;
+                }
+                ChangementPaie::RetirerAjustement {
+                    element_id,
+                    origine,
+                } => {
+                    tx.execute(
+                        "DELETE FROM ajustements_element WHERE element_id = ?1 AND origine = ?2",
+                        [element_id, origine],
+                    )?;
                 }
             }
         }

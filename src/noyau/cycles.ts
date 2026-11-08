@@ -22,7 +22,7 @@
 import { ajouterJours, type DateCivile } from './dates';
 import { additionner, type Cents } from './montants';
 import { paiesEntre, type ExceptionPaie, type Paie, type ProfilPaie } from './paie';
-import { montantEnVigueur, occurrences, type Regle } from './regles';
+import { montantEnVigueur, occurrences, periodesDe, type Regle } from './regles';
 
 export type Nature = 'revenu' | 'depense';
 export type Genre = 'fixe' | 'enveloppe';
@@ -41,6 +41,26 @@ export interface ElementPlanifie {
   estimation?: boolean;
   /** Dépense ponctuelle rattachée au cycle de cette paie (date d'origine). */
   cyclePaie?: DateCivile;
+}
+
+/**
+ * Ajustement d'UNE occurrence (étape 4b, A) : la règle ne change pas.
+ * L'occurrence est identifiée par son élément et sa date d'origine :
+ * l'échéance d'origine pour un élément daté, la date d'origine de la paie
+ * pour un élément lié à la paie ou rattaché à un cycle choisi. Cette clé ne
+ * bouge jamais, même si la paie ou l'échéance est déplacée.
+ */
+export interface AjustementOccurrence {
+  elementId: string;
+  origine: DateCivile;
+  /** Montant pour cette fois seulement. */
+  montant?: Cents;
+  /** Nouvelle échéance (élément daté) : rattachée selon A1, sauf paie choisie. */
+  date?: DateCivile;
+  /** Payée avec cette paie (date d'origine), échéance inchangée. */
+  paieOrigine?: DateCivile;
+  /** Retirée cette fois-ci : visible, jamais comptée. */
+  retire?: boolean;
 }
 
 export interface RattachementManuel {
@@ -65,8 +85,14 @@ export interface Ligne {
   genre: Genre;
   incertain: boolean;
   estimation: boolean;
-  /** Entre dans le disponible ; faux pour un revenu incertain. */
+  /** Entre dans le disponible ; faux pour un revenu incertain ou une occurrence retirée. */
   compte: boolean;
+  /** Date d'origine : identité stable de l'occurrence (avec l'élément). */
+  origine: DateCivile;
+  /** L'occurrence porte un ajustement. */
+  ajuste: boolean;
+  /** Retirée cette fois-ci. */
+  retiree: boolean;
 }
 
 export type Signal = 'negatif' | 'seuil' | null;
@@ -104,6 +130,7 @@ export interface EntreePlan {
   exceptions?: readonly ExceptionPaie[];
   elements?: readonly ElementPlanifie[];
   rattachementsManuels?: readonly RattachementManuel[];
+  ajustements?: readonly AjustementOccurrence[];
   /** Seuil d'attention (A9) ; null ou absent : seul un disponible négatif est signalé. */
   seuil?: Cents | null;
   /** Date du jour ; n'influence aucun montant ni aucun statut à cette étape. */
@@ -143,46 +170,47 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
   const avantPremierCycle: Ligne[] = [];
   const reglesSansOccurrence: string[] = [];
 
-  // Pour le rattachement des dates fixes : toutes les paies réelles connues
-  // jusqu'à la fin de la période, y compris celles d'avant la période. On
-  // part un peu avant la date de départ : la toute première paie peut avoir
-  // été avancée par une exception.
-  const paiesReelles = paiesEntre(entree.profil, exceptions, ajouterJours(entree.profil.frequence.depart, -62), finPeriode);
+  // On génère les occurrences un peu au-delà de la période : un ajustement
+  // peut y faire entrer (ou en faire sortir) une occurrence voisine.
+  const debutGen = ajouterJours(debut, -62);
+  const finGen = ajouterJours(finPeriode, 62);
+  // Pour le rattachement des dates fixes : toutes les paies réelles connues,
+  // y compris celles d'avant la période. On part un peu avant la date de
+  // départ : la toute première paie peut avoir été avancée par une exception.
+  const paiesReelles = paiesEntre(entree.profil, exceptions, ajouterJours(entree.profil.frequence.depart, -62), finGen);
   const premiereDuProfil = paiesReelles[0]?.date ?? entree.profil.frequence.depart;
+  // Dates d'origine des paies de mois complets : le rang en dépend (Q7).
+  const origines = paiesReelles.map((p) => p.dateOrigine);
+  const ajustements = indexerAjustements(entree);
 
   for (const el of elements) {
-    if (el.cyclePaie !== undefined) {
-      // D7 : une seule ligne, dans le cycle de la paie choisie (même déplacée).
-      parOrigine.get(el.cyclePaie)?.lignes.push(ligne(el, null, montantEnVigueur(el.regle.montants, el.cyclePaie), false));
-      continue;
+    let placees = 0;
+    for (const occ of occurrencesElement(el, origines, debutGen, finGen)) {
+      const a = ajustements.get(cle(el.id, occ.origine));
+      const echeance = occ.echeance !== null && a?.date !== undefined ? a.date : occ.echeance;
+      const montant = a?.montant !== undefined ? a.montant : occ.montant;
+      const l = ligne(el, echeance, montant, a?.paieOrigine !== undefined, occ.origine, a);
+      let cible: Cycle | undefined;
+      if (a?.paieOrigine !== undefined) {
+        cible = parOrigine.get(a.paieOrigine);
+      } else if (occ.paie !== null) {
+        cible = parOrigine.get(occ.paie);
+      } else if (echeance !== null) {
+        if (echeance < premiereDuProfil) {
+          if (echeance >= debut && echeance <= finPeriode) avantPremierCycle.push(l);
+          continue;
+        }
+        // A1 : dernière paie versée au plus tard le jour de l'échéance.
+        const paie = [...paiesReelles].reverse().find((p) => p.date <= echeance);
+        cible = paie ? parOrigine.get(paie.dateOrigine) : undefined;
+      }
+      if (cible) {
+        cible.lignes.push(l);
+        placees += 1;
+      }
     }
-    if (estLieeALaPaie(el.regle)) {
-      // Dates d'origine des paies de mois complets : le rang en dépend (Q7).
-      const origines = paiesReelles.map((p) => p.dateOrigine);
-      const occ = occurrences(el.regle, cycles[0]?.paie.dateOrigine ?? debut, cycles.at(-1)?.paie.dateOrigine ?? fin, origines)
-        .filter((o) => parOrigine.has(o.date));
-      if (el.regle.frequence.type === 'rangPaie' && occ.length === 0) reglesSansOccurrence.push(el.id);
-      for (const o of occ) {
-        parOrigine.get(o.date)?.lignes.push(ligne(el, null, o.montant, false));
-      }
-      continue;
-    }
-
-    for (const o of occurrences(el.regle, debut, finPeriode)) {
-      const manuel = entree.rattachementsManuels?.find((r) => r.elementId === el.id && r.echeance === o.date);
-      const cibleManuelle = manuel ? parOrigine.get(manuel.paieOrigine) : undefined;
-      if (cibleManuelle) {
-        cibleManuelle.lignes.push(ligne(el, o.date, o.montant, true));
-        continue;
-      }
-      if (o.date < premiereDuProfil) {
-        avantPremierCycle.push(ligne(el, o.date, o.montant, false));
-        continue;
-      }
-      // A1 : dernière paie versée au plus tard le jour de l'échéance.
-      const paie = [...paiesReelles].reverse().find((p) => p.date <= o.date);
-      const cible = paie ? parOrigine.get(paie.dateOrigine) : undefined;
-      cible?.lignes.push(ligne(el, o.date, o.montant, false));
+    if (el.regle.frequence.type === 'rangPaie' && !el.regle.changements?.length && !el.cyclePaie && placees === 0) {
+      reglesSansOccurrence.push(el.id);
     }
   }
 
@@ -195,18 +223,26 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
     c.revenus = c.paie.montant !== null && c.autresRevenus !== null ? c.paie.montant + c.autresRevenus : null;
     c.disponible = c.revenus !== null && c.sorties !== null ? c.revenus - c.sorties : null;
     c.estimation = comptees.some((l) => l.estimation);
-    c.nonComptes = additionner(0, ...c.lignes.filter((l) => !l.compte && l.montant !== null).map((l) => l.montant ?? 0));
+    c.nonComptes = additionner(0, ...c.lignes.filter((l) => l.incertain && !l.retiree && l.montant !== null).map((l) => l.montant ?? 0));
     c.signal = signal(c.disponible, seuil);
   }
 
   return { cycles, avantPremierCycle, reglesSansOccurrence };
 }
 
-function ligne(el: ElementPlanifie, echeance: DateCivile | null, montant: Cents | null, manuel: boolean): Ligne {
+function ligne(
+  el: ElementPlanifie,
+  echeance: DateCivile | null,
+  montant: Cents | null,
+  manuel: boolean,
+  origine: DateCivile,
+  a: AjustementOccurrence | undefined,
+): Ligne {
   const nature = el.nature ?? 'depense';
   // Une enveloppe est toujours une dépense ; seul un revenu peut être incertain.
   const genre = nature === 'depense' ? (el.genre ?? 'fixe') : 'fixe';
   const incertain = nature === 'revenu' && el.incertain === true;
+  const retiree = a?.retire === true;
   return {
     elementId: el.id,
     libelle: el.libelle,
@@ -218,8 +254,98 @@ function ligne(el: ElementPlanifie, echeance: DateCivile | null, montant: Cents 
     genre,
     incertain,
     estimation: el.estimation === true,
-    compte: !incertain,
+    // A3 : un revenu incertain n'est jamais compté, même ajusté.
+    compte: !incertain && !retiree,
+    origine,
+    ajuste: a !== undefined,
+    retiree,
   };
+}
+
+const cle = (elementId: string, origine: DateCivile) => `${elementId}|${origine}`;
+
+function indexerAjustements(entree: EntreePlan): Map<string, AjustementOccurrence> {
+  const m = new Map<string, AjustementOccurrence>();
+  // Rattachements manuels de l'étape 3 : un ajustement « payée avec cette paie ».
+  for (const r of entree.rattachementsManuels ?? []) {
+    m.set(cle(r.elementId, r.echeance), { elementId: r.elementId, origine: r.echeance, paieOrigine: r.paieOrigine });
+  }
+  for (const a of entree.ajustements ?? []) m.set(cle(a.elementId, a.origine), a);
+  return m;
+}
+
+interface OccurrenceBrute {
+  origine: DateCivile;
+  /** Échéance d'origine ; null pour un élément lié à la paie. */
+  echeance: DateCivile | null;
+  montant: Cents | null;
+  /** Paie (date d'origine) d'un élément lié à la paie ; null pour un élément daté. */
+  paie: DateCivile | null;
+}
+
+/** Toutes les occurrences d'un élément, période de fréquence par période (B). */
+function occurrencesElement(
+  el: ElementPlanifie,
+  origines: readonly DateCivile[],
+  debutGen: DateCivile,
+  finGen: DateCivile,
+): OccurrenceBrute[] {
+  if (el.cyclePaie !== undefined) {
+    // D7 : une seule ligne, dans le cycle de la paie choisie (même déplacée).
+    return [{ origine: el.cyclePaie, echeance: null, montant: montantEnVigueur(el.regle.montants, el.cyclePaie), paie: el.cyclePaie }];
+  }
+  const resultat: OccurrenceBrute[] = [];
+  for (const p of periodesDe(el.regle)) {
+    const regle: Regle = {
+      frequence: p.frequence,
+      montants: el.regle.montants,
+      suspensions: el.regle.suspensions,
+      ...(minimum(el.regle.fin ?? null, p.fin) !== null ? { fin: minimum(el.regle.fin ?? null, p.fin)! } : {}),
+    };
+    const depuis = (d: DateCivile) => (p.debut === null || d >= p.debut ? d : p.debut);
+    if (estLieeALaPaie(regle)) {
+      if (origines.length === 0) continue;
+      for (const o of occurrences(regle, depuis(origines[0]!), origines.at(-1)!, origines)) {
+        resultat.push({ origine: o.date, echeance: null, montant: o.montant, paie: o.date });
+      }
+    } else {
+      for (const o of occurrences(regle, depuis(debutGen), finGen)) {
+        resultat.push({ origine: o.date, echeance: o.date, montant: o.montant, paie: null });
+      }
+    }
+  }
+  return resultat;
+}
+
+function minimum(a: DateCivile | null, b: DateCivile | null): DateCivile | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return a < b ? a : b;
+}
+
+/**
+ * Ajustements qui ne correspondent plus à aucune occurrence (élément
+ * supprimé, date suspendue, fréquence changée…). Ils n'agissent plus ; les
+ * actions les nomment avant d'enregistrer, jamais en silence.
+ */
+export function ajustementsOrphelins(entree: {
+  profil: ProfilPaie;
+  exceptions?: readonly ExceptionPaie[];
+  elements: readonly ElementPlanifie[];
+  ajustements: readonly AjustementOccurrence[];
+}): AjustementOccurrence[] {
+  return entree.ajustements.filter((a) => {
+    const el = entree.elements.find((e) => e.id === a.elementId);
+    if (!el) return true;
+    if (el.cyclePaie !== undefined) return a.origine !== el.cyclePaie;
+    const origines = paiesEntre(entree.profil, entree.exceptions ?? [], ajouterJours(a.origine, -70), ajouterJours(a.origine, 70)).map(
+      (p) => p.dateOrigine,
+    );
+    const existe = occurrencesElement(el, origines, ajouterJours(a.origine, -1), ajouterJours(a.origine, 1)).some(
+      (o) => o.origine === a.origine,
+    );
+    return !existe;
+  });
 }
 
 /** A9 et Q8 : négatif, ou strictement sous le seuil. */
@@ -245,10 +371,10 @@ export interface ChangementRattachement {
  */
 export function comparerRattachements(avant: Plan, apres: Plan): ChangementRattachement[] {
   const position = (plan: Plan) => {
-    const m = new Map<string, { paie: DateCivile; libelle: string }>();
+    const m = new Map<string, { paie: DateCivile; libelle: string; echeance: DateCivile; elementId: string }>();
     for (const c of plan.cycles) {
       for (const l of c.lignes) {
-        if (l.echeance) m.set(`${l.elementId}|${l.echeance}`, { paie: c.paie.dateOrigine, libelle: l.libelle });
+        if (l.echeance) m.set(cle(l.elementId, l.origine), { paie: c.paie.dateOrigine, libelle: l.libelle, echeance: l.echeance, elementId: l.elementId });
       }
     }
     return m;
@@ -256,11 +382,10 @@ export function comparerRattachements(avant: Plan, apres: Plan): ChangementRatta
   const a = position(avant);
   const b = position(apres);
   const changements: ChangementRattachement[] = [];
-  for (const [cle, { paie, libelle }] of a) {
-    const nouvelle = b.get(cle);
+  for (const [k, { paie, libelle, echeance, elementId }] of a) {
+    const nouvelle = b.get(k);
     if (nouvelle && nouvelle.paie !== paie) {
-      const [elementId = '', echeance = ''] = cle.split('|');
-      changements.push({ elementId, libelle, echeance: echeance as DateCivile, dePaie: paie, versPaie: nouvelle.paie });
+      changements.push({ elementId, libelle, echeance, dePaie: paie, versPaie: nouvelle.paie });
     }
   }
   return changements.sort((x, y) => (x.echeance < y.echeance ? -1 : 1));

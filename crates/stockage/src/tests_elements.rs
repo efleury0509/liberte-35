@@ -49,6 +49,7 @@ fn loyer() -> ElementStocke {
         }],
         fin: Some("2028-06-30".into()),
         cycle_paie: None,
+        changements_frequence: vec![],
     }
 }
 
@@ -244,9 +245,10 @@ fn un_fichier_de_l_etape_3_passe_en_version_3_sans_perte() {
         }],
         seuil: Some(50_000),
         elements: Vec::new(),
+        ajustements: Vec::new(),
     };
     let s = Stockage::ouvrir(&chemin, Profil::Essai, horloge()).unwrap();
-    assert_eq!(s.version_schema().unwrap(), 3);
+    assert_eq!(s.version_schema().unwrap(), 4);
     assert_eq!(s.lire_paie().unwrap(), avant);
     assert_eq!(s.nombre_entrees_journal().unwrap(), 1);
     let copies = std::fs::read_dir(d.path().join("precaution"))

@@ -11,10 +11,12 @@
     proposerAjout,
     proposerCertitude,
     proposerFin,
+    proposerFrequence,
     proposerMontant,
     proposerReprise,
     proposerSuppression,
     proposerSuspension,
+    quandLieePaie,
     quandSansDate,
     type Quand,
   } from '../../actions/elements';
@@ -35,12 +37,15 @@
     /** Augmente à chaque confirmation ou annulation : les formulaires se ferment. */
     remise: number;
     proposer: (fabrique: () => Proposition) => void;
+    /** Élément à ouvrir (« Modifier la règle… » depuis le détail d'un cycle). */
+    aGerer?: string | null;
   }
-  let { elements, donnees, modifiable, cycles, jour, remise, proposer }: Props = $props();
+  let { elements, donnees, modifiable, cycles, jour, remise, proposer, aGerer = null }: Props = $props();
 
   let ajout = $state(false);
   let gere: string | null = $state(null);
-  let action: 'montant' | 'suspendre' | 'reprendre' | 'terminer' | null = $state(null);
+  let action: 'montant' | 'frequence' | 'suspendre' | 'reprendre' | 'terminer' | null = $state(null);
+  let fNouvelleFrequence = $state<Quand>('chaquePaie');
 
   // Champs de l'ajout
   let fNature = $state<'depense' | 'revenu'>('depense');
@@ -63,7 +68,18 @@
     action = null;
   });
 
+  $effect(() => {
+    if (!aGerer) return;
+    gere = aGerer;
+    action = null;
+    ajout = false;
+    const id = aGerer;
+    queueMicrotask(() => document.getElementById(`element-${id}`)?.scrollIntoView({ block: 'center' }));
+  });
+
   const choixQuand = $derived(fNature === 'revenu' ? QUAND_REVENU : QUAND_DEPENSE);
+  const recurrences = (e: ElementStocke) => (e.nature === 'revenu' ? QUAND_REVENU : QUAND_DEPENSE).filter((q) => q !== 'unique' && q !== 'cycle');
+  const nombreAjustements = (e: ElementStocke) => (donnees?.ajustements ?? []).filter((a) => a.elementId === e.id).length;
   $effect(() => {
     if (!choixQuand.includes(fQuand)) fQuand = 'mois';
   });
@@ -85,6 +101,8 @@
     const s = e.suspensions.find((x) => x.fin >= jour);
     if (s) t.push(s.debut <= jour ? `Suspendu jusqu’au ${formaterDateCourte(s.fin as DateCivile)}` : `Suspension du ${formaterDateCourte(s.debut as DateCivile)} au ${formaterDateCourte(s.fin as DateCivile)}`);
     if (e.fin) t.push(e.fin < jour ? 'Terminé' : `Se termine après le ${formaterDateCourte(e.fin as DateCivile)}`);
+    const n = nombreAjustements(e);
+    if (n > 0) t.push(n === 1 ? '1 occurrence ajustée' : `${n} occurrences ajustées`);
     return t;
   }
 
@@ -131,6 +149,7 @@
     e.preventDefault();
     const d = donnees!;
     if (action === 'montant') proposer(() => proposerMontant(d, el.id, fA, fB, jour));
+    if (action === 'frequence') proposer(() => proposerFrequence(d, el.id, fNouvelleFrequence, fA, jour));
     if (action === 'suspendre') proposer(() => proposerSuspension(d, el.id, fA, fB, jour));
     if (action === 'reprendre') proposer(() => proposerReprise(d, el.id, fA, jour));
     if (action === 'terminer') proposer(() => proposerFin(d, el.id, fA, jour));
@@ -206,6 +225,8 @@
             {/each}
           </select>
         </label>
+      {:else if quandLieePaie(fQuand)}
+        <label>Date de départ (facultatif : sinon, dès le cycle actuel) <input type="date" bind:value={fDate} /></label>
       {:else if !quandSansDate(fQuand)}
         <label>Date <input type="date" bind:value={fDate} /></label>
       {/if}
@@ -213,18 +234,18 @@
       {#if fNature === 'revenu'}
         <label class="case"><input type="checkbox" bind:checked={fIncertain} /> Revenu incertain</label>
       {/if}
-      <button type="submit" class="principal">Voir l’aperçu</button>
+      <button type="submit" class="principal">Enregistrer</button>
       <button type="button" onclick={() => (ajout = false)}>Annuler</button>
     </form>
   {/if}
 {/if}
 
 {#snippet item(e: ElementStocke)}
-  <li>
+  <li id={`element-${e.id}`}>
     <div class="ligne">
       <span class="nom">{e.libelle}</span>
       <span class="montant">{montantAffiche(e)}</span>
-      <span class="discret">{decrireQuand(e)}</span>
+      <span class="discret">{decrireQuand(e, jour)}</span>
       {#each etiquettes(e) as t (t)}<span class="etiquette">{t}</span>{/each}
       {#if modifiable}
         <button type="button" class="petit" onclick={() => gerer(e.id)} aria-expanded={gere === e.id}>Gérer</button>
@@ -233,6 +254,9 @@
     {#if gere === e.id}
       <div class="boutons">
         <button type="button" onclick={() => choisirAction('montant')}>Changer le montant à partir d’une date</button>
+        {#if !e.cyclePaie && e.frequence.type !== 'ponctuelle'}
+          <button type="button" onclick={() => choisirAction('frequence')}>Changer la fréquence à partir d’une date</button>
+        {/if}
         <button type="button" onclick={() => choisirAction('suspendre')}>Suspendre</button>
         {#if e.suspensions.some((s) => s.fin >= jour)}
           <button type="button" onclick={() => choisirAction('reprendre')}>Reprendre plus tôt</button>
@@ -250,6 +274,16 @@
           {#if action === 'montant'}
             <label>À partir du <input type="date" bind:value={fA} /></label>
             <label>Nouveau montant ($) <input inputmode="decimal" bind:value={fB} /></label>
+          {:else if action === 'frequence'}
+            <label
+              >Nouvelle fréquence
+              <select bind:value={fNouvelleFrequence}>
+                {#each recurrences(e) as q (q)}
+                  <option value={q}>{LIBELLES_QUAND[q]}</option>
+                {/each}
+              </select>
+            </label>
+            <label>À partir du <input type="date" bind:value={fA} /></label>
           {:else if action === 'suspendre'}
             <label>Du <input type="date" bind:value={fA} /></label>
             <label>Au (inclus) <input type="date" bind:value={fB} /></label>
@@ -258,7 +292,7 @@
           {:else}
             <label>Dernière date incluse <input type="date" bind:value={fA} /></label>
           {/if}
-          <button type="submit" class="principal">Voir l’aperçu</button>
+          <button type="submit" class="principal">Enregistrer</button>
           <button type="button" onclick={() => (action = null)}>Annuler</button>
         </form>
       {/if}

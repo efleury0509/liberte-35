@@ -24,11 +24,17 @@ et dans le cahier fonctionnel de référence.
   enregistrement et journal. Base de données en version 2 (copie de
   précaution avant la mise à niveau). Exemple fictif visible seulement dans
   l'installation d'essai.
-- Étape 4 (version 0.4.0) : autres revenus (certains, incertains, estimés),
+- Étape 4 (validée fonctionnellement, version 0.4.0) : autres revenus (certains, incertains, estimés),
   dépenses fixes et enveloppes variables en deux panneaux, dépenses
   ponctuelles ; modifier à partir d'une date, suspendre, terminer, supprimer.
   Un revenu incertain reste hors du disponible. Base de données en version 3.
   Chaque version publiée porte son propre numéro (voir docs/RECONSTRUIRE.md).
+- Étape 4b (version 0.4.1) : « Enregistrer » direct avec « Annuler », aperçu
+  seulement quand il protège ; ajustements d'une occurrence (montant, date,
+  autre paie, retrait) depuis le détail d'un cycle, sans toucher la règle ;
+  changement de fréquence daté ; « Voir les paies suivantes ». Textes clairs
+  de l'installateur Windows (installation, mise à jour, réinstallation) et
+  version visible dans la barre latérale. Base de données en version 4.
 
 ## Organisation du code
 

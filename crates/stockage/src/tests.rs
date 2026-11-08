@@ -57,7 +57,7 @@ fn nouveau_fichier_cree_a_la_derniere_version() {
     let s = Stockage::ouvrir(&chemin_dans(&d, "donnees.sqlite"), Profil::Essai, horloge()).unwrap();
     let etat = s.etat().unwrap();
     assert_eq!(etat.version_schema, version_schema_attendue());
-    assert_eq!(etat.version_schema, 3);
+    assert_eq!(etat.version_schema, 4);
     assert_eq!(etat.profil, Profil::Essai);
     assert!(etat.integrite_ok);
     assert_eq!(etat.nombre_entrees_journal, 0);

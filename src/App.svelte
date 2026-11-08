@@ -29,7 +29,7 @@
 </script>
 
 <div class="application">
-  <BarreLaterale active={sectionActive} profil={etat?.profil} onchoisir={(id) => (sectionActive = id)} />
+  <BarreLaterale active={sectionActive} profil={etat?.profil} version={etat?.versionApplication} onchoisir={(id) => (sectionActive = id)} />
 
   <main id="contenu" tabindex="-1" aria-labelledby="titre-section">
     {#if erreur}

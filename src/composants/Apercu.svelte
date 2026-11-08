@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Aperçu d'un changement important (cahier 14.2) : anciennes et nouvelles
-  // valeurs, conséquences, puis confirmer, ajuster ou annuler.
+  // Aperçu d'un changement important (cahier 14.2, étape 4b C) : anciennes
+  // et nouvelles valeurs, conséquences, puis enregistrer, ajuster ou annuler.
+  // N'apparaît que lorsqu'il protège vraiment.
   import type { Proposition } from '../actions/paie';
 
   interface Props {
@@ -15,6 +16,7 @@
 </script>
 
 <div class="apercu" role="dialog" aria-modal="false" aria-labelledby="titre-apercu" data-testid="apercu">
+  <p class="avis">À vérifier avant d’enregistrer</p>
   <h2 id="titre-apercu">{proposition.titre}</h2>
   <table>
     <thead>
@@ -42,7 +44,7 @@
     <p role="alert" class="erreur">{erreur}</p>
   {/if}
   <div class="boutons">
-    <button type="button" class="principal" onclick={onconfirmer} disabled={enCours}>Confirmer</button>
+    <button type="button" class="principal" onclick={onconfirmer} disabled={enCours}>Enregistrer</button>
     <button type="button" onclick={onajuster} disabled={enCours}>Ajuster</button>
     <button type="button" onclick={onannuler} disabled={enCours}>Annuler</button>
   </div>
@@ -60,6 +62,11 @@
   h2 {
     font-size: 17px;
     margin: 0 0 var(--espace-3);
+  }
+  .avis {
+    margin: 0 0 var(--espace-1);
+    font-size: var(--taille-petit);
+    color: var(--couleur-texte-discret);
   }
   h3 {
     font-size: var(--taille-texte);
