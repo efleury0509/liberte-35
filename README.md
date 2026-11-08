@@ -13,14 +13,18 @@ et dans le cahier fonctionnel de référence.
 
 ## État
 
-Étape 1 : fondations. Les huit sections existent dans la barre latérale ;
-elles prendront vie aux étapes suivantes du plan.
+- Étape 1 (validée) : fondations. Les huit sections existent dans la barre
+  latérale ; elles prendront vie aux étapes suivantes du plan.
+- Étape 2 : socle de calcul (`src/noyau/`) — montants en cents exacts,
+  dates civiles sans heure, toutes les fréquences du cahier, dates d'effet,
+  suspensions et fin. Aucun nouvel écran.
 
 ## Organisation du code
 
 | Dossier | Contenu |
 | --- | --- |
 | `src/` | Interface (Svelte + TypeScript). Ne calcule rien. |
+| `src/noyau/` | Calculs purs : montants, dates, fréquences, règles. Aucun écran, aucun stockage. |
 | `src/lib/textes.fr.ts` | Tous les libellés, pour ajuster le ton sans toucher au code. |
 | `src/styles/jetons.css` | Apparence provisoire ; sera remplacée par la direction artistique. |
 | `crates/stockage/` | Fichier SQLite, versions du schéma, journal des changements. Testé seul. |
