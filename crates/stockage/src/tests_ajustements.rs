@@ -316,7 +316,10 @@ fn b4_un_fichier_de_l_etape_4_passe_en_version_4_sans_rien_changer() {
             .unwrap();
     }
     let s = Stockage::ouvrir(&chemin, Profil::Essai, horloge()).unwrap();
-    assert_eq!(s.version_schema().unwrap(), 4);
+    assert_eq!(
+        s.version_schema().unwrap(),
+        MIGRATIONS.last().unwrap().version
+    );
     let donnees = s.lire_paie().unwrap();
     assert_eq!(
         donnees.elements,
@@ -354,5 +357,5 @@ fn b4_un_fichier_de_l_etape_4_passe_en_version_4_sans_rien_changer() {
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
     assert_eq!(copies.len(), 1);
-    assert!(copies[0].contains("v3-vers-v4"), "{copies:?}");
+    assert!(copies[0].contains("v3-vers-v"), "{copies:?}");
 }

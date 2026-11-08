@@ -27,19 +27,27 @@ export function cyclesAffiches(
   entree: Omit<Parameters<typeof planifier>[0], 'profil'>,
   jour: DateCivile,
   nombre: number = NOMBRE_CYCLES,
-): { plan: ReturnType<typeof planifier>; cycles: Cycle[]; courant: DateCivile | null } {
+  /** Étape 5 : cycles précédents affichés en plus, avant le cycle actuel. */
+  precedents = 0,
+): { plan: ReturnType<typeof planifier>; cycles: Cycle[]; courant: DateCivile | null; aVerifierAvant: number } {
   const depart = profil.frequence.depart;
   // 0.4.3 : la première paie peut être versée avant la date de départ du
   // calendrier ; l'affichage commence alors à sa date réelle.
   const premiere = paiesEntre(profil, entree.exceptions ?? [], ajouterJours(depart, -31), ajouterJours(depart, 31))[0]?.date ?? depart;
   const debutCalendrier = premiere < depart ? premiere : depart;
-  const debut = depart > jour ? debutCalendrier : ajouterJours(jour, -45);
+  // Étape 5 : on calcule aussi les cycles des derniers mois, pour savoir s'il
+  // y reste des éléments à vérifier (jamais avant le début du calendrier).
+  const recul = ajouterJours(jour, -200 - precedents * 32);
+  const debut = depart > jour ? debutCalendrier : recul < debutCalendrier ? debutCalendrier : recul;
   // Assez large pour « nombre » cycles mensuels, plus la marge du début.
-  const plan = planifier({ ...entree, profil }, debut, ajouterJours(debut, 60 + nombre * 32));
-  const i = Math.max(0, plan.cycles.findIndex((c) => c.fin >= jour));
-  const cycles = plan.cycles.slice(i, i + nombre);
+  // Étape 5 : la date du jour donne les statuts (À venir, À vérifier).
+  const plan = planifier({ aujourdhui: jour, ...entree, profil }, debut, ajouterJours(jour > debut ? jour : debut, 60 + nombre * 32));
+  const iActuel = Math.max(0, plan.cycles.findIndex((c) => c.fin >= jour));
+  const i = Math.max(0, iActuel - precedents);
+  const cycles = plan.cycles.slice(i, iActuel + nombre);
   const actuel = plan.cycles.find((c) => c.debut <= jour && c.fin >= jour);
-  return { plan, cycles, courant: actuel?.paie.dateOrigine ?? null };
+  const aVerifierAvant = plan.cycles.slice(0, i).reduce((n, c) => n + c.aVerifier, 0);
+  return { plan, cycles, courant: actuel?.paie.dateOrigine ?? null, aVerifierAvant };
 }
 
 export interface Analyse {
@@ -55,7 +63,13 @@ export interface Analyse {
 
 const MAX_CYCLES_MONTRES = 4;
 
-const entreeDe = (n: DonneesNoyau) => ({ exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, seuil: n.seuil });
+const entreeDe = (n: DonneesNoyau) => ({
+  exceptions: n.exceptions,
+  elements: n.elements,
+  ajustements: n.ajustements,
+  confirmations: n.confirmations,
+  seuil: n.seuil,
+});
 
 export function analyser(d: DonneesPaie, changements: readonly ChangementPaie[], jour: DateCivile): Analyse {
   const vide: Analyse = { cycles: [], passes: false, rattachements: [], orphelins: [] };

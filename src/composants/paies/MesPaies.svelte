@@ -25,11 +25,18 @@
   import { aujourdhui } from '../../lib/aujourdhui';
   import { exempleAutorise } from '../../lib/exemple';
   import type { ChangementPaie, DonneesPaie, EntreeJournal, FrequenceStockee, Plateforme, Profil } from '../../lib/plateforme';
-  import { planifier, type Cycle, type Ligne, type Plan } from '../../noyau/cycles';
+  import { planifier, type Cycle, type FaitConfirme, type Ligne, type Plan } from '../../noyau/cycles';
   import { dateCivile, formaterDateCourte, formaterDateLongue, type DateCivile } from '../../noyau/dates';
   import { formaterMontant } from '../../noyau/montants';
   import { montantEnVigueur } from '../../noyau/regles';
   import Apercu from '../Apercu.svelte';
+  import {
+    proposerAnnulationConfirmation,
+    proposerConfirmation,
+    proposerCorrection,
+    proposerToutConfirmer,
+    type CibleConfirmation,
+  } from '../../actions/confirmations';
   import RevenusDepenses from './RevenusDepenses.svelte';
   import TableauCycles from './TableauCycles.svelte';
 
@@ -53,6 +60,7 @@
   let enCours = $state(false);
   let remise = $state(0);
   let nombreCycles = $state(NOMBRE_CYCLES);
+  let nombrePrecedents = $state(0);
   /** Dernier enregistrement direct, qu'on peut annuler (C). */
   let dernier: { titre: string; inverse: ChangementPaie[]; journal: EntreeJournal[] } | null = $state(null);
   let messageAnnulation: string | null = $state(null);
@@ -61,6 +69,10 @@
   // 0.4.3 : la modification de la paie elle-même est repliée par défaut,
   // pour ne jamais la confondre avec l'ajustement d'un revenu ou d'une dépense.
   let modifPaie = $state(false);
+  // Étape 5 : « Confirmer autrement… » ou « Corriger » une confirmation.
+  let formConfirmation: { cible: CibleConfirmation; mode: 'confirmer' | 'corriger' } | null = $state(null);
+  let fConfMontant = $state('');
+  let fConfDate = $state('');
   let minuterieAnnulation: ReturnType<typeof setTimeout> | undefined;
   let fOccMontant = $state('');
   let fOccDate = $state('');
@@ -96,6 +108,8 @@
     plan: Plan;
     cycles: Cycle[];
     courant: DateCivile | null;
+    /** Éléments à vérifier dans les cycles non affichés d’avant. */
+    aVerifierAvant: number;
   }
 
   const calcul: { vue: Vue | null; erreur: string | null } = $derived.by(() => {
@@ -110,14 +124,15 @@
   function calculerVue(): Vue | null {
     if (exemple) {
       const plan = planifier({ profil: PROFIL_ETAPE4, elements: ELEMENTS_ETAPE4 }, PERIODE_ETAPE4.debut, PERIODE_ETAPE4.fin);
-      return { plan, cycles: plan.cycles, courant: null };
+      return { plan, cycles: plan.cycles, courant: null, aVerifierAvant: 0 };
     }
     if (!noyau?.profil) return null;
     return cyclesAffiches(
       noyau.profil,
-      { exceptions: noyau.exceptions, elements: noyau.elements, ajustements: noyau.ajustements, seuil: noyau.seuil },
+      { exceptions: noyau.exceptions, elements: noyau.elements, ajustements: noyau.ajustements, confirmations: noyau.confirmations, seuil: noyau.seuil },
       jour,
       nombreCycles,
+      nombrePrecedents,
     );
   }
 
@@ -167,6 +182,7 @@
       erreurSaisie = null;
       occurrence = null;
       modifPaie = false;
+      formConfirmation = null;
       remise += 1;
       onchangement();
     } catch (e) {
@@ -191,7 +207,7 @@
         d.journal.map((e) => ({ ...e, champ: `annulation — ${e.champ}`, ancienneValeur: e.nouvelleValeur, nouvelleValeur: e.ancienneValeur })),
       );
       dernier = null;
-      messageAnnulation = `Annulé : ${d.titre}.`;
+      messageAnnulation = `Annulé : ${finPhrase(d.titre)}`;
       // 0.4.3 : la confirmation d'annulation disparaît d'elle-même.
       clearTimeout(minuterieAnnulation);
       minuterieAnnulation = setTimeout(() => (messageAnnulation = null), 5000);
@@ -207,6 +223,7 @@
     if (!donnees) return;
     occurrence = { elementId, origine };
     modifPaie = false;
+    formConfirmation = null;
     erreurSaisie = null;
     const etat = lireOccurrence(donnees, occurrence);
     fOccMontant = etat.ligne?.montant !== null && etat.ligne?.montant !== undefined ? (etat.ligne.montant / 100).toFixed(2).replace('.', ',') : '';
@@ -221,10 +238,25 @@
     remise += 1;
   }
 
+  // Un titre qui finit par une abréviation (« 7 janv. ») ne reçoit pas un second point.
+  const finPhrase = (t: string) => (t.endsWith('.') ? t : `${t}.`);
+  const enTexte = (c: number | null) => (c === null ? '' : (c / 100).toFixed(2).replace('.', ','));
+
+  function ouvrirConfirmation(cible: CibleConfirmation, mode: 'confirmer' | 'corriger', prevu: number | null, confirmation: FaitConfirme | null) {
+    occurrence = null;
+    modifPaie = false;
+    erreurSaisie = null;
+    formConfirmation = { cible, mode };
+    // Q20 : la date du jour par défaut ; pour corriger, la date déjà confirmée.
+    fConfMontant = enTexte(mode === 'corriger' && confirmation ? confirmation.montant : prevu);
+    fConfDate = mode === 'corriger' && confirmation ? confirmation.date : jour;
+  }
+
   function choisirCycle(dateOrigine: DateCivile) {
     choisi = choisi === dateOrigine ? null : dateOrigine;
     occurrence = null;
     modifPaie = false;
+    formConfirmation = null;
     proposition = null;
     erreurSaisie = null;
     const c = vue?.cycles.find((x) => x.paie.dateOrigine === dateOrigine);
@@ -334,6 +366,44 @@
   </section>
 {/if}
 
+{#if vue}
+  {#if vue.plan.avantPremierCycle.length > 0}
+    <p class="discret" data-testid="avant-premier-cycle">
+      Avant le premier cycle (non compté) :
+      {vue.plan.avantPremierCycle.map((l) => `${l.libelle} du ${formaterDateCourte(l.echeance ?? jour)}`).join(', ')}
+    </p>
+  {/if}
+  {#each vue.plan.reglesSansOccurrence as id (id)}
+    <p class="discret">La règle « {id} » ne s’applique à aucune paie de cette période.</p>
+  {/each}
+
+  {#if !exemple && vue.aVerifierAvant > 0}
+    <p class="discret" data-testid="a-verifier-avant">
+      {vue.aVerifierAvant === 1 ? '1 élément à vérifier' : `${vue.aVerifierAvant} éléments à vérifier`} dans les cycles précédents.
+      <button type="button" class="petit" onclick={() => (nombrePrecedents += 2)}>Les afficher</button>
+    </p>
+  {/if}
+  <TableauCycles cycles={vue.cycles} {choisi} courant={vue.courant} onchoisir={choisirCycle} {detail} />
+  {#if !exemple}
+    <p class="boutons">
+      <button type="button" onclick={() => (nombrePrecedents += 2)}>Voir les paies précédentes</button>
+      <button type="button" onclick={() => (nombreCycles += NOMBRE_CYCLES)}>Voir les paies suivantes</button>
+      {#if nombreCycles > NOMBRE_CYCLES || nombrePrecedents > 0}
+        <button
+          type="button"
+          onclick={() => {
+            nombreCycles = NOMBRE_CYCLES;
+            nombrePrecedents = 0;
+          }}>Revenir au cycle actuel</button
+        >
+      {/if}
+    </p>
+  {/if}
+  <p class="discret">
+    Le disponible planifié est le résultat de la planification : ce n’est pas le solde de ton compte.
+  </p>
+{/if}
+
 {#if exemple || donnees?.profil}
   <RevenusDepenses
     elements={exemple ? ELEMENTS_EXEMPLE : (donnees?.elements ?? [])}
@@ -352,7 +422,7 @@
 {/if}
 {#if dernier}
   <p class="enregistre" role="status" data-testid="enregistre">
-    Enregistré : {dernier.titre}.
+    Enregistré : {finPhrase(dernier.titre)}
     <button type="button" onclick={annulerDernier} disabled={enCours}>Annuler</button>
     <button type="button" class="fermer" onclick={() => (dernier = null)} aria-label="Fermer">×</button>
   </p>
@@ -370,30 +440,6 @@
   />
 {/if}
 
-{#if vue}
-  {#if vue.plan.avantPremierCycle.length > 0}
-    <p class="discret" data-testid="avant-premier-cycle">
-      Avant le premier cycle (non compté) :
-      {vue.plan.avantPremierCycle.map((l) => `${l.libelle} du ${formaterDateCourte(l.echeance ?? jour)}`).join(', ')}
-    </p>
-  {/if}
-  {#each vue.plan.reglesSansOccurrence as id (id)}
-    <p class="discret">La règle « {id} » ne s’applique à aucune paie de cette période.</p>
-  {/each}
-
-  <TableauCycles cycles={vue.cycles} {choisi} courant={vue.courant} onchoisir={choisirCycle} {detail} />
-  {#if !exemple}
-    <p class="boutons">
-      <button type="button" onclick={() => (nombreCycles += NOMBRE_CYCLES)}>Voir les paies suivantes</button>
-      {#if nombreCycles > NOMBRE_CYCLES}
-        <button type="button" onclick={() => (nombreCycles = NOMBRE_CYCLES)}>Revenir au cycle actuel</button>
-      {/if}
-    </p>
-  {/if}
-  <p class="discret">
-    Le disponible planifié est le résultat de la planification : ce n’est pas le solde de ton compte.
-  </p>
-{/if}
 
 {#snippet formulaireProfil(creation: boolean)}
   <form
@@ -486,32 +532,117 @@
   </form>
 {/snippet}
 
+{#snippet statutLigne(l: Ligne)}
+  {#if l.statut === 'confirme' && l.confirmation}
+    <span class="statut confirme" data-testid="statut">Confirmé le {formaterDateCourte(l.confirmation.date)}</span>
+    {#if l.montantPrevu !== null && l.montantPrevu !== l.confirmation.montant}<span class="note">prévu {formaterMontant(l.montantPrevu)}</span>{/if}
+  {:else if l.statut === 'retiree'}
+    <span class="statut" data-testid="statut">retirée cette fois</span>
+  {:else if l.statut === 'enveloppe'}
+    <span class="statut" data-testid="statut">Enveloppe</span>
+  {:else}
+    <span class="statut" class:a-verifier={l.statut === 'aVerifier'} data-testid="statut">{l.statut === 'aVerifier' ? 'À vérifier' : 'À venir'}</span>
+    {#if l.incertain && !l.compte}<span class="note">non compté (incertain)</span>{/if}
+  {/if}
+{/snippet}
+
+{#snippet actionsLigne(c: Cycle, l: Ligne)}
+  {#if !exemple}
+    {@const cible = { elementId: l.elementId, origine: l.origine }}
+    <span class="actions-ligne">
+      {#if l.statut === 'confirme'}
+        <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'corriger', l.montantPrevu, l.confirmation)}>Corriger</button>
+        <button type="button" class="petit" onclick={() => proposer(() => proposerAnnulationConfirmation(donnees!, cible, jour))}>Annuler la confirmation</button>
+      {:else if l.statut === 'aVenir' || l.statut === 'aVerifier'}
+        <button type="button" class="petit principal" onclick={() => proposer(() => proposerConfirmation(donnees!, cible, null, jour))} aria-label={`Confirmer ${l.libelle}`}>Confirmer</button>
+        <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'confirmer', l.montantPrevu, null)}>Confirmer autrement…</button>
+        {#if l.statut === 'aVerifier'}
+          <button type="button" class="petit" onclick={() => proposer(() => proposerRetrait(donnees!, cible, true, jour))}>N’a pas eu lieu</button>
+        {/if}
+        {@render boutonAjuster(c, l)}
+      {:else}
+        {@render boutonAjuster(c, l)}
+      {/if}
+    </span>
+  {/if}
+{/snippet}
+
+{#snippet formulaireConfirmation()}
+  {@const f = formConfirmation!}
+  <form
+    class="formulaire occurrence"
+    data-testid="formulaire-confirmation"
+    onsubmit={(e) => {
+      e.preventDefault();
+      const saisie = { montant: fConfMontant, date: fConfDate };
+      proposer(() => (f.mode === 'corriger' ? proposerCorrection(donnees!, f.cible, saisie, jour) : proposerConfirmation(donnees!, f.cible, saisie, jour)));
+    }}
+  >
+    <p class="discret">
+      {f.mode === 'corriger' ? 'Corriger la confirmation' : 'Confirmer avec le montant et la date réels'} : la date est une information, elle ne
+      change pas le cycle.
+    </p>
+    <label>Montant reçu ou payé ($) <input inputmode="decimal" bind:value={fConfMontant} /></label>
+    <label>Date <input type="date" bind:value={fConfDate} /></label>
+    <button type="submit" class="principal">Enregistrer</button>
+    <button type="button" onclick={() => (formConfirmation = null)}>Fermer</button>
+  </form>
+{/snippet}
+
 {#snippet detail(c: Cycle)}
+  {@const confirmables = (c.paieStatut !== 'confirme' ? 1 : 0) + c.lignes.filter((l) => (l.statut === 'aVenir' || l.statut === 'aVerifier') && !l.incertain).length}
   <section class="carte" aria-labelledby="titre-detail" data-testid="detail-cycle">
-    <h2 id="titre-detail">Cycle du {formaterDateLongue(c.debut)} au {formaterDateLongue(c.fin)}</h2>
+    <div class="entete-detail">
+      <h2 id="titre-detail">Cycle du {formaterDateLongue(c.debut)} au {formaterDateLongue(c.fin)}</h2>
+      {#if !exemple && confirmables > 0}
+        <button type="button" onclick={() => proposer(() => proposerToutConfirmer(donnees!, c.paie.dateOrigine, jour))}>Tout confirmer…</button>
+      {/if}
+    </div>
     <table>
       <tbody>
         <tr class="groupe"><th scope="rowgroup" colspan="4">Revenus</th></tr>
-        <tr>
+        <tr data-testid="ligne-paie">
           <th scope="row">Paie du {formaterDateCourte(c.paie.date)}{c.paie.deplacee ? ` (prévue le ${formaterDateCourte(c.paie.dateOrigine)})` : ''}</th>
-          <td class="montant">{c.paie.montant === null ? 'À compléter' : formaterMontant(c.paie.montant)}</td>
-          <td>Prévu</td>
-          <td></td>
+          <td class="montant">
+            {#if c.paieConfirmation}{formaterMontant(c.paieConfirmation.montant)}{:else}{c.paie.montant === null ? 'À compléter' : formaterMontant(c.paie.montant)}{/if}
+          </td>
+          <td>
+            {#if c.paieConfirmation}
+              <span class="statut confirme" data-testid="statut">Confirmée le {formaterDateCourte(c.paieConfirmation.date)}</span>
+              {#if c.paie.montant !== null && c.paie.montant !== c.paieConfirmation.montant}<span class="note">prévue {formaterMontant(c.paie.montant)}</span>{/if}
+            {:else}
+              <span class="statut" class:a-verifier={c.paieStatut === 'aVerifier'} data-testid="statut">{c.paieStatut === 'aVerifier' ? 'À vérifier' : 'À venir'}</span>
+            {/if}
+          </td>
+          <td>
+            {#if !exemple}
+              {@const cible = { elementId: null, origine: c.paie.dateOrigine }}
+              <span class="actions-ligne">
+                {#if c.paieConfirmation}
+                  <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'corriger', c.paie.montant, c.paieConfirmation)}>Corriger</button>
+                  <button type="button" class="petit" onclick={() => proposer(() => proposerAnnulationConfirmation(donnees!, cible, jour))}>Annuler la confirmation</button>
+                {:else}
+                  <button type="button" class="petit principal" onclick={() => proposer(() => proposerConfirmation(donnees!, cible, null, jour))} aria-label="Confirmer la paie">Confirmer</button>
+                  <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'confirmer', c.paie.montant, null)}>Confirmer autrement…</button>
+                {/if}
+              </span>
+            {/if}
+          </td>
         </tr>
         {#each c.lignes.filter((l) => l.nature === 'revenu') as l (`${l.elementId}|${l.origine}`)}
-          <tr class:non-compte={!l.compte} class:retiree={l.retiree}>
+          <tr class:non-compte={!l.compte} class:retiree={l.retiree} data-ligne={l.elementId}>
             <th scope="row">
               {l.libelle}{l.echeance ? ` (le ${formaterDateCourte(l.echeance)})` : ''}{l.estimation ? ' — estimation' : ''}
               {@render marques(l)}
             </th>
             <td class="montant">{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
-            <td>{l.retiree ? 'retirée cette fois' : l.compte ? 'Prévu' : 'non compté (incertain)'}</td>
-            <td>{@render boutonAjuster(c, l)}</td>
+            <td>{@render statutLigne(l)}</td>
+            <td>{@render actionsLigne(c, l)}</td>
           </tr>
         {/each}
         <tr class="groupe"><th scope="rowgroup" colspan="4">Sorties</th></tr>
         {#each c.lignes.filter((l) => l.nature === 'depense') as l (`${l.elementId}|${l.origine}`)}
-          <tr class:retiree={l.retiree}>
+          <tr class:retiree={l.retiree} data-ligne={l.elementId}>
             <th scope="row">
               {l.libelle}{l.echeance ? ` (dû le ${formaterDateCourte(l.echeance)})` : ''}{l.genre === 'enveloppe' ? ' — enveloppe' : ''}{l.estimation
                 ? ' — estimation'
@@ -519,8 +650,8 @@
               {@render marques(l)}
             </th>
             <td class="montant">−{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
-            <td>{l.retiree ? 'retirée cette fois' : 'Prévu'}</td>
-            <td>{@render boutonAjuster(c, l)}</td>
+            <td>{@render statutLigne(l)}</td>
+            <td>{@render actionsLigne(c, l)}</td>
           </tr>
         {:else}
           <tr><td colspan="4" class="discret">Aucune sortie prévue dans ce cycle.</td></tr>
@@ -536,6 +667,9 @@
     {#if occurrence && c.lignes.some((l) => l.elementId === occurrence?.elementId && l.origine === occurrence?.origine)}
       {@render formulaireOccurrence(c)}
     {/if}
+    {#if formConfirmation && (formConfirmation.cible.elementId === null ? formConfirmation.cible.origine === c.paie.dateOrigine : c.lignes.some((l) => l.elementId === formConfirmation?.cible.elementId && l.origine === formConfirmation?.cible.origine))}
+      {@render formulaireConfirmation()}
+    {/if}
     {#if c.nonComptes > 0}
       <p class="discret">Non compté : {formaterMontant(c.nonComptes)} de revenus incertains, en attente de confirmation.</p>
     {/if}
@@ -548,6 +682,7 @@
             onclick={() => {
               modifPaie = true;
               occurrence = null;
+              formConfirmation = null;
               fDateReelle = c.paie.date;
               fMontantPaie = '';
             }}>Modifier la date ou le montant de cette paie…</button
@@ -677,6 +812,28 @@
   .occurrence p {
     flex-basis: 100%;
     margin: 0;
+  }
+  .entete-detail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--espace-3);
+  }
+  .actions-ligne {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--espace-2);
+  }
+  .statut {
+    color: var(--couleur-texte-discret);
+    white-space: nowrap;
+  }
+  .statut.a-verifier {
+    color: var(--couleur-attention, #e0b45c);
+  }
+  .statut.confirme {
+    color: var(--couleur-texte);
   }
   .modif-paie {
     border: 1px solid var(--couleur-bordure);

@@ -9,6 +9,9 @@ import { proposerAjout, proposerFrequence, proposerSuspension, proposerFin, prop
 import { proposerAjustement, proposerRetrait, proposerRetourRegle } from '../src/actions/occurrences';
 import { proposerException, versNoyau, ErreurSaisie } from '../src/actions/paie';
 import { cyclesAffiches } from '../src/actions/analyse';
+import { proposerAnnulationConfirmation, proposerConfirmation, proposerCorrection, proposerToutConfirmer } from '../src/actions/confirmations';
+import { ajustementsOrphelins } from '../src/noyau/cycles';
+import { paiesEntre } from '../src/noyau/paie';
 import { appliquerChangements, inverser, donneesVides } from '../src/lib/appliquer';
 import { dateCivile as d, ajouterJours } from '../src/noyau/dates';
 import type { DonneesPaie } from '../src/lib/plateforme';
@@ -20,7 +23,7 @@ const choisir = <T,>(t: readonly T[]) => t[Math.floor(hasard() * t.length)]!;
 const dateAlea = (a: string, jours: number) => ajouterJours(d(a), Math.floor(hasard() * jours));
 const ATTENDUES = Array.from({ length: 13 }, (_, i) => ajouterJours(d('2027-01-07'), 14 * i));
 
-it('200 suites de 30 actions réelles : les 13 paies restent affichées après chaque action, avril compris', () => {
+it('200 suites de 30 actions réelles : les 13 paies restent affichées et aucune confirmation ne disparaît, après chaque action', () => {
   let trouve = 0;
   for (let essai = 0; essai < 200 && trouve < 1; essai++) {
     let donnees: DonneesPaie = { ...donneesVides(), profil: { frequence: 'deuxSemaines', depart: '2027-01-07', jours: null }, salaires: [{ aPartirDu: '2027-01-07', montant: 210000 }] };
@@ -30,7 +33,7 @@ it('200 suites de 30 actions réelles : les 13 paies restent affichées après c
       const n = versNoyau(donnees);
       const vue = cyclesAffiches(n.profil!, { exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, seuil: n.seuil }, JOUR);
       const els = donnees.elements;
-      const action = choisir(['ajout', 'ajout', 'ajust', 'ajust', 'retrait', 'retour', 'freq', 'susp', 'fin', 'montant', 'exc', 'annuler', 'suppr']);
+      const action = choisir(['ajout', 'ajout', 'ajust', 'ajust', 'retrait', 'retour', 'freq', 'susp', 'fin', 'montant', 'exc', 'annuler', 'suppr', 'conf', 'conf', 'confAutre', 'corr', 'annConf', 'tout']);
       let p: any = null;
       let desc = action;
       try {
@@ -54,6 +57,20 @@ it('200 suites de 30 actions réelles : les 13 paies restent affichées après c
             p = proposerAjustement(donnees, cible, s as any, JOUR);
           } else if (action === 'retrait') p = proposerRetrait(donnees, cible, !l.retiree, JOUR);
           else p = proposerRetourRegle(donnees, cible, JOUR);
+        } else if (['conf', 'confAutre', 'corr', 'annConf'].includes(action)) {
+          const c = choisir(vue.cycles);
+          const lignes = c.lignes.filter((l) => l.genre !== 'enveloppe');
+          const cible = hasard() < 0.3 || !lignes.length ? { elementId: null, origine: c.paie.dateOrigine } : (() => { const l = choisir(lignes); return { elementId: l.elementId, origine: l.origine }; })();
+          desc += ` ${cible.elementId ?? 'paie'}@${cible.origine}`;
+          const saisie = { montant: String(Math.floor(hasard() * 900)), date: dateAlea('2027-01-01', 200) };
+          if (action === 'conf') p = proposerConfirmation(donnees, cible, null, JOUR);
+          if (action === 'confAutre') p = proposerConfirmation(donnees, cible, saisie, JOUR);
+          if (action === 'corr') p = proposerCorrection(donnees, cible, saisie, JOUR);
+          if (action === 'annConf') p = proposerAnnulationConfirmation(donnees, cible, JOUR);
+        } else if (action === 'tout') {
+          const c = choisir(vue.cycles);
+          desc += ` cycle ${c.paie.dateOrigine}`;
+          p = proposerToutConfirmer(donnees, c.paie.dateOrigine, JOUR);
         } else if (action === 'annuler') {
           if (!dernier) continue;
           p = { changements: dernier.inv, journal: [] };
@@ -89,6 +106,15 @@ it('200 suites de 30 actions réelles : les 13 paies restent affichées après c
       try {
         origines = cyclesAffiches(n2.profil!, { exceptions: n2.exceptions, elements: n2.elements, ajustements: n2.ajustements, seuil: n2.seuil }, JOUR).cycles.map((c) => c.paie.dateOrigine);
       } catch (e) { histo.push('PLAN EXCEPTION ' + e); console.log(histo.join('\n')); trouve++; break; }
+      // Étape 5 (Q23) : aucune opération confirmée ne disparaît après une action acceptée.
+      const perdues = donnees.confirmations.filter((f) => {
+        if (f.elementId === null) return !paiesEntre(n2.profil!, n2.exceptions, ajouterJours(d(f.origine), -40), ajouterJours(d(f.origine), 40)).some((x) => x.dateOrigine === f.origine);
+        return ajustementsOrphelins({ profil: n2.profil!, exceptions: n2.exceptions, elements: n2.elements, ajustements: [{ elementId: f.elementId, origine: d(f.origine) }] }).length > 0;
+      });
+      if (perdues.length > 0) {
+        console.log('=== CONFIRMATION PERDUE, ESSAI', essai, '\n' + histo.join('\n') + '\n' + JSON.stringify(perdues));
+        trouve++; break;
+      }
       if (JSON.stringify(origines) !== JSON.stringify(ATTENDUES)) {
         console.log('=== ESSAI', essai, '\n' + histo.join('\n') + '\n-> origines ' + origines.join(' '));
         console.log('exceptions', JSON.stringify(donnees.exceptions), 'profil', JSON.stringify(donnees.profil));

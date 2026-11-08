@@ -43,7 +43,7 @@ describe('Cycles et rattachement — C1 à C9', () => {
   });
 
   it('tout est « Prévu » : aucune ligne n’est confirmée', () => {
-    for (const c of plan.cycles) for (const l of c.lignes) expect(l.statut).toBe('prevu');
+    for (const c of plan.cycles) for (const l of c.lignes) expect(l.statut).not.toBe('confirme');
   });
 });
 
@@ -73,7 +73,7 @@ describe('Cas particuliers — K1 à K6', () => {
   it('K4 : des cycles passés restent « Prévu » (aujourd’hui fictif : 20 mai 2027)', () => {
     const plan = base({ aujourdhui: d('2027-05-20') });
     expect(plan.cycles.every((c) => c.fin < '2027-05-20')).toBe(true);
-    for (const c of plan.cycles) for (const l of c.lignes) expect(l.statut).toBe('prevu');
+    for (const c of plan.cycles) for (const l of c.lignes) expect(l.statut).not.toBe('confirme');
   });
 
   it('K5 : un profil sans montant net ne produit jamais de revenu inventé', () => {

@@ -2,11 +2,11 @@
 // Séparé des actions pour que « paie.ts » puisse l'utiliser sans dépendance
 // circulaire.
 
-import type { AjustementOccurrence, ElementPlanifie } from '../noyau/cycles';
+import type { AjustementOccurrence, ElementPlanifie, ConfirmationOccurrence } from '../noyau/cycles';
 import { dateCivile } from '../noyau/dates';
 import type { Frequence } from '../noyau/frequences';
 import type { Regle } from '../noyau/regles';
-import type { AjustementStocke, ElementStocke } from '../lib/plateforme';
+import type { AjustementStocke, ElementStocke, ConfirmationStockee } from '../lib/plateforme';
 
 export function versFrequenceNoyau(f: ElementStocke['frequence']): Frequence {
   const copie: Record<string, unknown> = { ...f };
@@ -68,4 +68,9 @@ export function versAjustementNoyau(a: AjustementStocke): AjustementOccurrence {
     ...(a.paieOrigine !== null ? { paieOrigine: dateCivile(a.paieOrigine) } : {}),
     ...(a.retire ? { retire: true } : {}),
   };
+}
+
+/** Confirmation stockée vers le noyau (étape 5). */
+export function versConfirmationNoyau(f: ConfirmationStockee): ConfirmationOccurrence {
+  return { elementId: f.elementId, origine: dateCivile(f.origine), date: dateCivile(f.date), montant: f.montant };
 }

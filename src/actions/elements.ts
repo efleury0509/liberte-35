@@ -14,6 +14,7 @@ import { montantEnVigueur } from '../noyau/regles';
 import type { AjustementStocke, ChangementPaie, DonneesPaie, ElementStocke, EntreeJournal } from '../lib/plateforme';
 import { analyser, cyclesAffiches } from './analyse';
 import { versElementNoyau } from './elementsStockes';
+import { confirmationsPerdues, messageConfirmationsPerdues } from './protection';
 import {
   A_COMPLETER,
   ErreurSaisie,
@@ -192,6 +193,9 @@ interface Brouillon {
  * retiré avec une trace au journal.
  */
 function finaliser(d: DonneesPaie, b: Brouillon, jour: DateCivile): Proposition {
+  // Q23 : une modification qui ferait disparaître une opération confirmée est refusée.
+  const perdues = confirmationsPerdues(d, b.changements);
+  if (perdues.length > 0) throw new ErreurSaisie(messageConfirmationsPerdues(d, perdues));
   const an = analyser(d, b.changements, jour);
   const nom = (id: string) => (d.elements ?? []).find((e) => e.id === id)?.libelle ?? id;
   const objet = (id: string) => {
@@ -350,6 +354,8 @@ export function proposerMontant(d: DonneesPaie, id: string, dateTexte: string, m
   const longue = formaterDateLongue(date);
   // Protection : un ajustement de montant n'est jamais écrasé par la règle.
   const gardes = (d.ajustements ?? []).filter((a) => a.elementId === id && a.montant !== null && a.origine >= date).length;
+  // P1 : une opération confirmée garde son montant confirmé.
+  const confirmees = (d.confirmations ?? []).filter((f) => f.elementId === id && f.origine >= date).length;
   return finaliser(
     d,
     {
@@ -358,8 +364,12 @@ export function proposerMontant(d: DonneesPaie, id: string, dateTexte: string, m
       changements: [{ type: 'definirElement', element: modifie }],
       journal: [entree(nomObjet(e), `montant à partir du ${date}`, montantOuACompleter(actuel), formaterMontant(montant))],
       avant: [`Les cycles d’avant le ${longue} ne changent pas.`],
-      apres: gardes > 0 ? [`${gardes} occurrence(s) ajustée(s) à la main gardent leur montant.`] : [],
-      apercuForce: gardes > 0,
+      apres: [
+        ...(gardes > 0 ? [`${gardes} occurrence(s) ajustée(s) à la main gardent leur montant.`] : []),
+        ...(confirmees === 1 ? ['1 opération confirmée garde son montant confirmé.'] : []),
+        ...(confirmees > 1 ? [`${confirmees} opérations confirmées gardent leur montant confirmé.`] : []),
+      ],
+      apercuForce: gardes > 0 || confirmees > 0,
     },
     jour,
   );
@@ -507,6 +517,10 @@ export function proposerCertitude(d: DonneesPaie, id: string, incertain: boolean
 
 export function proposerSuppression(d: DonneesPaie, id: string, jour: DateCivile): Proposition {
   const e = trouver(d, id);
+  // Q16 : après une confirmation, on termine ; on ne supprime plus.
+  if ((d.confirmations ?? []).some((f) => f.elementId === id)) {
+    throw new ErreurSaisie(`« ${e.libelle} » a des opérations confirmées : il ne peut plus être supprimé ; termine-le plutôt (Gérer → Terminer).`);
+  }
   const description = `${decrireMontant(versElementNoyau(e).regle.montants.at(-1)?.montant ?? null, e.estimation)} — ${decrireQuand(e, jour)}`;
   const ajustements = (d.ajustements ?? []).filter((a) => a.elementId === id).length;
   return finaliser(

@@ -35,7 +35,8 @@ function donnees(elements = ELEMENTS_ETAPE4.map(versStocke)): DonneesPaie {
     seuil: null,
     elements,
     ajustements: [],
-  };
+  confirmations: [],
+};
 }
 
 const saisie = (s: Partial<SaisieElement>): SaisieElement => ({

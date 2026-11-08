@@ -12,11 +12,15 @@ export const donneesVides = (): DonneesPaie => ({
   seuil: null,
   elements: [],
   ajustements: [],
+  confirmations: [],
 });
 
 // Copie par sérialisation, comme le pont Tauri : les objets réactifs de
 // l'interface ne peuvent pas être copiés autrement.
 export const cloner = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
+
+const memeOccurrence = (a: { elementId: string | null; origine: string }, b: { elementId: string | null; origine: string }) =>
+  a.elementId === b.elementId && a.origine === b.origine;
 
 const parDate = <T>(cle: (x: T) => string) => (a: T, b: T) => (cle(a) < cle(b) ? -1 : cle(a) > cle(b) ? 1 : 0);
 
@@ -55,6 +59,9 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
       break;
     }
     case 'supprimerElement':
+      if (d.confirmations.some((f) => f.elementId === c.id)) {
+        refus('Ce revenu ou cette dépense a des opérations confirmées : termine-le plutôt que de le supprimer.');
+      }
       d.elements = d.elements.filter((e) => e.id !== c.id);
       d.ajustements = d.ajustements.filter((a) => a.elementId !== c.id);
       break;
@@ -70,6 +77,16 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
     }
     case 'retirerAjustement':
       d.ajustements = d.ajustements.filter((x) => !(x.elementId === c.elementId && x.origine === c.origine));
+      break;
+    case 'definirConfirmation': {
+      const f = c.confirmation;
+      if (f.elementId !== null && !d.elements.some((e) => e.id === f.elementId)) refus('Ce revenu ou cette dépense n’existe plus.');
+      if (f.montant < 0) refus('Un montant confirmé ne peut pas être négatif.');
+      d.confirmations = [...d.confirmations.filter((x) => !memeOccurrence(x, f)), f].sort(parDate((x) => `${x.elementId ?? ''}|${x.origine}`));
+      break;
+    }
+    case 'retirerConfirmation':
+      d.confirmations = d.confirmations.filter((x) => !memeOccurrence(x, c));
       break;
   }
 }
@@ -135,6 +152,18 @@ function inverseUn(d: DonneesPaie, c: ChangementPaie): ChangementPaie[] {
       const a = c.ajustement;
       const avant = d.ajustements.find((x) => x.elementId === a.elementId && x.origine === a.origine);
       return [avant ? { type: 'definirAjustement', ajustement: avant } : { type: 'retirerAjustement', elementId: a.elementId, origine: a.origine }];
+    }
+    case 'definirConfirmation': {
+      const avant = d.confirmations.find((x) => memeOccurrence(x, c.confirmation));
+      return [
+        avant
+          ? { type: 'definirConfirmation', confirmation: avant }
+          : { type: 'retirerConfirmation', elementId: c.confirmation.elementId, origine: c.confirmation.origine },
+      ];
+    }
+    case 'retirerConfirmation': {
+      const avant = d.confirmations.find((x) => memeOccurrence(x, c));
+      return avant ? [{ type: 'definirConfirmation', confirmation: avant }] : [];
     }
     case 'retirerAjustement': {
       const avant = d.ajustements.find((x) => x.elementId === c.elementId && x.origine === c.origine);

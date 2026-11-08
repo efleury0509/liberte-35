@@ -28,7 +28,7 @@
       <th scope="col" class="montant">Autres revenus</th>
       <th scope="col" class="montant">Sorties</th>
       <th scope="col" class="montant">Disponible planifié</th>
-      <th scope="col">Statut</th>
+      <th scope="col">Suivi</th>
       <th scope="col"><span class="visuellement-cache">Détails</span></th>
     </tr>
   </thead>
@@ -55,7 +55,7 @@
           {#if c.estimation && c.disponible !== null}<span class="note" data-testid="estimation">Estimation</span>{/if}
         </td>
         <td>
-          Prévu
+          {#if c.aVerifier > 0}<span class="a-verifier" data-testid="a-verifier">{c.aVerifier} à vérifier</span>{/if}
           {#if c.signal}
             <span class="signal" data-testid="signal" title={c.signal === 'negatif' ? 'Disponible planifié négatif' : 'Disponible planifié sous ton seuil d’attention'}>
               À anticiper
@@ -74,6 +74,10 @@
 </table>
 
 <style>
+  .a-verifier {
+    color: var(--couleur-attention, #e0b45c);
+    white-space: nowrap;
+  }
   .ligne-detail > td {
     padding: 0 0 var(--espace-4);
     font-variant-numeric: normal;

@@ -71,15 +71,41 @@ export interface RattachementManuel {
   paieOrigine: DateCivile;
 }
 
-export type Statut = 'prevu';
+/**
+ * Statut d'une occurrence (étape 5, A2) : « À venir », « À vérifier » le
+ * lendemain de l'échéance (ou de la fin du cycle sans échéance), « Confirmé ».
+ * Jamais « impayé ». Une enveloppe n'a pas de statut (4.6-c) ; une occurrence
+ * retirée cette fois non plus.
+ */
+export type Statut = 'aVenir' | 'aVerifier' | 'confirme' | 'enveloppe' | 'retiree';
+
+/** Fait confirmé (étape 5) : ce n'est pas une transaction bancaire. */
+export interface ConfirmationOccurrence {
+  /** null : la paie elle-même. */
+  elementId: string | null;
+  /** Date d'origine : même identité que les ajustements. */
+  origine: DateCivile;
+  /** Date réelle, à titre d'information : ne change jamais le cycle (Q19). */
+  date: DateCivile;
+  montant: Cents;
+}
+
+export interface FaitConfirme {
+  date: DateCivile;
+  montant: Cents;
+}
 
 export interface Ligne {
   elementId: string;
   libelle: string;
   /** Échéance pour un élément à date fixe ; null pour un élément lié à la paie. */
   echeance: DateCivile | null;
+  /** Montant compté : le confirmé s'il existe, sinon le prévu (Q18). */
   montant: Cents | null;
+  /** Montant prévu (règle ou ajustement), gardé comme référence. */
+  montantPrevu: Cents | null;
   statut: Statut;
+  confirmation: FaitConfirme | null;
   manuel: boolean;
   nature: Nature;
   genre: Genre;
@@ -115,6 +141,11 @@ export interface Cycle {
   /** Revenus incertains connus, affichés mais non comptés. */
   nonComptes: Cents;
   signal: Signal;
+  /** Statut de la paie elle-même. */
+  paieStatut: 'aVenir' | 'aVerifier' | 'confirme';
+  paieConfirmation: FaitConfirme | null;
+  /** Nombre d'éléments à vérifier dans ce cycle, paie comprise. */
+  aVerifier: number;
 }
 
 export interface Plan {
@@ -133,7 +164,9 @@ export interface EntreePlan {
   ajustements?: readonly AjustementOccurrence[];
   /** Seuil d'attention (A9) ; null ou absent : seul un disponible négatif est signalé. */
   seuil?: Cents | null;
-  /** Date du jour ; n'influence aucun montant ni aucun statut à cette étape. */
+  /** Faits confirmés (étape 5). */
+  confirmations?: readonly ConfirmationOccurrence[];
+  /** Date du jour : sert aux statuts (A2) ; absente, tout est « À venir ». */
   aujourdhui?: DateCivile;
 }
 
@@ -162,6 +195,9 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
     estimation: false,
     nonComptes: 0,
     signal: null,
+    paieStatut: 'aVenir',
+    paieConfirmation: null,
+    aVerifier: 0,
   }));
   if (cycles.length === 0) return { cycles, avantPremierCycle: [], reglesSansOccurrence: [] };
 
@@ -182,6 +218,11 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
   // Dates d'origine des paies de mois complets : le rang en dépend (Q7).
   const origines = paiesReelles.map((p) => p.dateOrigine);
   const ajustements = indexerAjustements(entree);
+  const confirmations = new Map((entree.confirmations ?? []).map((f) => [cle(f.elementId ?? PAIE, f.origine), f] as const));
+  const aujourdhui = entree.aujourdhui;
+  // A2 : « À vérifier » à partir du lendemain de l'échéance.
+  const statutDate = (echeance: DateCivile): 'aVenir' | 'aVerifier' =>
+    aujourdhui !== undefined && aujourdhui > echeance ? 'aVerifier' : 'aVenir';
 
   for (const el of elements) {
     let placees = 0;
@@ -189,7 +230,7 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
       const a = ajustements.get(cle(el.id, occ.origine));
       const echeance = occ.echeance !== null && a?.date !== undefined ? a.date : occ.echeance;
       const montant = a?.montant !== undefined ? a.montant : occ.montant;
-      const l = ligne(el, echeance, montant, a?.paieOrigine !== undefined, occ.origine, a);
+      const l = ligne(el, echeance, montant, a?.paieOrigine !== undefined, occ.origine, a, confirmations.get(cle(el.id, occ.origine)));
       let cible: Cycle | undefined;
       if (a?.paieOrigine !== undefined) {
         cible = parOrigine.get(a.paieOrigine);
@@ -197,6 +238,7 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
         cible = parOrigine.get(occ.paie);
       } else if (echeance !== null) {
         if (echeance < premiereDuProfil) {
+          if (l.statut === 'aVenir') l.statut = statutDate(echeance);
           if (echeance >= debut && echeance <= finPeriode) avantPremierCycle.push(l);
           continue;
         }
@@ -217,13 +259,21 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
   const total = (montants: (Cents | null)[]): Cents | null =>
     montants.every((m): m is Cents => m !== null) ? additionner(0, ...montants) : null;
   for (const c of cycles) {
+    // Statuts (étape 5) : sans échéance, « À vérifier » le lendemain de la fin du cycle.
+    for (const l of c.lignes) if (l.statut === 'aVenir') l.statut = statutDate(l.echeance ?? c.fin);
+    const fp = confirmations.get(cle(PAIE, c.paie.dateOrigine));
+    c.paieConfirmation = fp ? { date: fp.date, montant: fp.montant } : null;
+    c.paieStatut = fp ? 'confirme' : statutDate(c.paie.date);
+    c.aVerifier = c.lignes.filter((l) => l.statut === 'aVerifier').length + (c.paieStatut === 'aVerifier' ? 1 : 0);
+    // Q18 : le montant confirmé remplace le prévu.
+    const paieComptee = fp ? fp.montant : c.paie.montant;
     const comptees = c.lignes.filter((l) => l.compte);
     c.sorties = total(comptees.filter((l) => l.nature === 'depense').map((l) => l.montant));
     c.autresRevenus = total(comptees.filter((l) => l.nature === 'revenu').map((l) => l.montant));
-    c.revenus = c.paie.montant !== null && c.autresRevenus !== null ? c.paie.montant + c.autresRevenus : null;
+    c.revenus = paieComptee !== null && c.autresRevenus !== null ? paieComptee + c.autresRevenus : null;
     c.disponible = c.revenus !== null && c.sorties !== null ? c.revenus - c.sorties : null;
     c.estimation = comptees.some((l) => l.estimation);
-    c.nonComptes = additionner(0, ...c.lignes.filter((l) => l.incertain && !l.retiree && l.montant !== null).map((l) => l.montant ?? 0));
+    c.nonComptes = additionner(0, ...c.lignes.filter((l) => l.incertain && !l.compte && !l.retiree && l.montant !== null).map((l) => l.montant ?? 0));
     c.signal = signal(c.disponible, seuil);
   }
 
@@ -237,25 +287,33 @@ function ligne(
   manuel: boolean,
   origine: DateCivile,
   a: AjustementOccurrence | undefined,
+  f: ConfirmationOccurrence | undefined,
 ): Ligne {
   const nature = el.nature ?? 'depense';
   // Une enveloppe est toujours une dépense ; seul un revenu peut être incertain.
   const genre = nature === 'depense' ? (el.genre ?? 'fixe') : 'fixe';
   const incertain = nature === 'revenu' && el.incertain === true;
   const retiree = a?.retire === true;
+  // Une enveloppe ne se confirme jamais (4.6-c) ; une occurrence retirée non plus.
+  const confirme = f !== undefined && genre !== 'enveloppe' && !retiree;
+  // Une occurrence retirée l'est d'abord, même s'il s'agit d'une enveloppe.
+  const statut: Statut = retiree ? 'retiree' : genre === 'enveloppe' ? 'enveloppe' : confirme ? 'confirme' : 'aVenir';
   return {
     elementId: el.id,
     libelle: el.libelle,
     echeance,
-    montant,
-    statut: 'prevu',
+    montant: confirme ? f.montant : montant,
+    montantPrevu: montant,
+    statut,
+    confirmation: confirme ? { date: f.date, montant: f.montant } : null,
     manuel,
     nature,
     genre,
     incertain,
-    estimation: el.estimation === true,
-    // A3 : un revenu incertain n'est jamais compté, même ajusté.
-    compte: !incertain && !retiree,
+    // Un montant confirmé n'est plus une estimation.
+    estimation: el.estimation === true && !confirme,
+    // A3 : un revenu incertain n'est compté qu'une fois sa réception confirmée.
+    compte: !retiree && (!incertain || confirme),
     origine,
     ajuste: a !== undefined,
     retiree,
@@ -263,6 +321,8 @@ function ligne(
 }
 
 const cle = (elementId: string, origine: DateCivile) => `${elementId}|${origine}`;
+/** Clé réservée aux confirmations de la paie elle-même. */
+const PAIE = '\u0000paie';
 
 function indexerAjustements(entree: EntreePlan): Map<string, AjustementOccurrence> {
   const m = new Map<string, AjustementOccurrence>();

@@ -38,6 +38,12 @@ et dans le cahier fonctionnel de référence.
   0.4.3 : modifier une paie est replié dans le détail du cycle et passe
   toujours par un aperçu (durées des cycles en clair) ; une paie déplacée
   affiche sa date prévue ; la première paie versée plus tôt reste affichée.
+- Étape 5 (version 0.5.0) : confirmations. Statuts « À venir », « À vérifier »
+  (jamais « impayé ») et « Confirmé » ; confirmer d'un clic, autrement,
+  corriger, annuler ; « Tout confirmer » avec aperçu ; revenu incertain compté
+  une fois reçu ; enveloppes jamais réconciliées ; aucune modification de règle
+  ne fait disparaître une opération confirmée. Tableau des cycles sous « Ma
+  paie », paies précédentes consultables. Base de données en version 5.
 
 ## Organisation du code
 

@@ -55,6 +55,14 @@ export interface PeriodeStockee {
 }
 
 /** Ajustement d'une occurrence (étape 4b, A) ; la règle ne change pas. */
+/** Fait confirmé (étape 5) ; elementId null : la paie elle-même. */
+export interface ConfirmationStockee {
+  elementId: string | null;
+  origine: string;
+  date: string;
+  montant: number;
+}
+
 export interface AjustementStocke {
   elementId: string;
   /** Date d'origine de l'occurrence : son identité stable. */
@@ -93,6 +101,7 @@ export interface DonneesPaie {
   seuil: number | null;
   elements: ElementStocke[];
   ajustements: AjustementStocke[];
+  confirmations: ConfirmationStockee[];
 }
 
 export type ChangementPaie =
@@ -105,6 +114,8 @@ export type ChangementPaie =
   | { type: 'definirElement'; element: ElementStocke }
   | { type: 'supprimerElement'; id: string }
   | { type: 'definirAjustement'; ajustement: AjustementStocke }
+  | { type: 'definirConfirmation'; confirmation: ConfirmationStockee }
+  | { type: 'retirerConfirmation'; elementId: string | null; origine: string }
   | { type: 'retirerAjustement'; elementId: string; origine: string };
 
 export interface EntreeJournal {
@@ -154,7 +165,7 @@ export function creerApercu(): Plateforme {
       return {
         profil: 'apercu',
         versionApplication: VERSION_APPLICATION,
-        versionSchema: 4,
+        versionSchema: 5,
         dossierDonnees: '(aucun : aperçu en mémoire)',
         integriteOk: true,
         nombreEntreesJournal: journal,

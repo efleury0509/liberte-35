@@ -70,6 +70,18 @@ pub struct AjustementStocke {
     pub retire: bool,
 }
 
+/// Fait confirmé (étape 5) : une date et un montant réels pour une
+/// occurrence. Ce n'est pas une transaction bancaire.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmationStockee {
+    /// None : la paie elle-même.
+    pub element_id: Option<String>,
+    pub origine: String,
+    pub date: String,
+    pub montant: i64,
+}
+
 /// Autre revenu ou dépense (étape 4). La fréquence garde le format du noyau
 /// de l'interface ; on vérifie ici seulement qu'elle a un type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,6 +115,8 @@ pub struct DonneesPaie {
     pub elements: Vec<ElementStocke>,
     #[serde(default)]
     pub ajustements: Vec<AjustementStocke>,
+    #[serde(default)]
+    pub confirmations: Vec<ConfirmationStockee>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -112,16 +126,44 @@ pub struct DonneesPaie {
     rename_all_fields = "camelCase"
 )]
 pub enum ChangementPaie {
-    DefinirProfil { profil: ProfilPaieStocke },
-    DefinirSalaire { salaire: SalaireStocke },
-    RetirerSalaire { a_partir_du: String },
-    DefinirException { exception: ExceptionStockee },
-    RetirerException { date_origine: String },
-    DefinirSeuil { seuil: Option<i64> },
-    DefinirElement { element: ElementStocke },
-    SupprimerElement { id: String },
-    DefinirAjustement { ajustement: AjustementStocke },
-    RetirerAjustement { element_id: String, origine: String },
+    DefinirProfil {
+        profil: ProfilPaieStocke,
+    },
+    DefinirSalaire {
+        salaire: SalaireStocke,
+    },
+    RetirerSalaire {
+        a_partir_du: String,
+    },
+    DefinirException {
+        exception: ExceptionStockee,
+    },
+    RetirerException {
+        date_origine: String,
+    },
+    DefinirSeuil {
+        seuil: Option<i64>,
+    },
+    DefinirElement {
+        element: ElementStocke,
+    },
+    SupprimerElement {
+        id: String,
+    },
+    DefinirAjustement {
+        ajustement: AjustementStocke,
+    },
+    RetirerAjustement {
+        element_id: String,
+        origine: String,
+    },
+    DefinirConfirmation {
+        confirmation: ConfirmationStockee,
+    },
+    RetirerConfirmation {
+        element_id: Option<String>,
+        origine: String,
+    },
 }
 
 fn erreur(message: impl Into<String>) -> ErreurStockage {
@@ -215,7 +257,34 @@ fn verifier(changement: &ChangementPaie) -> Resultat<()> {
             Ok(())
         }
         ChangementPaie::RetirerAjustement { origine, .. } => verifier_date(origine),
+        ChangementPaie::DefinirConfirmation { confirmation: c } => {
+            verifier_date(&c.origine)?;
+            verifier_date(&c.date)?;
+            if c.montant < 0 {
+                return Err(erreur("Un montant confirmé ne peut pas être négatif."));
+            }
+            Ok(())
+        }
+        ChangementPaie::RetirerConfirmation { origine, .. } => verifier_date(origine),
     }
+}
+
+fn lire_confirmations(conn: &rusqlite::Connection) -> Resultat<Vec<ConfirmationStockee>> {
+    let mut req = conn.prepare(
+        "SELECT element_id, origine, date, montant FROM confirmations
+         ORDER BY ifnull(element_id, ''), origine",
+    )?;
+    let lignes = req
+        .query_map([], |r| {
+            Ok(ConfirmationStockee {
+                element_id: r.get(0)?,
+                origine: r.get(1)?,
+                date: r.get(2)?,
+                montant: r.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(lignes)
 }
 
 fn verifier_element(e: &ElementStocke) -> Resultat<()> {
@@ -453,6 +522,7 @@ impl Stockage {
             .and_then(|s| s.parse::<i64>().ok());
         let elements = lire_elements(&self.conn)?;
         let ajustements = lire_ajustements(&self.conn)?;
+        let confirmations = lire_confirmations(&self.conn)?;
         Ok(DonneesPaie {
             profil,
             salaires,
@@ -460,6 +530,7 @@ impl Stockage {
             seuil,
             elements,
             ajustements,
+            confirmations,
         })
     }
 
@@ -540,6 +611,18 @@ impl Stockage {
                 },
                 ChangementPaie::DefinirElement { element } => ecrire_element(&tx, element)?,
                 ChangementPaie::SupprimerElement { id } => {
+                    // Q16 : un élément qui a des opérations confirmées se termine,
+                    // il ne se supprime pas.
+                    let confirme: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM confirmations WHERE element_id = ?1)",
+                        [id],
+                        |r| r.get(0),
+                    )?;
+                    if confirme {
+                        return Err(erreur(
+                            "Ce revenu ou cette dépense a des opérations confirmées : termine-le plutôt que de le supprimer.",
+                        ));
+                    }
                     // Ses montants, suspensions, périodes et ajustements partent avec lui.
                     tx.execute("DELETE FROM elements WHERE id = ?1", [id])?;
                 }
@@ -567,6 +650,36 @@ impl Stockage {
                     tx.execute(
                         "DELETE FROM ajustements_element WHERE element_id = ?1 AND origine = ?2",
                         [element_id, origine],
+                    )?;
+                }
+                ChangementPaie::DefinirConfirmation { confirmation: c } => {
+                    if let Some(id) = &c.element_id {
+                        let existe: bool = tx.query_row(
+                            "SELECT EXISTS (SELECT 1 FROM elements WHERE id = ?1)",
+                            [id],
+                            |r| r.get(0),
+                        )?;
+                        if !existe {
+                            return Err(erreur("Ce revenu ou cette dépense n'existe plus."));
+                        }
+                    }
+                    tx.execute(
+                        "DELETE FROM confirmations WHERE ifnull(element_id, '') = ifnull(?1, '') AND origine = ?2",
+                        params![c.element_id, c.origine],
+                    )?;
+                    tx.execute(
+                        "INSERT INTO confirmations (element_id, origine, date, montant, cree_le)
+                         VALUES (?1, ?2, ?3, ?4, ?5)",
+                        params![c.element_id, c.origine, c.date, c.montant, maintenant],
+                    )?;
+                }
+                ChangementPaie::RetirerConfirmation {
+                    element_id,
+                    origine,
+                } => {
+                    tx.execute(
+                        "DELETE FROM confirmations WHERE ifnull(element_id, '') = ifnull(?1, '') AND origine = ?2",
+                        params![element_id, origine],
                     )?;
                 }
             }

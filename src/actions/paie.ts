@@ -3,12 +3,13 @@
 // puis enregistré seulement après confirmation, avec ses entrées de journal
 // (A10). Rien ici ne calcule de montant : le noyau s'en charge.
 
-import { planifier, comparerRattachements, type AjustementOccurrence, type ElementPlanifie, type Plan } from '../noyau/cycles';
+import { planifier, comparerRattachements, type AjustementOccurrence, type ConfirmationOccurrence, type ElementPlanifie, type Plan } from '../noyau/cycles';
 import { ajouterJours, dateCivile, ecartEnJours, formaterDateCourte, formaterDateLongue, type DateCivile } from '../noyau/dates';
 import { arrondirDecimal, formaterMontant, type Cents } from '../noyau/montants';
 import { paiesEntre, type ExceptionPaie, type Paie, type ProfilPaie } from '../noyau/paie';
 import { montantEnVigueur } from '../noyau/regles';
-import { versAjustementNoyau, versElementNoyau } from './elementsStockes';
+import { versAjustementNoyau, versConfirmationNoyau, versElementNoyau } from './elementsStockes';
+import { confirmationsPerdues, messageConfirmationsPerdues } from './protection';
 import type {
   ChangementPaie,
   DonneesPaie,
@@ -59,6 +60,7 @@ export interface DonneesNoyau {
   seuil: Cents | null;
   elements: ElementPlanifie[];
   ajustements: AjustementOccurrence[];
+  confirmations: ConfirmationOccurrence[];
 }
 
 export function versNoyau(d: DonneesPaie): DonneesNoyau {
@@ -86,6 +88,7 @@ export function versNoyau(d: DonneesPaie): DonneesNoyau {
     seuil: d.seuil,
     elements: (d.elements ?? []).map(versElementNoyau),
     ajustements: (d.ajustements ?? []).map(versAjustementNoyau),
+    confirmations: (d.confirmations ?? []).map(versConfirmationNoyau),
   };
 }
 
@@ -176,6 +179,9 @@ export function proposerProfil(d: DonneesPaie, s: SaisieProfil): Proposition {
     }
   }
   // Le calendrier de paie touche tous les cycles : toujours un aperçu.
+  // Q23 : un nouveau calendrier ne doit faire disparaître aucune opération confirmée.
+  const perdues = confirmationsPerdues(d, changements);
+  if (perdues.length > 0) throw new ErreurSaisie(messageConfirmationsPerdues(d, perdues));
   return { titre: d.profil ? 'Modifier le calendrier de paie' : 'Créer le profil de paie', lignes, consequences, changements, journal, apercu: true };
 }
 
@@ -218,7 +224,7 @@ export interface SaisieException {
 
 function planAutour(d: DonneesNoyau, profil: ProfilPaie, paie: Paie, elements: readonly ElementPlanifie[], exceptions: ExceptionPaie[]): Plan {
   return planifier(
-    { profil, exceptions, elements, ajustements: d.ajustements, seuil: d.seuil },
+    { profil, exceptions, elements, ajustements: d.ajustements, confirmations: d.confirmations, seuil: d.seuil },
     ajouterJours(paie.dateOrigine, -70),
     ajouterJours(paie.dateOrigine, 70),
   );
@@ -297,8 +303,10 @@ export function proposerException(
   }
   const rattachements = comparerRattachements(avant, apres);
   for (const c of rattachements) {
+    // Étape 5 : un élément déjà confirmé est nommé comme tel ; sa confirmation est gardée.
+    const confirme = avant.cycles.some((x) => x.lignes.some((l) => l.elementId === c.elementId && l.echeance === c.echeance && l.statut === 'confirme'));
     consequences.push(
-      `À vérifier : ${c.libelle} (${formaterDateCourte(c.echeance)}) passerait de la paie du ${formaterDateCourte(c.dePaie)} à celle du ${formaterDateCourte(c.versPaie)}`,
+      `À vérifier : ${c.libelle} (${formaterDateCourte(c.echeance)}${confirme ? ', confirmé' : ''}) passerait de la paie du ${formaterDateCourte(c.dePaie)} à celle du ${formaterDateCourte(c.versPaie)}`,
     );
   }
   if (cycleAvant && cycleApres && cycleAvant.disponible !== cycleApres.disponible) {

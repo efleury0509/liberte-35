@@ -12,6 +12,7 @@ import { montantEnVigueur } from '../noyau/regles';
 import { analyser } from './analyse';
 import { decrireAjustement, nomObjet } from './elements';
 import { versElementNoyau } from './elementsStockes';
+import { estConfirmee } from './protection';
 import { ErreurSaisie, SECTION, lireDate, lireMontant, versNoyau, type Proposition } from './paie';
 
 export interface CibleOccurrence {
@@ -41,7 +42,7 @@ function situer(d: DonneesPaie, cible: CibleOccurrence): { ligne: Ligne | undefi
   if (!n.profil) return { ligne: undefined, paie: null };
   const origine = cible.origine as DateCivile;
   const plan = planifier(
-    { profil: n.profil, exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, seuil: n.seuil },
+    { profil: n.profil, exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, confirmations: n.confirmations, seuil: n.seuil },
     ajouterJours(origine, -100),
     ajouterJours(origine, 100),
   );
@@ -88,6 +89,10 @@ function proposition(
   const changements: ChangementPaie[] = apres
     ? [{ type: 'definirAjustement', ajustement: apres }]
     : [{ type: 'retirerAjustement', elementId: cible.elementId, origine: cible.origine }];
+  // Étape 5 : une opération confirmée ne s'ajuste plus ; on corrige ou on annule la confirmation.
+  if (estConfirmee(d, cible.elementId, cible.origine)) {
+    throw new ErreurSaisie('Cette opération est confirmée : corrige ou annule d’abord la confirmation.');
+  }
   const journal: EntreeJournal[] = [
     {
       section: SECTION,

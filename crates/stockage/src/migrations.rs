@@ -131,6 +131,21 @@ CREATE TABLE periodes_frequence (
 ) STRICT;
 "#;
 
+// Étape 5 : ajout seulement. Une confirmation est un fait (date, montant)
+// accroché à une occurrence ; element_id vide (NULL) : la paie elle-même.
+// Un élément qui a des confirmations ne peut pas être supprimé (RESTRICT).
+const V5: &str = r#"
+CREATE TABLE confirmations (
+    element_id TEXT REFERENCES elements(id) ON DELETE RESTRICT,
+    origine    TEXT NOT NULL CHECK (origine GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    date       TEXT NOT NULL CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    montant    INTEGER NOT NULL CHECK (montant >= 0),
+    cree_le    TEXT NOT NULL
+) STRICT;
+
+CREATE UNIQUE INDEX confirmations_occurrence ON confirmations (ifnull(element_id, ''), origine);
+"#;
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -151,6 +166,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 4,
         description: "Ajustements d'occurrence et changements de fréquence datés",
         sql: V4,
+    },
+    Migration {
+        version: 5,
+        description: "Confirmations : faits confirmés, distincts du plan",
+        sql: V5,
     },
 ];
 
