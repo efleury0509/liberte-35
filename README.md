@@ -29,7 +29,7 @@ et dans le cahier fonctionnel de référence.
   ponctuelles ; modifier à partir d'une date, suspendre, terminer, supprimer.
   Un revenu incertain reste hors du disponible. Base de données en version 3.
   Chaque version publiée porte son propre numéro (voir docs/RECONSTRUIRE.md).
-- Étape 4b (version 0.4.1) : « Enregistrer » direct avec « Annuler », aperçu
+- Étape 4b (version 0.4.2) : « Enregistrer » direct avec « Annuler », aperçu
   seulement quand il protège ; ajustements d'une occurrence (montant, date,
   autre paie, retrait) depuis le détail d'un cycle, sans toucher la règle ;
   changement de fréquence daté ; « Voir les paies suivantes ». Textes clairs

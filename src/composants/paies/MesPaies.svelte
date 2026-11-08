@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     ErreurSaisie,
     LIBELLES_FREQUENCE,
@@ -134,10 +134,20 @@
     } catch (e) {
       proposition = null;
       erreurSaisie = e instanceof ErreurSaisie || e instanceof Error ? e.message : String(e);
+      void montrer('erreur-saisie');
       return;
     }
-    if (p.apercu) proposition = p;
-    else void enregistrer(p, true);
+    if (p.apercu) {
+      proposition = p;
+      void montrer('apercu');
+    } else void enregistrer(p, true);
+  }
+
+  // L'aperçu et les messages sont au-dessus du tableau : quand on agit depuis
+  // le détail d'un cycle, on les amène à l'écran.
+  async function montrer(testid: string) {
+    await tick();
+    document.querySelector(`[data-testid="${testid}"]`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
   }
 
   async function enregistrer(p: Proposition, direct: boolean) {
@@ -637,6 +647,13 @@
     margin: 0;
   }
   .enregistre {
+    /* Toujours visible, même quand on agit depuis le bas de la page. */
+    position: fixed;
+    bottom: var(--espace-4);
+    left: calc(50% + 120px);
+    transform: translateX(-50%);
+    z-index: 10;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
     display: flex;
     gap: var(--espace-3);
     align-items: center;
