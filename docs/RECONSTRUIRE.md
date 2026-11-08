@@ -19,7 +19,20 @@ dans plusieurs années.
 1. Ouvrir le dépôt sur github.com, onglet **Actions**.
 2. Choisir **Fabrication**, puis **Run workflow** sur la branche `main`.
 3. À la fin (environ 15 à 25 minutes), ouvrir l'exécution : les installateurs
-   sont dans **Artifacts** (`liberte-35-officiel`, `liberte-35-essai`).
+   sont dans **Artifacts** (`liberte-35-officiel-X.Y.Z`, `liberte-35-essai-X.Y.Z`).
+
+### Numéro de version
+
+Chaque version publiée porte un numéro unique, identique dans `package.json`,
+`src-tauri/tauri.conf.json` et `Cargo.toml` (section `[workspace.package]`).
+Pour publier une nouvelle version, augmenter ce numéro dans les trois fichiers.
+Si le numéro n'a pas changé depuis la dernière publication (étiquette git
+`vX.Y.Z`), la fabrication vérifie et compile tout, mais ne publie aucun
+installateur : Windows verrait sinon un « même numéro, déjà installé » et la
+mise à jour par-dessus ne se ferait pas proprement.
+
+Une nouvelle version s'installe par-dessus l'ancienne, sans désinstaller ;
+le fichier de données est mis à niveau après une copie de précaution.
 
 ## Option B — Sur un ordinateur Windows, sans GitHub
 

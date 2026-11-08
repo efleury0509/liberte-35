@@ -1,5 +1,5 @@
 //! Données de paie : profil, changements de salaire, exceptions, seuil
-//! d'attention. Chaque changement est enregistré avec ses entrées de
+//! d'attention, autres revenus et dépenses (étape 4). Chaque changement est enregistré avec ses entrées de
 //! journal dans une seule transaction : soit tout est écrit, soit rien.
 //! Les calculs (cycles, disponible) se font dans le noyau de l'interface ;
 //! ici, on ne fait que garder les décisions de l'utilisatrice.
@@ -35,6 +35,40 @@ pub struct ExceptionStockee {
     pub montant: Option<i64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MontantStocke {
+    pub a_partir_du: String,
+    pub montant: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuspensionStocke {
+    pub debut: String,
+    pub fin: String,
+}
+
+/// Autre revenu ou dépense (étape 4). La fréquence garde le format du noyau
+/// de l'interface ; on vérifie ici seulement qu'elle a un type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementStocke {
+    pub id: String,
+    pub libelle: String,
+    /// revenu ou depense.
+    pub nature: String,
+    /// fixe ou enveloppe.
+    pub genre: String,
+    pub incertain: bool,
+    pub estimation: bool,
+    pub frequence: serde_json::Value,
+    pub montants: Vec<MontantStocke>,
+    pub suspensions: Vec<SuspensionStocke>,
+    pub fin: Option<String>,
+    pub cycle_paie: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DonneesPaie {
@@ -42,6 +76,7 @@ pub struct DonneesPaie {
     pub salaires: Vec<SalaireStocke>,
     pub exceptions: Vec<ExceptionStockee>,
     pub seuil: Option<i64>,
+    pub elements: Vec<ElementStocke>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +92,8 @@ pub enum ChangementPaie {
     DefinirException { exception: ExceptionStockee },
     RetirerException { date_origine: String },
     DefinirSeuil { seuil: Option<i64> },
+    DefinirElement { element: ElementStocke },
+    SupprimerElement { id: String },
 }
 
 fn erreur(message: impl Into<String>) -> ErreurStockage {
@@ -126,7 +163,147 @@ fn verifier(changement: &ChangementPaie) -> Resultat<()> {
             }
             Ok(())
         }
+        ChangementPaie::DefinirElement { element } => verifier_element(element),
+        ChangementPaie::SupprimerElement { id } => {
+            if id.is_empty() {
+                return Err(erreur("Élément à supprimer non précisé."));
+            }
+            Ok(())
+        }
     }
+}
+
+fn verifier_element(e: &ElementStocke) -> Resultat<()> {
+    if e.id.is_empty() || e.id.len() > 64 {
+        return Err(erreur("Identifiant d'élément invalide."));
+    }
+    if e.libelle.trim().is_empty() {
+        return Err(erreur("Un revenu ou une dépense doit avoir un nom."));
+    }
+    match (e.nature.as_str(), e.genre.as_str()) {
+        ("depense", "fixe" | "enveloppe") | ("revenu", "fixe") => {}
+        ("revenu", "enveloppe") => return Err(erreur("Une enveloppe est toujours une dépense.")),
+        _ => return Err(erreur("Nature ou genre inconnu.")),
+    }
+    if e.incertain && e.nature != "revenu" {
+        return Err(erreur("Seul un revenu peut être incertain."));
+    }
+    if !e.frequence.get("type").is_some_and(|t| t.is_string()) {
+        return Err(erreur("Fréquence invalide."));
+    }
+    for m in &e.montants {
+        verifier_date(&m.a_partir_du)?;
+        if m.montant < 0 {
+            return Err(erreur("Un montant ne peut pas être négatif."));
+        }
+    }
+    for s in &e.suspensions {
+        verifier_date(&s.debut)?;
+        verifier_date(&s.fin)?;
+        if s.fin < s.debut {
+            return Err(erreur("Une suspension doit finir après son début."));
+        }
+    }
+    if let Some(f) = &e.fin {
+        verifier_date(f)?;
+    }
+    if let Some(c) = &e.cycle_paie {
+        verifier_date(c)?;
+    }
+    Ok(())
+}
+
+fn lire_elements(conn: &rusqlite::Connection) -> Resultat<Vec<ElementStocke>> {
+    let mut req = conn.prepare(
+        "SELECT id, libelle, nature, genre, incertain, estimation, frequence, fin, cycle_paie
+         FROM elements ORDER BY rowid",
+    )?;
+    let mut elements = req
+        .query_map([], |r| {
+            let frequence: String = r.get(6)?;
+            Ok(ElementStocke {
+                id: r.get(0)?,
+                libelle: r.get(1)?,
+                nature: r.get(2)?,
+                genre: r.get(3)?,
+                incertain: r.get::<_, i64>(4)? == 1,
+                estimation: r.get::<_, i64>(5)? == 1,
+                frequence: serde_json::from_str(&frequence).unwrap_or(serde_json::Value::Null),
+                montants: Vec::new(),
+                suspensions: Vec::new(),
+                fin: r.get(7)?,
+                cycle_paie: r.get(8)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut req_m = conn.prepare(
+        "SELECT a_partir_du, montant FROM montants_element WHERE element_id = ?1 ORDER BY a_partir_du",
+    )?;
+    let mut req_s = conn.prepare(
+        "SELECT debut, fin FROM suspensions_element WHERE element_id = ?1 ORDER BY debut, fin",
+    )?;
+    for e in &mut elements {
+        e.montants = req_m
+            .query_map([&e.id], |r| {
+                Ok(MontantStocke {
+                    a_partir_du: r.get(0)?,
+                    montant: r.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        e.suspensions = req_s
+            .query_map([&e.id], |r| {
+                Ok(SuspensionStocke {
+                    debut: r.get(0)?,
+                    fin: r.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+    Ok(elements)
+}
+
+fn ecrire_element(tx: &rusqlite::Transaction, e: &ElementStocke) -> Resultat<()> {
+    // Remplacement complet : l'élément garde sa place dans la liste.
+    tx.execute(
+        "INSERT INTO elements (id, libelle, nature, genre, incertain, estimation, frequence, fin, cycle_paie)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT(id) DO UPDATE SET libelle = excluded.libelle, nature = excluded.nature,
+           genre = excluded.genre, incertain = excluded.incertain, estimation = excluded.estimation,
+           frequence = excluded.frequence, fin = excluded.fin, cycle_paie = excluded.cycle_paie",
+        params![
+            e.id,
+            e.libelle.trim(),
+            e.nature,
+            e.genre,
+            e.incertain as i64,
+            e.estimation as i64,
+            e.frequence.to_string(),
+            e.fin,
+            e.cycle_paie
+        ],
+    )?;
+    tx.execute(
+        "DELETE FROM montants_element WHERE element_id = ?1",
+        [&e.id],
+    )?;
+    tx.execute(
+        "DELETE FROM suspensions_element WHERE element_id = ?1",
+        [&e.id],
+    )?;
+    for m in &e.montants {
+        tx.execute(
+            "INSERT INTO montants_element (element_id, a_partir_du, montant) VALUES (?1, ?2, ?3)",
+            params![e.id, m.a_partir_du, m.montant],
+        )?;
+    }
+    for s in &e.suspensions {
+        tx.execute(
+            "INSERT INTO suspensions_element (element_id, debut, fin) VALUES (?1, ?2, ?3)",
+            params![e.id, s.debut, s.fin],
+        )?;
+    }
+    Ok(())
 }
 
 impl Stockage {
@@ -173,11 +350,13 @@ impl Stockage {
         let seuil = self
             .parametre(CLE_SEUIL)?
             .and_then(|s| s.parse::<i64>().ok());
+        let elements = lire_elements(&self.conn)?;
         Ok(DonneesPaie {
             profil,
             salaires,
             exceptions,
             seuil,
+            elements,
         })
     }
 
@@ -256,6 +435,10 @@ impl Stockage {
                         tx.execute("DELETE FROM parametres WHERE cle = ?1", [CLE_SEUIL])?;
                     }
                 },
+                ChangementPaie::DefinirElement { element } => ecrire_element(&tx, element)?,
+                ChangementPaie::SupprimerElement { id } => {
+                    tx.execute("DELETE FROM elements WHERE id = ?1", [id])?;
+                }
             }
         }
         for e in journal {

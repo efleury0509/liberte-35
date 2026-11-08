@@ -4,6 +4,7 @@
 // l'interface), un aperçu en mémoire répond à la place : rien n'est enregistré.
 
 import { invoke } from '@tauri-apps/api/core';
+import { version as VERSION_APPLICATION } from '../../package.json';
 
 export type Profil = 'essai' | 'officiel' | 'apercu';
 
@@ -36,11 +37,41 @@ export interface ExceptionStockee {
   montant: number | null;
 }
 
+export interface MontantStocke {
+  aPartirDu: string;
+  montant: number;
+}
+
+export interface SuspensionStockee {
+  debut: string;
+  fin: string;
+}
+
+/**
+ * Autre revenu ou dépense (étape 4). La fréquence garde le format du noyau
+ * (par exemple { type: 'mois', n: 1, depart: '2027-01-20' }).
+ */
+export interface ElementStocke {
+  id: string;
+  libelle: string;
+  nature: 'revenu' | 'depense';
+  genre: 'fixe' | 'enveloppe';
+  incertain: boolean;
+  estimation: boolean;
+  frequence: Record<string, unknown> & { type: string };
+  montants: MontantStocke[];
+  suspensions: SuspensionStockee[];
+  fin: string | null;
+  /** Dépense ponctuelle rattachée à un cycle choisi : date d'origine de sa paie. */
+  cyclePaie: string | null;
+}
+
 export interface DonneesPaie {
   profil: ProfilPaieStocke | null;
   salaires: SalaireStocke[];
   exceptions: ExceptionStockee[];
   seuil: number | null;
+  elements: ElementStocke[];
 }
 
 export type ChangementPaie =
@@ -49,7 +80,9 @@ export type ChangementPaie =
   | { type: 'retirerSalaire'; aPartirDu: string }
   | { type: 'definirException'; exception: ExceptionStockee }
   | { type: 'retirerException'; dateOrigine: string }
-  | { type: 'definirSeuil'; seuil: number | null };
+  | { type: 'definirSeuil'; seuil: number | null }
+  | { type: 'definirElement'; element: ElementStocke }
+  | { type: 'supprimerElement'; id: string };
 
 export interface EntreeJournal {
   section: string;
@@ -87,7 +120,7 @@ function simulation(): string | null {
 
 /** Aperçu en mémoire : mêmes règles que le stockage, rien n'est enregistré. */
 export function creerApercu(): Plateforme {
-  let donnees: DonneesPaie = { profil: null, salaires: [], exceptions: [], seuil: null };
+  let donnees: DonneesPaie = { profil: null, salaires: [], exceptions: [], seuil: null, elements: [] };
   let journal = 0;
   // Copie par sérialisation, comme le pont Tauri : les objets réactifs de
   // l'interface ne peuvent pas être copiés autrement.
@@ -119,6 +152,14 @@ export function creerApercu(): Plateforme {
       case 'definirSeuil':
         donnees.seuil = c.seuil;
         break;
+      case 'definirElement':
+        if (c.element.libelle.trim() === '') throw 'Un revenu ou une dépense doit avoir un nom. Rien n’a été enregistré.';
+        if (c.element.montants.some((m) => m.montant < 0)) throw 'Un montant ne peut pas être négatif. Rien n’a été enregistré.';
+        donnees.elements = [...donnees.elements.filter((e) => e.id !== c.element.id), c.element];
+        break;
+      case 'supprimerElement':
+        donnees.elements = donnees.elements.filter((e) => e.id !== c.id);
+        break;
     }
   }
 
@@ -129,8 +170,8 @@ export function creerApercu(): Plateforme {
       }
       return {
         profil: 'apercu',
-        versionApplication: '0.1.0',
-        versionSchema: 2,
+        versionApplication: VERSION_APPLICATION,
+        versionSchema: 3,
         dossierDonnees: '(aucun : aperçu en mémoire)',
         integriteOk: true,
         nombreEntreesJournal: journal,

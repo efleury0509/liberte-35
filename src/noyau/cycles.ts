@@ -8,20 +8,39 @@
 //   de son échéance (A1), d'après les dates réelles ;
 // - un rattachement choisi à la main l'emporte.
 //
-// Le disponible est un résultat de PLANIFICATION : revenus prévus moins
-// sorties prévues du cycle. Aucun report d'un cycle à l'autre. Si un montant
-// manque, le disponible reste inconnu (null) au lieu d'être inventé.
+// - une dépense ponctuelle rattachée à un cycle choisi suit la paie de ce
+//   cycle, identifiée par sa date d'origine (D7).
+//
+// Le disponible est un résultat de PLANIFICATION : paie + autres revenus
+// certains − sorties du cycle. Aucun report d'un cycle à l'autre. Si un
+// montant compté manque, le disponible reste inconnu (null) au lieu d'être
+// inventé (A6, Q15). Un revenu incertain est affiché mais jamais compté tant
+// que sa réception n'est pas confirmée (A3). Un montant estimé compté rend le
+// disponible « Estimation » ; une enveloppe, montant choisi, non (Q14).
 // À cette étape, toute ligne est « Prévu » ; les confirmations viennent à l'étape 5.
 
 import { ajouterJours, type DateCivile } from './dates';
 import { additionner, type Cents } from './montants';
 import { paiesEntre, type ExceptionPaie, type Paie, type ProfilPaie } from './paie';
-import { occurrences, type Regle } from './regles';
+import { montantEnVigueur, occurrences, type Regle } from './regles';
+
+export type Nature = 'revenu' | 'depense';
+export type Genre = 'fixe' | 'enveloppe';
 
 export interface ElementPlanifie {
   id: string;
   libelle: string;
   regle: Regle;
+  /** Par défaut : dépense. */
+  nature?: Nature;
+  /** Dépense fixe (par défaut) ou enveloppe variable, jamais réconciliée. */
+  genre?: Genre;
+  /** Revenu incertain : visible, jamais compté avant sa réception confirmée (A3). */
+  incertain?: boolean;
+  /** Montant estimé plutôt que connu avec précision. */
+  estimation?: boolean;
+  /** Dépense ponctuelle rattachée au cycle de cette paie (date d'origine). */
+  cyclePaie?: DateCivile;
 }
 
 export interface RattachementManuel {
@@ -42,6 +61,12 @@ export interface Ligne {
   montant: Cents | null;
   statut: Statut;
   manuel: boolean;
+  nature: Nature;
+  genre: Genre;
+  incertain: boolean;
+  estimation: boolean;
+  /** Entre dans le disponible ; faux pour un revenu incertain. */
+  compte: boolean;
 }
 
 export type Signal = 'negatif' | 'seuil' | null;
@@ -51,10 +76,18 @@ export interface Cycle {
   debut: DateCivile;
   fin: DateCivile;
   lignes: Ligne[];
+  /** Autres revenus comptés ; null si l'un d'eux n'a pas de montant. */
+  autresRevenus: Cents | null;
+  /** Paie + autres revenus comptés ; null si un montant manque. */
+  revenus: Cents | null;
   /** Total des sorties ; null si un montant manque. */
   sorties: Cents | null;
-  /** Disponible planifié ; null si la paie ou une sortie n'a pas de montant. */
+  /** Disponible planifié ; null si un montant compté manque. */
   disponible: Cents | null;
+  /** Le disponible inclut au moins un montant estimé. */
+  estimation: boolean;
+  /** Revenus incertains connus, affichés mais non comptés. */
+  nonComptes: Cents;
   signal: Signal;
 }
 
@@ -95,8 +128,12 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
     debut: paie.date,
     fin: ajouterJours(paies[i + 1]?.date ?? suivante?.date ?? ajouterJours(paie.date, 1), -1),
     lignes: [],
+    autresRevenus: null,
+    revenus: null,
     sorties: null,
     disponible: null,
+    estimation: false,
+    nonComptes: 0,
     signal: null,
   }));
   if (cycles.length === 0) return { cycles, avantPremierCycle: [], reglesSansOccurrence: [] };
@@ -114,6 +151,11 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
   const premiereDuProfil = paiesReelles[0]?.date ?? entree.profil.frequence.depart;
 
   for (const el of elements) {
+    if (el.cyclePaie !== undefined) {
+      // D7 : une seule ligne, dans le cycle de la paie choisie (même déplacée).
+      parOrigine.get(el.cyclePaie)?.lignes.push(ligne(el, null, montantEnVigueur(el.regle.montants, el.cyclePaie), false));
+      continue;
+    }
     if (estLieeALaPaie(el.regle)) {
       // Dates d'origine des paies de mois complets : le rang en dépend (Q7).
       const origines = paiesReelles.map((p) => p.dateOrigine);
@@ -144,10 +186,16 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
     }
   }
 
+  const total = (montants: (Cents | null)[]): Cents | null =>
+    montants.every((m): m is Cents => m !== null) ? additionner(0, ...montants) : null;
   for (const c of cycles) {
-    const montants = c.lignes.map((l) => l.montant);
-    c.sorties = montants.every((m): m is Cents => m !== null) ? additionner(...montants) : null;
-    c.disponible = c.paie.montant !== null && c.sorties !== null ? c.paie.montant - c.sorties : null;
+    const comptees = c.lignes.filter((l) => l.compte);
+    c.sorties = total(comptees.filter((l) => l.nature === 'depense').map((l) => l.montant));
+    c.autresRevenus = total(comptees.filter((l) => l.nature === 'revenu').map((l) => l.montant));
+    c.revenus = c.paie.montant !== null && c.autresRevenus !== null ? c.paie.montant + c.autresRevenus : null;
+    c.disponible = c.revenus !== null && c.sorties !== null ? c.revenus - c.sorties : null;
+    c.estimation = comptees.some((l) => l.estimation);
+    c.nonComptes = additionner(0, ...c.lignes.filter((l) => !l.compte && l.montant !== null).map((l) => l.montant ?? 0));
     c.signal = signal(c.disponible, seuil);
   }
 
@@ -155,7 +203,23 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
 }
 
 function ligne(el: ElementPlanifie, echeance: DateCivile | null, montant: Cents | null, manuel: boolean): Ligne {
-  return { elementId: el.id, libelle: el.libelle, echeance, montant, statut: 'prevu', manuel };
+  const nature = el.nature ?? 'depense';
+  // Une enveloppe est toujours une dépense ; seul un revenu peut être incertain.
+  const genre = nature === 'depense' ? (el.genre ?? 'fixe') : 'fixe';
+  const incertain = nature === 'revenu' && el.incertain === true;
+  return {
+    elementId: el.id,
+    libelle: el.libelle,
+    echeance,
+    montant,
+    statut: 'prevu',
+    manuel,
+    nature,
+    genre,
+    incertain,
+    estimation: el.estimation === true,
+    compte: !incertain,
+  };
 }
 
 /** A9 et Q8 : négatif, ou strictement sous le seuil. */

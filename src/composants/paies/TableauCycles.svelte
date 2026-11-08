@@ -22,6 +22,7 @@
       <th scope="col">Paie du</th>
       <th scope="col">Cycle</th>
       <th scope="col" class="montant">Paie</th>
+      <th scope="col" class="montant">Autres revenus</th>
       <th scope="col" class="montant">Sorties</th>
       <th scope="col" class="montant">Disponible planifié</th>
       <th scope="col">Statut</th>
@@ -41,8 +42,15 @@
           {montant(c.paie.montant)}
           {#if c.paie.montantModifie}<span class="note">modifiée</span>{/if}
         </td>
+        <td class="montant">
+          {c.lignes.some((l) => l.nature === 'revenu') ? montant(c.autresRevenus) : '—'}
+          {#if c.nonComptes > 0}<span class="note">+ {formaterMontant(c.nonComptes)} non compté</span>{/if}
+        </td>
         <td class="montant">{montant(c.sorties)}</td>
-        <td class="montant" data-testid="disponible">{montant(c.disponible)}</td>
+        <td class="montant" data-testid="disponible">
+          {montant(c.disponible)}
+          {#if c.estimation && c.disponible !== null}<span class="note" data-testid="estimation">Estimation</span>{/if}
+        </td>
         <td>
           Prévu
           {#if c.signal}

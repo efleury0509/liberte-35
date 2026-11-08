@@ -11,15 +11,18 @@
     versNoyau,
     type Proposition,
   } from '../../actions/paie';
-  import { ELEMENTS_FICTIFS, PERIODE_FICTIVE, PROFIL_FICTIF } from '../../exemple/scenarioFictif';
+  import { cyclesAffiches } from '../../actions/elements';
+  import { versElementStocke } from '../../actions/elementsStockes';
+  import { ELEMENTS_ETAPE4, PERIODE_ETAPE4, PROFIL_ETAPE4 } from '../../exemple/scenarioEtape4';
   import { aujourdhui } from '../../lib/aujourdhui';
   import { exempleAutorise } from '../../lib/exemple';
   import type { DonneesPaie, FrequenceStockee, Plateforme, Profil } from '../../lib/plateforme';
   import { planifier, type Cycle, type Plan } from '../../noyau/cycles';
-  import { ajouterJours, dateCivile, formaterDateCourte, formaterDateLongue, type DateCivile } from '../../noyau/dates';
+  import { dateCivile, formaterDateCourte, formaterDateLongue, type DateCivile } from '../../noyau/dates';
   import { formaterMontant } from '../../noyau/montants';
   import { montantEnVigueur } from '../../noyau/regles';
   import Apercu from '../Apercu.svelte';
+  import RevenusDepenses from './RevenusDepenses.svelte';
   import TableauCycles from './TableauCycles.svelte';
 
   interface Props {
@@ -29,8 +32,8 @@
   }
   let { plateforme, profilInstallation, onchangement }: Props = $props();
 
-  const NOMBRE_CYCLES = 13;
   const jour = aujourdhui();
+  const ELEMENTS_EXEMPLE = ELEMENTS_ETAPE4.map(versElementStocke);
 
   let donnees: DonneesPaie | null = $state(null);
   let erreurChargement: string | null = $state(null);
@@ -40,6 +43,7 @@
   let proposition: Proposition | null = $state(null);
   let erreurSaisie: string | null = $state(null);
   let enCours = $state(false);
+  let remise = $state(0);
 
   // Champs des formulaires
   let fFrequence: FrequenceStockee = $state('deuxSemaines');
@@ -82,21 +86,11 @@
 
   function calculerVue(): Vue | null {
     if (exemple) {
-      const plan = planifier({ profil: PROFIL_FICTIF, elements: ELEMENTS_FICTIFS }, PERIODE_FICTIVE.debut, PERIODE_FICTIVE.fin);
+      const plan = planifier({ profil: PROFIL_ETAPE4, elements: ELEMENTS_ETAPE4 }, PERIODE_ETAPE4.debut, PERIODE_ETAPE4.fin);
       return { plan, cycles: plan.cycles, courant: null };
     }
     if (!noyau?.profil) return null;
-    const depart = noyau.profil.frequence.depart;
-    const debut = depart > jour ? depart : ajouterJours(jour, -45);
-    const plan = planifier(
-      { profil: noyau.profil, exceptions: noyau.exceptions, seuil: noyau.seuil },
-      debut,
-      ajouterJours(debut, 260),
-    );
-    const i = plan.cycles.findIndex((c) => c.fin >= jour);
-    const cycles = plan.cycles.slice(Math.max(0, i), Math.max(0, i) + NOMBRE_CYCLES);
-    const actuel = plan.cycles.find((c) => c.debut <= jour && c.fin >= jour);
-    return { plan, cycles, courant: actuel?.paie.dateOrigine ?? null };
+    return cyclesAffiches(noyau.profil, { exceptions: noyau.exceptions, elements: noyau.elements, seuil: noyau.seuil }, jour);
   }
 
   const cycleChoisi = $derived(vue?.cycles.find((c) => c.paie.dateOrigine === choisi) ?? null);
@@ -120,6 +114,7 @@
       proposition = null;
       edition = 'aucune';
       erreurSaisie = null;
+      remise += 1;
       onchangement();
     } catch (e) {
       erreurSaisie = typeof e === 'string' ? e : e instanceof Error ? e.message : 'Enregistrement impossible.';
@@ -132,6 +127,7 @@
     proposition = null;
     edition = 'aucune';
     erreurSaisie = null;
+    remise += 1;
   }
 
   function choisirCycle(dateOrigine: DateCivile) {
@@ -182,8 +178,8 @@
 
 {#if exemple}
   <p class="bandeau-exemple" role="note" data-testid="bandeau-exemple">
-    Exemple fictif des cas témoins de l’étape 3 : paie de 2 100 $ aux deux semaines, loyer, assurances, épicerie, essence et
-    paiement supplémentaire de dette. Rien n’est enregistré.
+    Exemple fictif des cas témoins de l’étape 4 (cycles M1 à M4) : paie de 2 100 $ aux deux semaines, autres revenus dont un
+    incertain, dépenses fixes, enveloppes et dépenses ponctuelles. Rien n’est enregistré.
   </p>
 {:else if donnees && !donnees.profil}
   <section aria-labelledby="titre-config">
@@ -243,6 +239,18 @@
       </form>
     {/if}
   </section>
+{/if}
+
+{#if exemple || donnees?.profil}
+  <RevenusDepenses
+    elements={exemple ? ELEMENTS_EXEMPLE : (donnees?.elements ?? [])}
+    {donnees}
+    modifiable={!exemple}
+    cycles={vue?.cycles ?? []}
+    {jour}
+    {remise}
+    {proposer}
+  />
 {/if}
 
 {#if erreurSaisie && !proposition}
@@ -321,29 +329,44 @@
     <h2 id="titre-detail">Cycle du {formaterDateLongue(c.debut)} au {formaterDateLongue(c.fin)}</h2>
     <table>
       <tbody>
+        <tr class="groupe"><th scope="rowgroup" colspan="3">Revenus</th></tr>
         <tr>
           <th scope="row">Paie du {formaterDateCourte(c.paie.date)}{c.paie.deplacee ? ` (prévue le ${formaterDateCourte(c.paie.dateOrigine)})` : ''}</th>
           <td class="montant">{c.paie.montant === null ? 'À compléter' : formaterMontant(c.paie.montant)}</td>
           <td>Prévu</td>
         </tr>
-        {#each c.lignes as l (`${l.elementId}${l.echeance}`)}
+        {#each c.lignes.filter((l) => l.nature === 'revenu') as l (`${l.elementId}${l.echeance}`)}
+          <tr class:non-compte={!l.compte}>
+            <th scope="row">
+              {l.libelle}{l.echeance ? ` (le ${formaterDateCourte(l.echeance)})` : ''}{l.estimation ? ' — estimation' : ''}
+            </th>
+            <td class="montant">{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
+            <td>{l.compte ? 'Prévu' : 'non compté (incertain)'}</td>
+          </tr>
+        {/each}
+        <tr class="groupe"><th scope="rowgroup" colspan="3">Sorties</th></tr>
+        {#each c.lignes.filter((l) => l.nature === 'depense') as l (`${l.elementId}${l.echeance}`)}
           <tr>
             <th scope="row">
-              {l.libelle}{l.echeance ? ` (dû le ${formaterDateCourte(l.echeance)})` : ''}{l.manuel ? ' — déplacé à la main' : ''}
+              {l.libelle}{l.echeance ? ` (dû le ${formaterDateCourte(l.echeance)})` : ''}{l.genre === 'enveloppe' ? ' — enveloppe' : ''}{l.estimation
+                ? ' — estimation'
+                : ''}{l.manuel ? ' — déplacé à la main' : ''}
             </th>
             <td class="montant">−{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
             <td>Prévu</td>
           </tr>
+        {:else}
+          <tr><td colspan="3" class="discret">Aucune sortie prévue dans ce cycle.</td></tr>
         {/each}
         <tr class="total">
           <th scope="row">Disponible planifié</th>
           <td class="montant">{c.disponible === null ? 'À compléter' : formaterMontant(c.disponible)}</td>
-          <td></td>
+          <td>{c.estimation ? 'Estimation' : ''}</td>
         </tr>
       </tbody>
     </table>
-    {#if c.lignes.length === 0 && !exemple}
-      <p class="discret">Les dépenses régulières s’ajouteront à l’étape 4.</p>
+    {#if c.nonComptes > 0}
+      <p class="discret">Non compté : {formaterMontant(c.nonComptes)} de revenus incertains, en attente de confirmation.</p>
     {/if}
 
     {#if !exemple}
@@ -424,6 +447,16 @@
   }
   .montant {
     text-align: right;
+  }
+  .groupe th {
+    padding-top: var(--espace-3);
+    color: var(--couleur-texte-discret);
+    font-size: var(--taille-petit);
+  }
+  .non-compte th,
+  .non-compte td {
+    color: var(--couleur-texte-discret);
+    font-style: italic;
   }
   .total th,
   .total td {

@@ -15,12 +15,13 @@ import { paiesEntre } from '../src/noyau/paie';
 import { creerApercu, type DonneesPaie } from '../src/lib/plateforme';
 
 const ESP = ' ';
-const VIDE: DonneesPaie = { profil: null, salaires: [], exceptions: [], seuil: null };
+const VIDE: DonneesPaie = { profil: null, salaires: [], exceptions: [], seuil: null, elements: [] };
 const BASE: DonneesPaie = {
   profil: { frequence: 'deuxSemaines', depart: '2027-01-07', jours: null },
   salaires: [{ aPartirDu: '2027-01-07', montant: 210_000 }],
   exceptions: [],
   seuil: null,
+  elements: [],
 };
 const paieDu = (donnees: DonneesPaie, date: string) => {
   const { profil, exceptions } = versNoyau(donnees);

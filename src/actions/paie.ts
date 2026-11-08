@@ -8,6 +8,7 @@ import { ajouterJours, dateCivile, formaterDateCourte, formaterDateLongue, type 
 import { arrondirDecimal, formaterMontant, type Cents } from '../noyau/montants';
 import { paiesEntre, type ExceptionPaie, type Paie, type ProfilPaie } from '../noyau/paie';
 import { montantEnVigueur } from '../noyau/regles';
+import { versElementNoyau } from './elementsStockes';
 import type {
   ChangementPaie,
   DonneesPaie,
@@ -33,8 +34,8 @@ export interface Proposition {
   journal: EntreeJournal[];
 }
 
-const SECTION = 'Mes paies';
-const A_COMPLETER = 'À compléter';
+export const SECTION = 'Mes paies';
+export const A_COMPLETER = 'À compléter';
 
 export const LIBELLES_FREQUENCE: Record<FrequenceStockee, string> = {
   hebdomadaire: 'Chaque semaine',
@@ -50,6 +51,7 @@ export interface DonneesNoyau {
   profil: ProfilPaie | null;
   exceptions: ExceptionPaie[];
   seuil: Cents | null;
+  elements: ElementPlanifie[];
 }
 
 export function versNoyau(d: DonneesPaie): DonneesNoyau {
@@ -71,13 +73,13 @@ export function versNoyau(d: DonneesPaie): DonneesNoyau {
     ...(e.dateReelle ? { dateReelle: dateCivile(e.dateReelle) } : {}),
     ...(e.montant !== null ? { montant: e.montant } : {}),
   }));
-  return { profil, exceptions, seuil: d.seuil };
+  return { profil, exceptions, seuil: d.seuil, elements: (d.elements ?? []).map(versElementNoyau) };
 }
 
 // ---------------------------------------------------------------------------
 // Saisies
 
-function lireDate(texte: string, nom: string): DateCivile {
+export function lireDate(texte: string, nom: string): DateCivile {
   try {
     return dateCivile(texte.trim());
   } catch {
@@ -98,7 +100,7 @@ export function lireMontant(texte: string, nom: string): Cents | null {
   return c;
 }
 
-const montantOuACompleter = (c: Cents | null | undefined) => (c === null || c === undefined ? A_COMPLETER : formaterMontant(c));
+export const montantOuACompleter = (c: Cents | null | undefined) => (c === null || c === undefined ? A_COMPLETER : formaterMontant(c));
 
 export function decrireFrequence(p: ProfilPaieStocke): string {
   const depart = formaterDateLongue(dateCivile(p.depart));
@@ -210,9 +212,10 @@ export function proposerException(
   d: DonneesPaie,
   paie: Paie,
   s: SaisieException,
-  elements: readonly ElementPlanifie[] = [],
+  elementsFournis?: readonly ElementPlanifie[],
 ): Proposition {
   const noyau = versNoyau(d);
+  const elements = elementsFournis ?? noyau.elements;
   if (!noyau.profil) throw new ErreurSaisie('Crée d’abord le profil de paie.');
   const dateReelle = s.dateReelle.trim() === '' ? paie.dateOrigine : lireDate(s.dateReelle, 'Date de versement');
   const montant = lireMontant(s.montant, 'Montant de cette paie');

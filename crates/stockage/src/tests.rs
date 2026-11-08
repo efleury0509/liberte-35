@@ -57,7 +57,7 @@ fn nouveau_fichier_cree_a_la_derniere_version() {
     let s = Stockage::ouvrir(&chemin_dans(&d, "donnees.sqlite"), Profil::Essai, horloge()).unwrap();
     let etat = s.etat().unwrap();
     assert_eq!(etat.version_schema, version_schema_attendue());
-    assert_eq!(etat.version_schema, 2);
+    assert_eq!(etat.version_schema, 3);
     assert_eq!(etat.profil, Profil::Essai);
     assert!(etat.integrite_ok);
     assert_eq!(etat.nombre_entrees_journal, 0);
@@ -140,10 +140,7 @@ fn un_fichier_d_une_version_plus_recente_n_est_pas_touche() {
         .unwrap();
     assert!(matches!(
         erreur,
-        ErreurStockage::VersionTropRecente {
-            fichier: 99,
-            application: 2
-        }
+        ErreurStockage::VersionTropRecente { fichier: 99, application } if application == actuelle()
     ));
     assert_eq!(std::fs::read(&chemin).unwrap(), avant);
 }
@@ -383,7 +380,7 @@ fn deux_installations_deux_fichiers_independants() {
 }
 
 #[test]
-fn un_fichier_de_l_etape_1_passe_en_version_2_sans_perte() {
+fn un_fichier_de_l_etape_1_passe_a_la_version_actuelle_sans_perte() {
     let d = TempDir::new().unwrap();
     let chemin = chemin_dans(&d, "donnees.sqlite");
     {
@@ -395,7 +392,7 @@ fn un_fichier_de_l_etape_1_passe_en_version_2_sans_perte() {
         assert_eq!(s.version_schema().unwrap(), 1);
     }
     let s = Stockage::ouvrir(&chemin, Profil::Essai, horloge()).unwrap();
-    assert_eq!(s.version_schema().unwrap(), 2);
+    assert_eq!(s.version_schema().unwrap(), actuelle());
     assert_eq!(s.parametre("cle").unwrap().as_deref(), Some("conservee"));
     assert_eq!(s.nombre_entrees_journal().unwrap(), 1);
     assert_eq!(s.lire_paie().unwrap(), DonneesPaie::default());

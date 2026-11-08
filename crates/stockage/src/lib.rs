@@ -20,7 +20,10 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
 pub use horloge::{formater_utc, Horloge, HorlogeFixe, HorlogeSysteme};
 use migrations::{derniere_version, Migration, MIGRATIONS};
-pub use paie::{ChangementPaie, DonneesPaie, ExceptionStockee, ProfilPaieStocke, SalaireStocke};
+pub use paie::{
+    ChangementPaie, DonneesPaie, ElementStocke, ExceptionStockee, MontantStocke, ProfilPaieStocke,
+    SalaireStocke, SuspensionStocke,
+};
 
 /// Version du schéma attendue par cette version de l'application.
 pub fn version_schema_attendue() -> u32 {
@@ -457,5 +460,7 @@ fn copie_de_precaution(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_elements;
 #[cfg(test)]
 mod tests_paie;

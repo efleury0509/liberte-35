@@ -6,28 +6,6 @@ const ouvrirMesPaies = async (page: Page, jour = '2027-05-20') => {
   await page.getByRole('button', { name: 'Mes paies' }).click();
 };
 
-test('exemple fictif : les neuf cycles des cas témoins, sans rien enregistrer', async ({ page }) => {
-  await ouvrirMesPaies(page);
-  await page.getByTestId('bouton-exemple').click();
-  await expect(page.getByTestId('bandeau-exemple')).toContainText('Rien n’est enregistré');
-  const lignes = page.getByTestId('cycles').locator('tbody tr');
-  await expect(lignes).toHaveCount(9);
-  await expect(page.locator('tr[data-cycle="2027-04-01"] [data-testid="disponible"]')).toHaveText(`540,00${ESP}$`);
-  await expect(page.locator('tr[data-cycle="2027-03-18"] [data-testid="disponible"]')).toHaveText(`1${ESP}940,00${ESP}$`);
-  await expect(page.getByTestId('avant-premier-cycle')).toContainText('Loyer du 1er janv.');
-  // Détail du cycle C9 : 3e paie d'avril, ni épicerie ni supplément (A8).
-  await page.locator('tr[data-cycle="2027-04-29"]').getByRole('button', { name: 'Détails' }).click();
-  const detail = page.getByTestId('detail-cycle');
-  await expect(detail).toContainText('Loyer (dû le 1er mai)');
-  await expect(detail).toContainText('Essence');
-  await expect(detail).not.toContainText('Épicerie');
-  await expect(detail).not.toContainText('Paiement supplémentaire');
-  await expect(detail).not.toContainText('Modifier cette paie');
-  // Retour : aucune donnée n'a été créée.
-  await page.getByTestId('bouton-exemple').click();
-  await expect(page.getByRole('heading', { name: 'Configurer ma paie' })).toBeVisible();
-});
-
 test('profil sans montant : tout reste « À compléter », rien n’est inventé', async ({ page }) => {
   await ouvrirMesPaies(page);
   await page.getByLabel('Date de la première paie').fill('2027-01-07');

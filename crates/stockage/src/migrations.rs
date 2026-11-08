@@ -78,6 +78,36 @@ CREATE TABLE exceptions_paie (
 ) STRICT;
 "#;
 
+const V3: &str = r#"
+CREATE TABLE elements (
+    id          TEXT PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 64),
+    libelle     TEXT NOT NULL CHECK (length(trim(libelle)) > 0),
+    nature      TEXT NOT NULL CHECK (nature IN ('revenu', 'depense')),
+    genre       TEXT NOT NULL CHECK (genre IN ('fixe', 'enveloppe')),
+    incertain   INTEGER NOT NULL CHECK (incertain IN (0, 1)),
+    estimation  INTEGER NOT NULL CHECK (estimation IN (0, 1)),
+    frequence   TEXT NOT NULL CHECK (json_valid(frequence) AND json_type(frequence) = 'object'),
+    fin         TEXT CHECK (fin GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    cycle_paie  TEXT CHECK (cycle_paie GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    CHECK (nature = 'depense' OR (genre = 'fixe')),
+    CHECK (nature = 'revenu' OR incertain = 0)
+) STRICT;
+
+CREATE TABLE montants_element (
+    element_id  TEXT NOT NULL REFERENCES elements(id) ON DELETE CASCADE,
+    a_partir_du TEXT NOT NULL CHECK (a_partir_du GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    montant     INTEGER NOT NULL CHECK (montant >= 0),
+    PRIMARY KEY (element_id, a_partir_du)
+) STRICT;
+
+CREATE TABLE suspensions_element (
+    element_id  TEXT NOT NULL REFERENCES elements(id) ON DELETE CASCADE,
+    debut       TEXT NOT NULL CHECK (debut GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    fin         TEXT NOT NULL CHECK (fin GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    CHECK (fin >= debut)
+) STRICT;
+"#;
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -88,6 +118,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 2,
         description: "Paie : profil, changements de salaire, exceptions",
         sql: V2,
+    },
+    Migration {
+        version: 3,
+        description: "Autres revenus, dépenses fixes, enveloppes et dépenses ponctuelles",
+        sql: V3,
     },
 ];
 
