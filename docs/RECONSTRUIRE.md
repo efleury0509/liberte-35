@@ -68,4 +68,11 @@ L'installateur se trouve dans `target\release\bundle\nsis\`.
   `liberte-35.sqlite` est au format SQLite, ouvert et documenté, lisible par
   de nombreux logiciels gratuits (par exemple « DB Browser for SQLite »).
 - Le fichier se trouve dans `%APPDATA%\ca.liberte35.officiel\`.
-- L'export portable (JSON et CSV), prévu à l'étape 6, offrira une autre porte de sortie.
+- Copies automatiques (étape 6) : `copies\jour-AAAA-MM-JJ.sqlite` (trois
+  journées d'utilisation) et `precaution\avant-….sqlite` (cinq au plus), à
+  côté du fichier de données. Ce sont des fichiers SQLite complets : une
+  copie peut être ouverte telle quelle, ou restaurée depuis Paramètres.
+- Export portable (Paramètres → « Exporter mes données… ») : un .zip avec
+  `donnees.json` (toutes les tables, montants en cents), un CSV par type
+  (UTF-8, point-virgule, virgule décimale, dates AAAA-MM-JJ) et un
+  `LISEZMOI.txt` qui décrit chaque colonne. Il ne se réimporte pas.

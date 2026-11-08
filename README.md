@@ -44,6 +44,13 @@ et dans le cahier fonctionnel de référence.
   une fois reçu ; enveloppes jamais réconciliées ; aucune modification de règle
   ne fait disparaître une opération confirmée. Tableau des cycles sous « Ma
   paie », paies précédentes consultables. Base de données en version 5.
+- Étape 6 (version 0.6.0) : sauvegarde locale et export. Copie du jour
+  vérifiée, quelques secondes après le dernier changement et à la fermeture
+  (trois journées d'utilisation) ; cinq copies de précaution ; restauration
+  depuis Paramètres (copie quotidienne, de précaution ou fichier choisi
+  ailleurs) avec aperçu ; export .zip (JSON, CSV pour LibreOffice Calc,
+  LISEZMOI) à l'emplacement choisi. « Salaire net en vigueur » affiche
+  « à partir du… » quand le premier salaire est à venir. Structure inchangée (5).
 
 ## Organisation du code
 

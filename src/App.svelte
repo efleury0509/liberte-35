@@ -25,7 +25,17 @@
     }
   }
 
-  onMount(chargerEtat);
+  // R6 : un seul avis quand la copie automatique échoue ; il disparaît
+  // à la prochaine copie réussie.
+  let avisCopie: string | null = $state(null);
+
+  onMount(() => {
+    void chargerEtat();
+    return plateforme.surAvisCopie((a) => {
+      if (a.reussie) avisCopie = null;
+      else if (a.nouvelAvis) avisCopie = a.erreur;
+    });
+  });
 </script>
 
 <div class="application">
@@ -35,6 +45,12 @@
     {#if erreur}
       <p class="bandeau probleme" role="alert" data-testid="bandeau-erreur">{erreur}</p>
     {/if}
+    {#if avisCopie}
+      <p class="bandeau probleme avis-copie" role="alert" data-testid="avis-copie">
+        {avisCopie} Détails dans Paramètres.
+        <button type="button" class="fermer" aria-label="Fermer l’avis" onclick={() => (avisCopie = null)}>×</button>
+      </p>
+    {/if}
     {#if etat && etat.profil !== 'officiel'}
       <p class="bandeau" role="note" data-testid="bandeau-profil">{TEXTES.profil[etat.profil]}</p>
     {/if}
@@ -42,7 +58,7 @@
     {#if section}
       <h1 id="titre-section">{section.libelle}</h1>
       {#if section.id === 'parametres'}
-        <Parametres {etat} {erreur} />
+        <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} />
       {:else if section.id === 'mes-paies' && !erreur}
         <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} />
       {:else}
@@ -81,6 +97,21 @@
     color: var(--couleur-attention);
     font-size: var(--taille-petit);
     display: inline-block;
+  }
+
+  .bandeau.avis-copie {
+    display: flex;
+    gap: var(--espace-4);
+    align-items: flex-start;
+  }
+
+  .fermer {
+    margin-left: auto;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
   }
 
   .bandeau.probleme {

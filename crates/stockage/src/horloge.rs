@@ -7,6 +7,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub trait Horloge: Send {
     /// Horodatage UTC au format ISO 8601, par exemple `2026-11-08T14:05:09Z`.
     fn maintenant(&self) -> String;
+
+    /// Jour civil local (`AAAA-MM-JJ`), pour nommer la copie du jour.
+    /// Par défaut, le jour de l'horodatage (les horloges de test).
+    fn jour_local(&self) -> String {
+        self.maintenant().chars().take(10).collect()
+    }
 }
 
 /// Horloge réelle du système.
@@ -19,6 +25,12 @@ impl Horloge for HorlogeSysteme {
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         formater_utc(secondes)
+    }
+
+    fn jour_local(&self) -> String {
+        // Le soir à Montréal, le jour UTC est déjà le lendemain : on prend
+        // le jour du fuseau réglé dans Windows.
+        chrono::Local::now().format("%Y-%m-%d").to_string()
     }
 }
 

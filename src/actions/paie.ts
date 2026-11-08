@@ -7,7 +7,7 @@ import { planifier, comparerRattachements, type AjustementOccurrence, type Confi
 import { ajouterJours, dateCivile, ecartEnJours, formaterDateCourte, formaterDateLongue, type DateCivile } from '../noyau/dates';
 import { arrondirDecimal, formaterMontant, type Cents } from '../noyau/montants';
 import { paiesEntre, type ExceptionPaie, type Paie, type ProfilPaie } from '../noyau/paie';
-import { montantEnVigueur } from '../noyau/regles';
+import { montantEnVigueur, type MontantDate } from '../noyau/regles';
 import { versAjustementNoyau, versConfirmationNoyau, versElementNoyau } from './elementsStockes';
 import { confirmationsPerdues, messageConfirmationsPerdues } from './protection';
 import type {
@@ -114,6 +114,19 @@ export function lireMontant(texte: string, nom: string): Cents | null {
   }
   if (c < 0) throw new ErreurSaisie(`${nom} : le montant ne peut pas être négatif.`);
   return c;
+}
+
+/**
+ * « Salaire net en vigueur » (étape 6, Q26) : le montant en vigueur, ou,
+ * si le premier salaire commence plus tard, « 2 100,00 $ à partir du
+ * 7 janv. 2027 ». « À compléter » seulement quand aucun salaire n’est indiqué.
+ */
+export function salaireAffiche(montants: readonly MontantDate[], jour: DateCivile): string {
+  const enVigueur = montantEnVigueur(montants, jour);
+  if (enVigueur !== null) return formaterMontant(enVigueur);
+  const prochain = [...montants].filter((m) => m.aPartirDu > jour).sort((a, b) => (a.aPartirDu < b.aPartirDu ? -1 : 1))[0];
+  if (!prochain) return A_COMPLETER;
+  return `${formaterMontant(prochain.montant)} à partir du ${formaterDateCourte(prochain.aPartirDu)} ${prochain.aPartirDu.slice(0, 4)}`;
 }
 
 export const montantOuACompleter = (c: Cents | null | undefined) => (c === null || c === undefined ? A_COMPLETER : formaterMontant(c));

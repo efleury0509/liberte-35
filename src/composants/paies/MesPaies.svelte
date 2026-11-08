@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import {
+    A_COMPLETER,
     ErreurSaisie,
     LIBELLES_FREQUENCE,
     decrireFrequence,
@@ -8,6 +9,7 @@
     proposerProfil,
     proposerSalaire,
     proposerSeuil,
+    salaireAffiche,
     versNoyau,
     type Proposition,
   } from '../../actions/paie';
@@ -28,7 +30,6 @@
   import { planifier, type Cycle, type FaitConfirme, type Ligne, type Plan } from '../../noyau/cycles';
   import { dateCivile, formaterDateCourte, formaterDateLongue, type DateCivile } from '../../noyau/dates';
   import { formaterMontant } from '../../noyau/montants';
-  import { montantEnVigueur } from '../../noyau/regles';
   import Apercu from '../Apercu.svelte';
   import {
     proposerAnnulationConfirmation,
@@ -136,7 +137,7 @@
     );
   }
 
-  const salaireActuel = $derived(noyau?.profil ? montantEnVigueur(noyau.profil.montants, jour) : null);
+  const salaireActuel = $derived(noyau?.profil ? salaireAffiche(noyau.profil.montants, jour) : A_COMPLETER);
 
   /**
    * Étape 4b, C : l'action prépare sa proposition ; si l'aperçu protège
@@ -317,7 +318,7 @@
     <h2 id="titre-paie">Ma paie</h2>
     <p data-testid="description-profil">{decrireFrequence(donnees.profil)}</p>
     <p>
-      Salaire net en vigueur : <strong data-testid="salaire-actuel">{salaireActuel === null ? 'À compléter' : formaterMontant(salaireActuel)}</strong>
+      Salaire net en vigueur : <strong data-testid="salaire-actuel">{salaireActuel}</strong>
     </p>
     {#if donnees.salaires.length > 1}
       <ul class="discret">

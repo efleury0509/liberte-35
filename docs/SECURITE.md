@@ -13,6 +13,12 @@
    avec l'application. La politique de sécurité de la fenêtre n'autorise
    aucun domaine extérieur (testé par `tests/hors-ligne.test.ts`).
 5. **Permissions minimales** : la fenêtre n'a que les permissions de base de
-   Tauri (`src-tauri/capabilities/default.json`).
+   Tauri (`src-tauri/capabilities/default.json`). Les fenêtres « Ouvrir » et
+   « Enregistrer sous » de l'étape 6 sont ouvertes par la coquille Rust
+   elle-même : l'interface n'a aucun accès direct aux fichiers.
+7. **Copies et exports locaux non chiffrés** (comme prévu au plan) : ils
+   restent sur l'ordinateur ou à l'endroit choisi. L'interface le rappelle
+   au moment d'exporter. Une copie d'essai ne peut jamais être restaurée dans
+   l'installation officielle, ni l'inverse.
 6. **Le journal des changements ne peut être ni modifié ni effacé**
    (protégé dans la base elle-même).

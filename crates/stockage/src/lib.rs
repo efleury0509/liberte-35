@@ -9,21 +9,28 @@
 //! - tient le journal des changements significatifs, qui ne peut être ni
 //!   modifié ni effacé.
 
+mod export;
 mod horloge;
 mod migrations;
 mod paie;
+mod sauvegardes;
 
 use std::fmt;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
+pub use export::ResumeExport;
 pub use horloge::{formater_utc, Horloge, HorlogeFixe, HorlogeSysteme};
 use migrations::{derniere_version, Migration, MIGRATIONS};
 pub use paie::{
     AjustementStocke, ChangementPaie, ConfirmationStockee, DonneesPaie, ElementStocke,
     ExceptionStockee, MontantStocke, PeriodeStockee, ProfilPaieStocke, SalaireStocke,
     SuspensionStocke,
+};
+pub use sauvegardes::{
+    ApercuRestauration, ChangementJournal, CopieFaite, CopieListee, ListeDesCopies,
+    ResultatRestauration, ResumeCopie, SourceCopie,
 };
 
 /// Version du schéma attendue par cette version de l'application.
@@ -98,6 +105,14 @@ pub enum ErreurStockage {
     CopieDePrecautionInvalide(String),
     /// Une donnée reçue est invalide ; rien n'a été enregistré.
     DonneeInvalide(String),
+    /// La copie du jour n'a pas pu être faite ; les autres sont intactes.
+    CopieDuJourEchouee(String),
+    /// La copie choisie ne peut pas être restaurée (explication).
+    RestaurationRefusee(String),
+    /// La restauration a échoué en cours de route ; rien n'a changé.
+    RestaurationEchouee(String),
+    /// L'export n'a pas pu être enregistré.
+    ExportEchoue(String),
 }
 
 impl fmt::Display for ErreurStockage {
@@ -121,6 +136,19 @@ impl fmt::Display for ErreurStockage {
                 write!(f, "Le contrôle d'intégrité a échoué ({d}). Rien n'a été modifié.")
             }
             ErreurStockage::DonneeInvalide(d) => write!(f, "{d} Rien n'a été enregistré."),
+            ErreurStockage::CopieDuJourEchouee(d) => write!(
+                f,
+                "La copie de sauvegarde du jour n'a pas pu être faite ({d}). Tes données sont bien enregistrées et tes copies précédentes sont intactes."
+            ),
+            ErreurStockage::RestaurationRefusee(d) => write!(f, "{d}"),
+            ErreurStockage::RestaurationEchouee(d) => write!(
+                f,
+                "La restauration n'a pas pu se faire ({d}). Rien n'a été restauré : tes données actuelles sont intactes."
+            ),
+            ErreurStockage::ExportEchoue(d) => write!(
+                f,
+                "L'export n'a pas pu être enregistré ({d}). Aucun fichier n'a été laissé à moitié écrit."
+            ),
             ErreurStockage::CopieDePrecautionInvalide(d) => write!(
                 f,
                 "La copie de précaution n'a pas pu être vérifiée ({d}). La mise à niveau n'a pas eu lieu."
@@ -182,7 +210,7 @@ pub struct EtatStockage {
 }
 
 const MARQUE_APPLICATION: &str = "liberte-35";
-const DOSSIER_PRECAUTION: &str = "precaution";
+pub(crate) const DOSSIER_PRECAUTION: &str = "precaution";
 
 pub struct Stockage {
     conn: Connection,
@@ -203,56 +231,8 @@ impl Stockage {
         horloge: Box<dyn Horloge>,
         migrations: &[Migration],
     ) -> Resultat<Stockage> {
-        if let Some(parent) = chemin.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let existait = chemin.exists();
-        let mut conn = Connection::open(chemin)?;
-        // Écriture sûre : chaque enregistrement est sur le disque avant de
-        // rendre la main ; les liens entre tables sont vérifiés.
-        conn.pragma_update(None, "journal_mode", "DELETE")?;
-        conn.pragma_update(None, "synchronous", "FULL")?;
-        conn.pragma_update(None, "foreign_keys", "ON")?;
-
-        let attendue = derniere_version(migrations);
-        let actuelle = lire_version(&conn)?;
-
-        if actuelle > attendue {
-            return Err(ErreurStockage::VersionTropRecente {
-                fichier: actuelle,
-                application: attendue,
-            });
-        }
-
-        if existait && actuelle > 0 {
-            // Toujours vérifier l'intégrité en premier, pour qu'un fichier
-            // abîmé soit signalé comme tel, et jamais modifié.
-            let rapport = rapport_integrite(&conn)
-                .map_err(|e| ErreurStockage::IntegriteCompromise(e.to_string()))?;
-            if rapport != "ok" {
-                return Err(ErreurStockage::IntegriteCompromise(rapport));
-            }
-            verifier_appartenance(&conn, profil)?;
-        } else if existait && actuelle == 0 && contient_des_tables(&conn)? {
-            return Err(ErreurStockage::FichierInconnu);
-        }
-
-        if actuelle < attendue {
-            if actuelle > 0 {
-                // Fichier existant (déjà vérifié ci-dessus) : copie de
-                // précaution vérifiée avant toute mise à niveau.
-                copie_de_precaution(&conn, chemin, actuelle, attendue, horloge.as_ref())?;
-            }
-            appliquer_migrations(&mut conn, actuelle, migrations)?;
-            if actuelle == 0 {
-                let maintenant = horloge.maintenant();
-                conn.execute(
-                    "INSERT INTO meta (cle, valeur) VALUES ('application', ?1), ('profil', ?2), ('cree_le', ?3)",
-                    params![MARQUE_APPLICATION, profil.code(), maintenant],
-                )?;
-            }
-        }
-
+        let conn = ouvrir_connexion(chemin, profil, horloge.as_ref(), migrations)?;
+        sauvegardes::nettoyer_temporaires(chemin);
         Ok(Stockage {
             conn,
             chemin: chemin.to_path_buf(),
@@ -356,6 +336,67 @@ impl Stockage {
     }
 }
 
+/// Ouvre (ou crée) le fichier, vérifie qu'il appartient à l'installation
+/// et le met à niveau. Sert aussi à rouvrir le fichier après une restauration.
+fn ouvrir_connexion(
+    chemin: &Path,
+    profil: Profil,
+    horloge: &dyn Horloge,
+    migrations: &[Migration],
+) -> Resultat<Connection> {
+    if let Some(parent) = chemin.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let existait = chemin.exists();
+    let mut conn = Connection::open(chemin)?;
+    // Écriture sûre : chaque enregistrement est sur le disque avant de
+    // rendre la main ; les liens entre tables sont vérifiés.
+    conn.pragma_update(None, "journal_mode", "DELETE")?;
+    conn.pragma_update(None, "synchronous", "FULL")?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+
+    let attendue = derniere_version(migrations);
+    let actuelle = lire_version(&conn)?;
+
+    if actuelle > attendue {
+        return Err(ErreurStockage::VersionTropRecente {
+            fichier: actuelle,
+            application: attendue,
+        });
+    }
+
+    if existait && actuelle > 0 {
+        // Toujours vérifier l'intégrité en premier, pour qu'un fichier
+        // abîmé soit signalé comme tel, et jamais modifié.
+        let rapport = rapport_integrite(&conn)
+            .map_err(|e| ErreurStockage::IntegriteCompromise(e.to_string()))?;
+        if rapport != "ok" {
+            return Err(ErreurStockage::IntegriteCompromise(rapport));
+        }
+        verifier_appartenance(&conn, profil)?;
+    } else if existait && actuelle == 0 && contient_des_tables(&conn)? {
+        return Err(ErreurStockage::FichierInconnu);
+    }
+
+    if actuelle < attendue {
+        if actuelle > 0 {
+            // Fichier existant (déjà vérifié ci-dessus) : copie de
+            // précaution vérifiée avant toute mise à niveau.
+            copie_de_precaution(&conn, chemin, actuelle, attendue, horloge)?;
+        }
+        appliquer_migrations(&mut conn, actuelle, migrations)?;
+        if actuelle == 0 {
+            let maintenant = horloge.maintenant();
+            conn.execute(
+                "INSERT INTO meta (cle, valeur) VALUES ('application', ?1), ('profil', ?2), ('cree_le', ?3)",
+                params![MARQUE_APPLICATION, profil.code(), maintenant],
+            )?;
+        }
+    }
+
+    Ok(conn)
+}
+
 fn lire_version(conn: &Connection) -> Resultat<u32> {
     let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     Ok(v as u32)
@@ -456,6 +497,7 @@ fn copie_de_precaution(
             "version {version} au lieu de {depuis}"
         )));
     }
+    sauvegardes::elaguer_precautions(&dossier);
     Ok(cible)
 }
 
@@ -468,4 +510,8 @@ mod tests_confirmations;
 #[cfg(test)]
 mod tests_elements;
 #[cfg(test)]
+mod tests_export;
+#[cfg(test)]
 mod tests_paie;
+#[cfg(test)]
+mod tests_sauvegardes;

@@ -1,8 +1,15 @@
 <script lang="ts">
-  import type { EtatApplication } from '../lib/plateforme';
+  import type { EtatApplication, Plateforme } from '../lib/plateforme';
   import { TEXTES } from '../lib/textes.fr';
+  import Sauvegardes from './Sauvegardes.svelte';
 
-  let { etat, erreur }: { etat: EtatApplication | null; erreur: string | null } = $props();
+  interface Props {
+    etat: EtatApplication | null;
+    erreur: string | null;
+    plateforme: Plateforme;
+    onrestauration: () => void;
+  }
+  let { etat, erreur, plateforme, onrestauration }: Props = $props();
   const T = TEXTES.parametres;
 </script>
 
@@ -37,6 +44,10 @@
     </dl>
   {/if}
 </section>
+
+{#if etat && !erreur}
+  <Sauvegardes {plateforme} {onrestauration} />
+{/if}
 
 <style>
   h2 {
