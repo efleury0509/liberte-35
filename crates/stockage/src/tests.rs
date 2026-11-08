@@ -13,24 +13,31 @@ fn chemin_dans(dossier: &TempDir, nom: &str) -> PathBuf {
     dossier.path().join(nom)
 }
 
+// Une migration de test, une version après la dernière vraie.
 const V2_TEST: &str =
-    "CREATE TABLE essai_v2 (id INTEGER PRIMARY KEY, libelle TEXT NOT NULL) STRICT;";
+    "CREATE TABLE essai_suivante (id INTEGER PRIMARY KEY, libelle TEXT NOT NULL) STRICT;";
 const V2_CASSEE: &str =
     "CREATE TABLE moitie (id INTEGER PRIMARY KEY) STRICT; CECI N'EST PAS DU SQL;";
 
-fn migrations_avec(v2_sql: &'static str) -> Vec<Migration> {
-    vec![
-        Migration {
-            version: 1,
-            description: "v1",
-            sql: MIGRATIONS[0].sql,
-        },
-        Migration {
-            version: 2,
-            description: "v2 (test)",
-            sql: v2_sql,
-        },
-    ]
+fn actuelle() -> u32 {
+    version_schema_attendue()
+}
+
+fn migrations_avec(sql_suivante: &'static str) -> Vec<Migration> {
+    let mut liste: Vec<Migration> = MIGRATIONS
+        .iter()
+        .map(|m| Migration {
+            version: m.version,
+            description: m.description,
+            sql: m.sql,
+        })
+        .collect();
+    liste.push(Migration {
+        version: actuelle() + 1,
+        description: "suivante (test)",
+        sql: sql_suivante,
+    });
+    liste
 }
 
 fn entree(champ: &str, ancienne: &str, nouvelle: &str) -> NouvelleEntree {
@@ -50,7 +57,7 @@ fn nouveau_fichier_cree_a_la_derniere_version() {
     let s = Stockage::ouvrir(&chemin_dans(&d, "donnees.sqlite"), Profil::Essai, horloge()).unwrap();
     let etat = s.etat().unwrap();
     assert_eq!(etat.version_schema, version_schema_attendue());
-    assert_eq!(etat.version_schema, 1);
+    assert_eq!(etat.version_schema, 2);
     assert_eq!(etat.profil, Profil::Essai);
     assert!(etat.integrite_ok);
     assert_eq!(etat.nombre_entrees_journal, 0);
@@ -135,7 +142,7 @@ fn un_fichier_d_une_version_plus_recente_n_est_pas_touche() {
         erreur,
         ErreurStockage::VersionTropRecente {
             fichier: 99,
-            application: 1
+            application: 2
         }
     ));
     assert_eq!(std::fs::read(&chemin).unwrap(), avant);
@@ -209,7 +216,7 @@ fn mise_a_niveau_precedee_d_une_copie_de_precaution_verifiee() {
     let s = Stockage::ouvrir_avec(&chemin, Profil::Essai, horloge(), &migrations).unwrap();
 
     // La mise à niveau a eu lieu, sans perte.
-    assert_eq!(s.version_schema().unwrap(), 2);
+    assert_eq!(s.version_schema().unwrap(), actuelle() + 1);
     assert_eq!(
         s.parametre("cle").unwrap().as_deref(),
         Some("valeur fictive")
@@ -217,17 +224,20 @@ fn mise_a_niveau_precedee_d_une_copie_de_precaution_verifiee() {
     assert_eq!(s.nombre_entrees_journal().unwrap(), 1);
     assert!(s.verifier_integrite().unwrap());
 
-    // La copie de précaution existe, est intègre et reste en version 1.
+    // La copie de précaution existe, est intègre et garde l'ancienne version.
     let copies: Vec<_> = std::fs::read_dir(d.path().join("precaution"))
         .unwrap()
         .collect();
     assert_eq!(copies.len(), 1);
     let copie = copies[0].as_ref().unwrap().path();
-    assert!(copie
-        .to_string_lossy()
-        .contains("avant-mise-a-niveau-v1-vers-v2-20261108140000"));
+    let attendu = format!(
+        "avant-mise-a-niveau-v{}-vers-v{}-20261108140000",
+        actuelle(),
+        actuelle() + 1
+    );
+    assert!(copie.to_string_lossy().contains(&attendu));
     let c = Connection::open(&copie).unwrap();
-    assert_eq!(lire_version(&c).unwrap(), 1);
+    assert_eq!(lire_version(&c).unwrap(), actuelle());
     let valeur: String = c
         .query_row("SELECT valeur FROM parametres WHERE cle = 'cle'", [], |r| {
             r.get(0)
@@ -247,9 +257,9 @@ fn une_mise_a_niveau_qui_echoue_ne_laisse_rien_a_moitie_fait() {
     let migrations = migrations_avec(V2_CASSEE);
     assert!(Stockage::ouvrir_avec(&chemin, Profil::Essai, horloge(), &migrations).is_err());
 
-    // Toujours en version 1, sans table à moitié créée, données intactes.
+    // Toujours à la version actuelle, sans table à moitié créée, données intactes.
     let s = Stockage::ouvrir(&chemin, Profil::Essai, horloge()).unwrap();
-    assert_eq!(s.version_schema().unwrap(), 1);
+    assert_eq!(s.version_schema().unwrap(), actuelle());
     let moitie: i64 = s
         .conn
         .query_row(
@@ -370,4 +380,27 @@ fn deux_installations_deux_fichiers_independants() {
         "aucune donnée fictive dans l'officielle"
     );
     assert_eq!(s_officiel.nombre_entrees_journal().unwrap(), 0);
+}
+
+#[test]
+fn un_fichier_de_l_etape_1_passe_en_version_2_sans_perte() {
+    let d = TempDir::new().unwrap();
+    let chemin = chemin_dans(&d, "donnees.sqlite");
+    {
+        // Fichier tel que l'installation de l'étape 1 l'a créé (version 1).
+        let mut s =
+            Stockage::ouvrir_avec(&chemin, Profil::Essai, horloge(), &MIGRATIONS[..1]).unwrap();
+        s.definir_parametre("cle", "conservee").unwrap();
+        s.consigner(&entree("montant", "1", "2")).unwrap();
+        assert_eq!(s.version_schema().unwrap(), 1);
+    }
+    let s = Stockage::ouvrir(&chemin, Profil::Essai, horloge()).unwrap();
+    assert_eq!(s.version_schema().unwrap(), 2);
+    assert_eq!(s.parametre("cle").unwrap().as_deref(), Some("conservee"));
+    assert_eq!(s.nombre_entrees_journal().unwrap(), 1);
+    assert_eq!(s.lire_paie().unwrap(), DonneesPaie::default());
+    let copies: Vec<_> = std::fs::read_dir(d.path().join("precaution"))
+        .unwrap()
+        .collect();
+    assert_eq!(copies.len(), 1);
 }

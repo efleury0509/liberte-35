@@ -7,6 +7,7 @@
 import {
   ajouterJours,
   ajouterMois,
+  composer,
   ecartEnJours,
   parties,
   type DateCivile,
@@ -22,6 +23,12 @@ export type Frequence =
   | { type: 'mois'; n: number; depart: DateCivile }
   /** Semestrielle : identique à tous les 6 mois (Q4). */
   | { type: 'semestrielle'; depart: DateCivile }
+  /**
+   * Deux fois par mois, à deux jours fixes (31 = dernier jour du mois).
+   * Le premier jour doit être au plus 27, pour que les deux dates restent
+   * distinctes même en février.
+   */
+  | { type: 'deuxFoisParMois'; jours: readonly [number, number]; depart: DateCivile }
   /** Annuelle (1) ou tous les X ans. */
   | { type: 'annees'; n: number; depart: DateCivile }
   /** À chaque paie. */
@@ -84,6 +91,31 @@ function parMois(depart: DateCivile, pas: number, debut: DateCivile, fin: DateCi
   return resultat;
 }
 
+function deuxFoisParMois(
+  jours: readonly [number, number],
+  depart: DateCivile,
+  debut: DateCivile,
+  fin: DateCivile,
+): DateCivile[] {
+  const [j1, j2] = jours;
+  if (!Number.isInteger(j1) || !Number.isInteger(j2) || j1 < 1 || j1 > 27 || j2 <= j1 || j2 > 31) {
+    throw new ErreurFrequence(
+      'Deux fois par mois : le premier jour doit être entre 1 et 27, et le second après le premier (31 = dernier jour).',
+    );
+  }
+  const resultat: DateCivile[] = [];
+  const point = parties(depart > debut ? depart : debut);
+  // Premier jour du mois où commencer ; chaque date est recalculée à partir
+  // de son jour visé, ce qui évite tout glissement.
+  for (let mois = composer(point.annee, point.mois, 1); mois <= fin; mois = ajouterMois(mois, 1, 1)) {
+    for (const j of [j1, j2]) {
+      const date = ajouterMois(mois, 0, j);
+      if (date >= depart && date >= debut && date <= fin) resultat.push(date);
+    }
+  }
+  return resultat;
+}
+
 /**
  * Toutes les dates d'une fréquence entre `debut` et `fin` inclus.
  * Les fréquences liées à la paie exigent la liste des dates de paie.
@@ -106,6 +138,8 @@ export function datesDe(
       return parMois(f.depart, verifierN(f.n), debut, fin);
     case 'semestrielle':
       return parMois(f.depart, 6, debut, fin);
+    case 'deuxFoisParMois':
+      return deuxFoisParMois(f.jours, f.depart, debut, fin);
     case 'annees':
       return parMois(f.depart, verifierN(f.n) * 12, debut, fin);
     case 'chaquePaie':

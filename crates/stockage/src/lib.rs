@@ -11,6 +11,7 @@
 
 mod horloge;
 mod migrations;
+mod paie;
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -19,6 +20,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
 pub use horloge::{formater_utc, Horloge, HorlogeFixe, HorlogeSysteme};
 use migrations::{derniere_version, Migration, MIGRATIONS};
+pub use paie::{ChangementPaie, DonneesPaie, ExceptionStockee, ProfilPaieStocke, SalaireStocke};
 
 /// Version du schéma attendue par cette version de l'application.
 pub fn version_schema_attendue() -> u32 {
@@ -90,6 +92,8 @@ pub enum ErreurStockage {
     /// La copie de précaution n'a pas pu être vérifiée ; la mise à niveau
     /// n'a pas eu lieu.
     CopieDePrecautionInvalide(String),
+    /// Une donnée reçue est invalide ; rien n'a été enregistré.
+    DonneeInvalide(String),
 }
 
 impl fmt::Display for ErreurStockage {
@@ -112,6 +116,7 @@ impl fmt::Display for ErreurStockage {
             ErreurStockage::IntegriteCompromise(d) => {
                 write!(f, "Le contrôle d'intégrité a échoué ({d}). Rien n'a été modifié.")
             }
+            ErreurStockage::DonneeInvalide(d) => write!(f, "{d} Rien n'a été enregistré."),
             ErreurStockage::CopieDePrecautionInvalide(d) => write!(
                 f,
                 "La copie de précaution n'a pas pu être vérifiée ({d}). La mise à niveau n'a pas eu lieu."
@@ -137,7 +142,8 @@ impl From<std::io::Error> for ErreurStockage {
 pub type Resultat<T> = Result<T, ErreurStockage>;
 
 /// Une entrée à ajouter au journal des changements.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NouvelleEntree {
     pub section: String,
     pub objet: String,
@@ -148,7 +154,8 @@ pub struct NouvelleEntree {
 }
 
 /// Une entrée lue dans le journal.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EntreeJournal {
     pub id: i64,
     pub horodatage: String,
@@ -450,3 +457,5 @@ fn copie_de_precaution(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_paie;

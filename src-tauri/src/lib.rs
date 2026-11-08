@@ -3,7 +3,7 @@
 
 use std::sync::Mutex;
 
-use l35_stockage::{HorlogeSysteme, Profil, Stockage};
+use l35_stockage::{ChangementPaie, DonneesPaie, HorlogeSysteme, NouvelleEntree, Profil, Stockage};
 use serde::Serialize;
 use tauri::Manager;
 
@@ -52,6 +52,34 @@ fn etat_application(
     })
 }
 
+fn avec_stockage<T>(
+    etat: &tauri::State<'_, EtatApp>,
+    action: impl FnOnce(&mut Stockage) -> Result<T, l35_stockage::ErreurStockage>,
+) -> Result<T, String> {
+    let mut garde = etat
+        .stockage
+        .lock()
+        .map_err(|_| "Stockage indisponible.".to_string())?;
+    let stockage = garde.as_mut().map_err(|m| m.clone())?;
+    action(stockage).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn lire_paie(etat: tauri::State<'_, EtatApp>) -> Result<DonneesPaie, String> {
+    avec_stockage(&etat, |s| s.lire_paie())
+}
+
+#[tauri::command]
+fn appliquer_changements_paie(
+    etat: tauri::State<'_, EtatApp>,
+    changements: Vec<ChangementPaie>,
+    journal: Vec<NouvelleEntree>,
+) -> Result<DonneesPaie, String> {
+    avec_stockage(&etat, |s| {
+        s.appliquer_changements_paie(&changements, &journal)
+    })
+}
+
 pub fn lancer() {
     tauri::Builder::default()
         .setup(|app| {
@@ -71,7 +99,11 @@ pub fn lancer() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![etat_application])
+        .invoke_handler(tauri::generate_handler![
+            etat_application,
+            lire_paie,
+            appliquer_changements_paie
+        ])
         .run(tauri::generate_context!())
         .expect("Liberté 35 n'a pas pu démarrer");
 }

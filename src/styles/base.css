@@ -25,6 +25,50 @@ body {
   outline-offset: 2px;
 }
 
+/* Boutons et champs temporaires, neutres. */
+button {
+  font: inherit;
+  color: var(--couleur-texte);
+  background: var(--couleur-surface-active);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--arrondi);
+  padding: var(--espace-1) var(--espace-4);
+  min-height: 36px;
+  cursor: pointer;
+}
+
+button.principal {
+  background: var(--couleur-accent);
+  color: var(--couleur-accent-texte);
+  border-color: var(--couleur-accent);
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input,
+select {
+  font: inherit;
+  color: var(--couleur-texte);
+  background: var(--couleur-fond);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--arrondi);
+  padding: var(--espace-1) var(--espace-2);
+  min-height: 36px;
+}
+
+input[type='date'] {
+  color-scheme: dark;
+}
+
+.montant {
+  text-align: right;
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

@@ -15,9 +15,15 @@ et dans le cahier fonctionnel de référence.
 
 - Étape 1 (validée) : fondations. Les huit sections existent dans la barre
   latérale ; elles prendront vie aux étapes suivantes du plan.
-- Étape 2 : socle de calcul (`src/noyau/`) — montants en cents exacts,
-  dates civiles sans heure, toutes les fréquences du cahier, dates d'effet,
-  suspensions et fin. Aucun nouvel écran.
+- Étape 2 (validée) : socle de calcul (`src/noyau/`) — montants en cents
+  exacts, dates civiles sans heure, toutes les fréquences du cahier, dates
+  d'effet, suspensions et fin. Aucun nouvel écran.
+- Étape 3 : cycles de paie et disponible planifié. Section « Mes paies » :
+  profil de paie (4 fréquences), changements de salaire datés, paie déplacée
+  ou modifiée une seule fois, seuil d'attention, aperçu avant chaque
+  enregistrement et journal. Base de données en version 2 (copie de
+  précaution avant la mise à niveau). Exemple fictif visible seulement dans
+  l'installation d'essai.
 
 ## Organisation du code
 

@@ -3,6 +3,7 @@
   import BarreLaterale from './composants/BarreLaterale.svelte';
   import SectionAVenir from './composants/SectionAVenir.svelte';
   import Parametres from './composants/Parametres.svelte';
+  import MesPaies from './composants/paies/MesPaies.svelte';
   import { SECTION_PAR_DEFAUT, trouverSection, type IdSection } from './lib/navigation';
   import { obtenirPlateforme, type EtatApplication } from './lib/plateforme';
   import { TEXTES } from './lib/textes.fr';
@@ -15,13 +16,16 @@
 
   const section = $derived(trouverSection(sectionActive));
 
-  onMount(async () => {
+  async function chargerEtat() {
     try {
       etat = await plateforme.etat();
+      erreur = null;
     } catch (e) {
       erreur = typeof e === 'string' ? e : TEXTES.parametres.erreur;
     }
-  });
+  }
+
+  onMount(chargerEtat);
 </script>
 
 <div class="application">
@@ -39,6 +43,8 @@
       <h1 id="titre-section">{section.libelle}</h1>
       {#if section.id === 'parametres'}
         <Parametres {etat} {erreur} />
+      {:else if section.id === 'mes-paies' && !erreur}
+        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} />
       {:else}
         <SectionAVenir etape={section.etape} />
       {/if}
