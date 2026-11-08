@@ -79,7 +79,7 @@ describe('C — l’aperçu seulement quand il protège', () => {
     expect(proposerSalaire(donnees(), '2027-03-01', '2200', JOUR).apercu).toBe(false);
     expect(proposerSalaire(donnees(), '2027-01-21', '2200', JOUR).apercu).toBe(true);
   });
-  it('C2 : une paie déplacée qui change le rattachement d’un élément (A11) : aperçu ; sinon direct', () => {
+  it('C2 : une paie déplacée : toujours un aperçu (A11, 0.4.3) ; un montant de paie seul : direct', () => {
     const plan = (dd: DonneesPaie) => {
       const n = versNoyau(dd);
       return planifier({ profil: n.profil!, elements: n.elements }, d('2027-02-01'), d('2027-03-31'));
@@ -89,7 +89,9 @@ describe('C — l’aperçu seulement quand il protège', () => {
     expect(avecEffet.apercu).toBe(true);
     const paie4mars = plan(donnees()).cycles[2]!.paie;
     const sansEffet = proposerException(donnees(), paie4mars, { dateReelle: '2027-03-05', montant: '' }, undefined, JOUR);
-    expect(sansEffet.apercu).toBe(false);
+    expect(sansEffet.apercu).toBe(true);
+    const montantSeul = proposerException(donnees(), paie4mars, { dateReelle: '2027-03-04', montant: '2200' }, undefined, JOUR);
+    expect(montantSeul.apercu).toBe(false);
   });
 });
 

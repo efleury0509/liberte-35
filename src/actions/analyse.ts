@@ -12,7 +12,7 @@ import { appliquerChangements } from '../lib/appliquer';
 import type { AjustementStocke, ChangementPaie, DonneesPaie } from '../lib/plateforme';
 import { ajustementsOrphelins, comparerRattachements, planifier, type ChangementRattachement, type Cycle } from '../noyau/cycles';
 import { ajouterJours, formaterDateCourte, type DateCivile } from '../noyau/dates';
-import type { ProfilPaie } from '../noyau/paie';
+import { paiesEntre, type ProfilPaie } from '../noyau/paie';
 import { montantOuACompleter, versNoyau, type DonneesNoyau } from './paie';
 
 export const NOMBRE_CYCLES = 13;
@@ -29,7 +29,11 @@ export function cyclesAffiches(
   nombre: number = NOMBRE_CYCLES,
 ): { plan: ReturnType<typeof planifier>; cycles: Cycle[]; courant: DateCivile | null } {
   const depart = profil.frequence.depart;
-  const debut = depart > jour ? depart : ajouterJours(jour, -45);
+  // 0.4.3 : la première paie peut être versée avant la date de départ du
+  // calendrier ; l'affichage commence alors à sa date réelle.
+  const premiere = paiesEntre(profil, entree.exceptions ?? [], ajouterJours(depart, -31), ajouterJours(depart, 31))[0]?.date ?? depart;
+  const debutCalendrier = premiere < depart ? premiere : depart;
+  const debut = depart > jour ? debutCalendrier : ajouterJours(jour, -45);
   // Assez large pour « nombre » cycles mensuels, plus la marge du début.
   const plan = planifier({ ...entree, profil }, debut, ajouterJours(debut, 60 + nombre * 32));
   const i = Math.max(0, plan.cycles.findIndex((c) => c.fin >= jour));

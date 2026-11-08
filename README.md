@@ -29,12 +29,15 @@ et dans le cahier fonctionnel de référence.
   ponctuelles ; modifier à partir d'une date, suspendre, terminer, supprimer.
   Un revenu incertain reste hors du disponible. Base de données en version 3.
   Chaque version publiée porte son propre numéro (voir docs/RECONSTRUIRE.md).
-- Étape 4b (version 0.4.2) : « Enregistrer » direct avec « Annuler », aperçu
+- Étape 4b (version 0.4.3) : « Enregistrer » direct avec « Annuler », aperçu
   seulement quand il protège ; ajustements d'une occurrence (montant, date,
   autre paie, retrait) depuis le détail d'un cycle, sans toucher la règle ;
   changement de fréquence daté ; « Voir les paies suivantes ». Textes clairs
   de l'installateur Windows (installation, mise à jour, réinstallation) et
   version visible dans la barre latérale. Base de données en version 4.
+  0.4.3 : modifier une paie est replié dans le détail du cycle et passe
+  toujours par un aperçu (durées des cycles en clair) ; une paie déplacée
+  affiche sa date prévue ; la première paie versée plus tôt reste affichée.
 
 ## Organisation du code
 

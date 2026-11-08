@@ -1643,7 +1643,7 @@ dependencies = [
 
 [[package]]
 name = "l35-stockage"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "rusqlite",
  "serde",
@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "liberte-35"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "l35-stockage",
  "serde",

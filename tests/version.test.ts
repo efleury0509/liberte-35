@@ -26,8 +26,8 @@ describe('Numéro de version', () => {
     expect(JSON.parse(lire('src-tauri/tauri.essai.conf.json')).version).toBeUndefined();
   });
 
-  it('est celui de l’étape 4b, avec ses retouches : 0.4.2', () => {
-    expect(paquet).toBe('0.4.2');
+  it('est celui des correctifs 4b : 0.4.3', () => {
+    expect(paquet).toBe('0.4.3');
   });
 
   it('la fabrication vérifie le numéro avant de publier (U2)', () => {

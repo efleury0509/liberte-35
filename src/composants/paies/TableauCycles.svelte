@@ -37,7 +37,7 @@
       <tr class:choisi={choisi === c.paie.dateOrigine} class:courant={courant === c.paie.dateOrigine} data-cycle={c.debut}>
         <th scope="row">
           {formaterDateCourte(c.paie.date)} {annee(c.paie.date)}
-          {#if c.paie.deplacee}<span class="note" title="Date de versement modifiée">déplacée</span>{/if}
+          {#if c.paie.deplacee}<span class="note deplacee" title="Paie versée à une autre date que prévu">prévue le {formaterDateCourte(c.paie.dateOrigine)}</span>{/if}
           {#if courant === c.paie.dateOrigine}<span class="note">cycle actuel</span>{/if}
         </th>
         <td>{formaterDateCourte(c.debut)} au {formaterDateCourte(c.fin)}</td>

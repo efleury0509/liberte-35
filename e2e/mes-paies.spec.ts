@@ -83,21 +83,23 @@ test('seuil d’attention : direct, signal discret, puis « Annuler » rétablit
   await expect(page.getByTestId('signal')).toHaveCount(0);
 });
 
-test('paie déplacée : refusée au-delà de la suivante, acceptée entre les deux (A11, Q11)', async ({ page }) => {
+test('paie déplacée : refusée au-delà de la suivante, acceptée entre les deux, toujours avec un aperçu (A11, Q11, 0.4.3)', async ({ page }) => {
   await ouvrirMesPaies(page, '2027-04-10');
   await creerProfil(page);
   const ligne = page.locator('tr[data-cycle="2027-04-15"]');
   await ligne.getByRole('button', { name: 'Détails' }).click();
+  await page.getByRole('button', { name: 'Modifier la date ou le montant de cette paie…' }).click();
   await page.getByLabel('Date réelle de versement').fill('2027-04-30');
-  await enregistrer(page);
+  await page.getByTestId('detail-cycle').getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.getByTestId('erreur-saisie')).toContainText('entre la paie précédente et la suivante');
 
   await page.getByLabel('Date réelle de versement').fill('2027-04-16');
-  await enregistrer(page);
-  // Aucun élément ne change de paie : enregistrement direct.
-  await expect(page.getByTestId('enregistre')).toBeVisible();
+  await page.getByTestId('detail-cycle').getByRole('button', { name: 'Enregistrer' }).click();
+  // Changer la date d'une paie : toujours un aperçu, même sans élément touché.
+  await expect(page.getByTestId('apercu')).toContainText('Cycle de cette paie : 14 jours → 13 jours');
+  await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
   const deplacee = page.locator('tr[data-cycle="2027-04-16"]');
-  await expect(deplacee).toContainText('déplacée');
+  await expect(deplacee).toContainText('prévue le 15 avr.');
   await expect(page.locator('tr[data-cycle="2027-04-29"]')).toBeVisible();
 });
 

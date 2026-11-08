@@ -4,7 +4,7 @@
 // (A10). Rien ici ne calcule de montant : le noyau s'en charge.
 
 import { planifier, comparerRattachements, type AjustementOccurrence, type ElementPlanifie, type Plan } from '../noyau/cycles';
-import { ajouterJours, dateCivile, formaterDateCourte, formaterDateLongue, type DateCivile } from '../noyau/dates';
+import { ajouterJours, dateCivile, ecartEnJours, formaterDateCourte, formaterDateLongue, type DateCivile } from '../noyau/dates';
 import { arrondirDecimal, formaterMontant, type Cents } from '../noyau/montants';
 import { paiesEntre, type ExceptionPaie, type Paie, type ProfilPaie } from '../noyau/paie';
 import { montantEnVigueur } from '../noyau/regles';
@@ -279,6 +279,22 @@ export function proposerException(
 
   const consequences: string[] = [];
   if (deplacee) consequences.push('La règle de paie ne change pas : les paies suivantes gardent leurs dates.');
+  // 0.4.3 : la durée des deux cycles touchés, en clair. Une paie déplacée
+  // allonge l'un et raccourcit l'autre ; c'est ce qui doit sauter aux yeux.
+  const dateChange = dateReelle !== paie.date;
+  if (dateChange && cycleAvant && cycleApres) {
+    const duree = (c: { debut: DateCivile; fin: DateCivile }) => ecartEnJours(c.debut, c.fin) + 1;
+    const bornes = (c: { debut: DateCivile; fin: DateCivile }) => `du ${formaterDateCourte(c.debut)} au ${formaterDateCourte(c.fin)}`;
+    const i = avant.cycles.indexOf(cycleAvant);
+    const precedentAvant = i > 0 ? avant.cycles[i - 1] : undefined;
+    const precedentApres = precedentAvant ? apres.cycles.find((c) => c.paie.dateOrigine === precedentAvant.paie.dateOrigine) : undefined;
+    if (precedentAvant && precedentApres) {
+      consequences.push(
+        `Cycle de la paie du ${formaterDateCourte(precedentApres.paie.date)} : ${duree(precedentAvant)} jours → ${duree(precedentApres)} jours (${bornes(precedentApres)}).`,
+      );
+    }
+    consequences.push(`Cycle de cette paie : ${duree(cycleAvant)} jours → ${duree(cycleApres)} jours (${bornes(cycleApres)}).`);
+  }
   const rattachements = comparerRattachements(avant, apres);
   for (const c of rattachements) {
     consequences.push(
@@ -303,7 +319,8 @@ export function proposerException(
     consequences,
     changements,
     journal,
-    apercu: rattachements.length > 0 || passe || jour === undefined,
+    // 0.4.3 : changer la date d'une paie change le calendrier, donc toujours un aperçu.
+    apercu: dateChange || rattachements.length > 0 || passe || jour === undefined,
   };
 }
 

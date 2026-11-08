@@ -58,6 +58,10 @@
   let messageAnnulation: string | null = $state(null);
   /** Occurrence en cours d'ajustement, dans le détail d'un cycle (A). */
   let occurrence: CibleOccurrence | null = $state(null);
+  // 0.4.3 : la modification de la paie elle-même est repliée par défaut,
+  // pour ne jamais la confondre avec l'ajustement d'un revenu ou d'une dépense.
+  let modifPaie = $state(false);
+  let minuterieAnnulation: ReturnType<typeof setTimeout> | undefined;
   let fOccMontant = $state('');
   let fOccDate = $state('');
   let fOccPaie = $state('');
@@ -162,6 +166,7 @@
       edition = 'aucune';
       erreurSaisie = null;
       occurrence = null;
+      modifPaie = false;
       remise += 1;
       onchangement();
     } catch (e) {
@@ -187,6 +192,9 @@
       );
       dernier = null;
       messageAnnulation = `Annulé : ${d.titre}.`;
+      // 0.4.3 : la confirmation d'annulation disparaît d'elle-même.
+      clearTimeout(minuterieAnnulation);
+      minuterieAnnulation = setTimeout(() => (messageAnnulation = null), 5000);
       onchangement();
     } catch (e) {
       erreurSaisie = typeof e === 'string' ? e : 'Annulation impossible.';
@@ -198,6 +206,7 @@
   function ouvrirOccurrence(c: Cycle, elementId: string, origine: DateCivile) {
     if (!donnees) return;
     occurrence = { elementId, origine };
+    modifPaie = false;
     erreurSaisie = null;
     const etat = lireOccurrence(donnees, occurrence);
     fOccMontant = etat.ligne?.montant !== null && etat.ligne?.montant !== undefined ? (etat.ligne.montant / 100).toFixed(2).replace('.', ',') : '';
@@ -215,6 +224,7 @@
   function choisirCycle(dateOrigine: DateCivile) {
     choisi = choisi === dateOrigine ? null : dateOrigine;
     occurrence = null;
+    modifPaie = false;
     proposition = null;
     erreurSaisie = null;
     const c = vue?.cycles.find((x) => x.paie.dateOrigine === dateOrigine);
@@ -344,6 +354,7 @@
   <p class="enregistre" role="status" data-testid="enregistre">
     Enregistré : {dernier.titre}.
     <button type="button" onclick={annulerDernier} disabled={enCours}>Annuler</button>
+    <button type="button" class="fermer" onclick={() => (dernier = null)} aria-label="Fermer">×</button>
   </p>
 {:else if messageAnnulation}
   <p class="enregistre" role="status" data-testid="annule">{messageAnnulation}</p>
@@ -530,18 +541,39 @@
     {/if}
 
     {#if !exemple}
-      <h3>Modifier cette paie seulement</h3>
-      <form
-        class="formulaire"
-        onsubmit={(e) => {
-          e.preventDefault();
-          proposer(() => proposerException(donnees!, c.paie, { dateReelle: fDateReelle, montant: fMontantPaie }, undefined, jour));
-        }}
-      >
-        <label>Date réelle de versement <input type="date" bind:value={fDateReelle} /></label>
-        <label>Montant de cette paie ($, vide = habituel) <input inputmode="decimal" bind:value={fMontantPaie} /></label>
-        <button type="submit" class="principal">Enregistrer</button>
-      </form>
+      {#if !modifPaie}
+        <p>
+          <button
+            type="button"
+            onclick={() => {
+              modifPaie = true;
+              occurrence = null;
+              fDateReelle = c.paie.date;
+              fMontantPaie = '';
+            }}>Modifier la date ou le montant de cette paie…</button
+          >
+        </p>
+      {:else}
+        <div class="modif-paie">
+          <h3>Modifier cette paie seulement</h3>
+          <p class="discret">
+            Il s’agit de la paie elle-même (prévue le {formaterDateLongue(c.paie.dateOrigine)}), pas d’un revenu ou d’une dépense
+            du cycle. Le calendrier de paie ne change pas.
+          </p>
+          <form
+            class="formulaire"
+            onsubmit={(e) => {
+              e.preventDefault();
+              proposer(() => proposerException(donnees!, c.paie, { dateReelle: fDateReelle, montant: fMontantPaie }, undefined, jour));
+            }}
+          >
+            <label>Date réelle de versement <input type="date" bind:value={fDateReelle} /></label>
+            <label>Montant de cette paie ($, vide = habituel) <input inputmode="decimal" bind:value={fMontantPaie} /></label>
+            <button type="submit" class="principal">Enregistrer</button>
+            <button type="button" onclick={() => (modifPaie = false)}>Fermer</button>
+          </form>
+        </div>
+      {/if}
     {/if}
   </section>
 {/snippet}
@@ -645,6 +677,16 @@
   .occurrence p {
     flex-basis: 100%;
     margin: 0;
+  }
+  .modif-paie {
+    border: 1px solid var(--couleur-bordure);
+    border-radius: var(--arrondi);
+    padding: var(--espace-3) var(--espace-4);
+    margin-top: var(--espace-3);
+  }
+  .fermer {
+    min-width: 32px;
+    padding: 0 var(--espace-2);
   }
   .enregistre {
     /* Toujours visible, même quand on agit depuis le bas de la page. */
