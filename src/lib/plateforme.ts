@@ -300,7 +300,14 @@ export function creerApercu(): Plateforme {
   const abonnes = new Set<(a: AvisCopie) => void>();
   let derniereErreur: string | null = null;
 
-  const maintenant = () => new Date().toISOString().slice(0, 19) + 'Z';
+  // L'heure réelle, mais posée sur le jour de l'aperçu (« ?aujourdhui= ») :
+  // une copie faite « aujourd'hui » reste d'aujourd'hui, même après minuit UTC.
+  const maintenant = () => {
+    const h = new Date();
+    const [a, m, j] = aujourdhui().split('-').map(Number);
+    const local = new Date(a, m - 1, j, h.getHours(), h.getMinutes(), h.getSeconds());
+    return local.toISOString().slice(0, 19) + 'Z';
+  };
   const instantane = (): Instantane => ({ donnees: cloner(donnees), journal: [...journal], horodatage: maintenant() });
   const resume = (i: Instantane): ResumeCopie => ({
     paieConfiguree: i.donnees.profil !== null,
