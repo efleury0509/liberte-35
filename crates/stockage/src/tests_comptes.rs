@@ -226,7 +226,7 @@ fn c_une_contribution_se_gere_depuis_mon_epargne() {
         vec![ChangementPaie::SupprimerElement { id: "c1".into() }],
     )
     .unwrap_err();
-    assert!(e.to_string().contains("Mon épargne"), "{e}");
+    assert!(e.to_string().contains("depuis Épargne"), "{e}");
 }
 
 #[test]

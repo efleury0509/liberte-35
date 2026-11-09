@@ -518,10 +518,10 @@ export function proposerCertitude(d: DonneesPaie, id: string, incertain: boolean
 export function proposerSuppression(d: DonneesPaie, id: string, jour: DateCivile): Proposition {
   const e = trouver(d, id);
   if ((d.cartes ?? []).some((k) => k.id === id || k.supplements.includes(id))) {
-    throw new ErreurSaisie('Ce paiement appartient à la carte : gère-le depuis Mes dettes.');
+    throw new ErreurSaisie('Ce paiement appartient à la carte : gère-le depuis Dettes.');
   }
   if ((d.comptes ?? []).some((k) => k.contributions.includes(id))) {
-    throw new ErreurSaisie('Cette contribution appartient à un compte : gère-la depuis Mon épargne.');
+    throw new ErreurSaisie('Cette contribution appartient à un compte : gère-la depuis Épargne.');
   }
   // Q16 : après une confirmation, on termine ; on ne supprime plus.
   if ((d.confirmations ?? []).some((f) => f.elementId === id)) {

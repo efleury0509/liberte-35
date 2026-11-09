@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { SECTIONS, type IdSection } from '../lib/navigation';
+  // Barre latérale prune V1, toujours visible (cahier V1, section 4) : seules
+  // les sections développées s'affichent ; Paramètres et Aide en pied.
+  import { House, CalendarDays, ShoppingCart, PiggyBank, Landmark, Target, FlaskConical, ChartColumn, Settings, CircleHelp } from '@lucide/svelte';
+  import NavigationLaterale, { type EntreeNavigation } from './base/NavigationLaterale.svelte';
+  import { SECTIONS, type IconeSection, type IdSection } from '../lib/navigation';
   import type { Profil } from '../lib/plateforme';
   import { TEXTES } from '../lib/textes.fr';
 
@@ -10,87 +14,31 @@
     version?: string | undefined;
     onchoisir: (id: IdSection) => void;
   }
-
   let { active, profil, version, onchoisir }: Props = $props();
+
+  const ICONES: Record<IconeSection, EntreeNavigation['icone']> = {
+    accueil: House,
+    paies: CalendarDays,
+    depenses: ShoppingCart,
+    epargne: PiggyBank,
+    dettes: Landmark,
+    objectifs: Target,
+    scenarios: FlaskConical,
+    rapports: ChartColumn,
+    parametres: Settings,
+    aide: CircleHelp,
+  };
+  const entree = (s: (typeof SECTIONS)[number]): EntreeNavigation => ({ id: s.id, libelle: s.libelle, icone: ICONES[s.icone] });
+  const principales = SECTIONS.filter((s) => s.zone === 'principale').map(entree);
+  const pied = SECTIONS.filter((s) => s.zone === 'pied').map(entree);
 </script>
 
-<!-- Barre latérale toujours visible (cahier 13.3). -->
-<nav aria-label={TEXTES.navigation.titre}>
-  <p class="nom">{TEXTES.application.nom}</p>
-  {#if profil === 'essai'}
-    <p class="marque-essai">Essai</p>
-  {/if}
-  {#if version}
-    <p class="version" data-testid="version-barre">Version {version}</p>
-  {/if}
-  <ul>
-    {#each SECTIONS as s (s.id)}
-      <li>
-        <button
-          type="button"
-          aria-current={s.id === active ? 'page' : undefined}
-          data-section={s.id}
-          onclick={() => onchoisir(s.id)}
-        >
-          {s.libelle}
-        </button>
-      </li>
-    {/each}
-  </ul>
-</nav>
-
-<style>
-  .version {
-    margin: 0 var(--espace-3) var(--espace-4);
-    font-size: var(--taille-petit);
-    color: var(--couleur-texte-discret);
-  }
-  nav {
-    background: var(--couleur-surface);
-    border-right: 1px solid var(--couleur-bordure);
-    padding: var(--espace-6) var(--espace-3);
-    overflow-y: auto;
-  }
-
-  .nom {
-    font-weight: 600;
-    font-size: 18px;
-    margin: 0 var(--espace-3) var(--espace-1);
-  }
-
-  .marque-essai {
-    margin: 0 var(--espace-3) var(--espace-1);
-    font-size: var(--taille-petit);
-    color: var(--couleur-attention);
-  }
-
-  ul {
-    list-style: none;
-    margin: var(--espace-4) 0 0;
-    padding: 0;
-  }
-
-  button {
-    display: block;
-    width: 100%;
-    text-align: left;
-    background: none;
-    border: 0;
-    border-radius: var(--arrondi);
-    color: inherit;
-    font: inherit;
-    padding: var(--espace-2) var(--espace-3);
-    min-height: 40px;
-    cursor: pointer;
-  }
-
-  button:hover {
-    background: var(--couleur-surface-active);
-  }
-
-  button[aria-current='page'] {
-    background: var(--couleur-accent);
-    color: var(--couleur-accent-texte);
-    font-weight: 600;
-  }
-</style>
+<NavigationLaterale
+  entrees={principales}
+  {pied}
+  {active}
+  libelle={TEXTES.navigation.titre}
+  marque={profil === 'essai' ? 'Essai' : null}
+  version={version ?? null}
+  onchoisir={(id) => onchoisir(id as IdSection)}
+/>

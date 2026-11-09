@@ -14,7 +14,7 @@ async function preparer(page: Page) {
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();
   await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.getByTestId('description-profil')).toBeVisible();
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await page.getByRole('button', { name: 'Ajouter un compte' }).click();
   const f = page.getByTestId('formulaire-ajout');
   await f.getByLabel('Type').selectOption({ label: 'CELI' });
@@ -95,7 +95,7 @@ test('P1, P2 : contribution répartie ; confirmée dans Mes paies, la part arriv
   await ligne.getByRole('button', { name: `Confirmer Contribution — ${CELI}` }).click();
   await expect(ligne.getByTestId('statut')).toContainText('Confirmé');
 
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await fiche(page).getByRole('button', { name: 'Voir le détail' }).click();
   await expect(fiche(page).getByTestId('valeur')).toHaveText($('2 150,00 $'));
   await expect(reserve(page, 'Fonds d’urgence').getByTestId('solde-reserve')).toHaveText($('100,00 $'));
@@ -119,7 +119,7 @@ test('D4, U1, U5 : Pneus couverts par leur réserve ; payés avec un seul aperç
   await expect(page.getByTestId('douze-mois')).toContainText('avril 2027');
 
   await dep.getByRole('button', { name: 'Voir le compte' }).click();
-  await expect(page.getByRole('heading', { name: 'Mon épargne', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Épargne', level: 1 })).toBeVisible();
   await expect(reserve(page, 'Pneus')).toBeVisible();
   await affecter(page, 'Pneus', '900');
 
@@ -130,11 +130,17 @@ test('D4, U1, U5 : Pneus couverts par leur réserve ; payés avec un seul aperç
   await expect(ligne.getByTestId('couverture-ligne')).toHaveText('couverte par la réserve');
   await ligne.getByRole('button', { name: 'Confirmer Pneus' }).click();
   const apercu = page.getByTestId('apercu');
+  // V1 : la fenêtre propose la source ; changer de source ne fait que recalculer l'aperçu.
+  await expect(apercu.getByTestId('source-reserve')).toBeChecked();
+  await apercu.getByTestId('source-paie').check();
+  await expect(apercu).not.toContainText(`Retrait de « ${CELI} »`);
+  await expect(ligne.getByTestId('couverture-ligne')).toHaveText('couverte par la réserve');
+  await apercu.getByTestId('source-reserve').check();
   await expect(apercu).toContainText('Réserve « Pneus »');
   await expect(apercu).toContainText(`Retrait de « ${CELI} »`);
   await enregistrerApercu(page);
   await expect(ligne.getByTestId('couverture-ligne')).toHaveText($('payée avec la réserve : 900,00 $'));
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await fiche(page).getByRole('button', { name: 'Voir le détail' }).click();
   await expect(fiche(page).getByTestId('valeur')).toHaveText($('1 100,00 $'));
 
@@ -142,8 +148,9 @@ test('D4, U1, U5 : Pneus couverts par leur réserve ; payés avec un seul aperç
   await page.locator('tr[data-cycle="2027-04-15"]').getByRole('button', { name: 'Détails' }).click();
   await page.getByTestId('detail-cycle').locator('tr[data-a-prevoir="oui"]').getByRole('button', { name: 'Annuler la confirmation' }).click();
   await expect(page.getByTestId('apercu')).toContainText('y revient');
-  await enregistrerApercu(page);
-  await nav(page, 'Mon épargne');
+  await expect(page.getByTestId('apercu')).toHaveAttribute('data-variante', 'annulation');
+  await page.getByTestId('apercu').getByRole('button', { name: 'Confirmer l’annulation' }).click();
+  await nav(page, 'Épargne');
   await fiche(page).getByRole('button', { name: 'Voir le détail' }).click();
   await expect(fiche(page).getByTestId('valeur')).toHaveText($('2 000,00 $'));
   await expect(reserve(page, 'Pneus').getByTestId('solde-reserve')).toHaveText($('900,00 $'));
@@ -160,7 +167,7 @@ test('U4 : « Confirmer sans utiliser la réserve » laisse la réserve intacte'
   await f.getByLabel('Prochaine date').fill('2027-04-15');
   await f.getByLabel('Créer une réserve liée dans').selectOption({ label: CELI });
   await f.getByRole('button', { name: 'Enregistrer' }).click();
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await fiche(page).getByRole('button', { name: 'Voir le détail' }).click();
   await affecter(page, 'Pneus', '900');
 
@@ -169,10 +176,12 @@ test('U4 : « Confirmer sans utiliser la réserve » laisse la réserve intacte'
   const ligne = page.getByTestId('detail-cycle').locator('tr[data-a-prevoir="oui"]');
   await ligne.getByRole('button', { name: 'Confirmer autrement…' }).click();
   const c = page.getByTestId('formulaire-confirmation');
-  await c.getByTestId('sans-reserve').check();
+  await c.getByTestId('source-paie').check();
   await c.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByTestId('apercu').getByTestId('source-paie')).toBeChecked();
+  await enregistrerApercu(page);
   await expect(ligne.getByTestId('couverture-ligne')).toHaveText('payée depuis le disponible');
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await fiche(page).getByRole('button', { name: 'Voir le détail' }).click();
   await expect(reserve(page, 'Pneus').getByTestId('solde-reserve')).toHaveText($('900,00 $'));
   await expect(fiche(page).getByTestId('valeur')).toHaveText($('2 000,00 $'));

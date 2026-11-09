@@ -122,7 +122,7 @@ describe('C — Contributions dans Mes paies', () => {
     const l = lignesCompte(d, cycle(d, '2027-01-21'), celi)[0]!;
     expect(libelleLigne(d, l)).toBe(`Contribution — ${CELI}`);
     expect(cycle(d, '2027-01-21').disponible).toBe(200_000);
-    refus(() => proposerSuppression(d, c1, JOUR), 'gère-la depuis Mon épargne');
+    refus(() => proposerSuppression(d, c1, JOUR), 'gère-la depuis Épargne');
   });
 
   it('C2 : 50 $ le 15 du mois, dans les cycles du 7 janv., du 4 févr. et du 4 mars', () => {

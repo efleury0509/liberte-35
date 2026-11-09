@@ -1419,7 +1419,7 @@ impl Stockage {
                     )?;
                     if pret {
                         return Err(erreur(
-                            "Ce versement appartient à un prêt : supprime le prêt depuis Mes dettes.",
+                            "Ce versement appartient à un prêt : supprime le prêt depuis Dettes.",
                         ));
                     }
                     let carte: bool = tx.query_row(
@@ -1430,7 +1430,7 @@ impl Stockage {
                     )?;
                     if carte {
                         return Err(erreur(
-                            "Ce paiement appartient à la carte : gère-le depuis Mes dettes.",
+                            "Ce paiement appartient à la carte : gère-le depuis Dettes.",
                         ));
                     }
                     let contribution: bool = tx.query_row(
@@ -1440,7 +1440,7 @@ impl Stockage {
                     )?;
                     if contribution {
                         return Err(erreur(
-                            "Cette contribution appartient à un compte : gère-la depuis Mon épargne.",
+                            "Cette contribution appartient à un compte : gère-la depuis Épargne.",
                         ));
                     }
                     let depense: bool = tx.query_row(

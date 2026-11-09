@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import BarreLaterale from './composants/BarreLaterale.svelte';
   import SectionAVenir from './composants/SectionAVenir.svelte';
+  import EnTeteSection from './composants/base/EnTeteSection.svelte';
   import Parametres from './composants/Parametres.svelte';
   import MesPaies from './composants/paies/MesPaies.svelte';
   import MesDettes from './composants/dettes/MesDettes.svelte';
@@ -84,7 +85,7 @@
     {/if}
 
     {#if section}
-      <h1 id="titre-section">{section.libelle}</h1>
+      <EnTeteSection id="titre-section" titre={section.libelle} sousTitre={section.sousTitre} illustration={section.illustration} />
       {#if section.id === 'parametres'}
         <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} />
       {:else if section.id === 'mes-paies' && !erreur}
@@ -114,7 +115,7 @@
   }
 
   main {
-    padding: var(--espace-8);
+    padding: var(--espace-6) var(--espace-10) var(--espace-8);
     overflow-y: auto;
   }
 
@@ -122,15 +123,11 @@
     outline: none;
   }
 
-  h1 {
-    font-size: var(--taille-titre);
-    margin: 0 0 var(--espace-6);
-  }
-
   .bandeau {
-    margin: 0 0 var(--espace-6);
-    padding: var(--espace-2) var(--espace-4);
-    border-radius: var(--arrondi);
+    margin: 0 0 var(--espace-4);
+    padding: var(--espace-1) var(--espace-4);
+    border-radius: var(--arrondi-pilule);
+    font-weight: 700;
     background: var(--couleur-attention-fond);
     color: var(--couleur-attention);
     font-size: var(--taille-petit);

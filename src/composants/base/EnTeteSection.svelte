@@ -3,6 +3,8 @@
   // un espace d'illustration à droite qui ne repousse jamais le contenu.
   import Eclats from './Eclats.svelte';
   import Illustration from './Illustration.svelte';
+  import Etoile from './Etoile.svelte';
+  import FormeOrganique from './FormeOrganique.svelte';
   import type { NomIllustration } from '../../lib/illustrations';
 
   interface Props {
@@ -25,7 +27,11 @@
     {#if sousTitre}<p class="sous-titre">{sousTitre}</p>{/if}
   </div>
   {#if illustration}
-    <div class="zone-illustration"><Illustration nom={illustration} {reserver} /></div>
+    <div class="zone-illustration">
+      <span class="soleil"><FormeOrganique forme="soleil" teinte="peche" /></span>
+      <span class="etoile"><Etoile taille={18} teinte="orange" /></span>
+      <span class="ill"><Illustration nom={illustration} {reserver} /></span>
+    </div>
   {/if}
 </header>
 
@@ -57,10 +63,31 @@
     font-size: var(--sous-titre-page);
   }
   .zone-illustration {
+    position: relative;
     width: 34%;
     max-width: 440px;
     min-height: 96px;
     display: flex;
     margin-top: calc(-1 * var(--espace-4));
+  }
+  .soleil {
+    position: absolute;
+    right: 8%;
+    top: -18px;
+    width: 150px;
+    height: 120px;
+    z-index: 0;
+  }
+  .etoile {
+    position: absolute;
+    right: calc(8% + 160px);
+    top: 4px;
+    z-index: 1;
+  }
+  .ill {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    width: 100%;
   }
 </style>

@@ -1,41 +1,40 @@
 import { expect, test } from '@playwright/test';
 
-const SECTIONS = [
-  "Vue d'ensemble",
-  'Mes paies',
-  'Mes dettes',
-  'Mon épargne',
-  'Dépenses à prévoir',
-  'Mes objectifs',
-  'Et si…',
-  'Paramètres',
-];
+// Sections développées, dans l'ordre de la barre latérale (V1).
+const SECTIONS = ['Mes paies', 'Dépenses à prévoir', 'Épargne', 'Dettes', 'Paramètres'];
 
-test('la barre latérale affiche les huit sections et la Vue d’ensemble par défaut', async ({ page }) => {
+test('la barre latérale prune affiche les sections développées et Mes paies par défaut', async ({ page }) => {
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
   await expect(nav.getByRole('button')).toHaveText(SECTIONS);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText("Vue d'ensemble");
-  await expect(nav.getByRole('button', { name: "Vue d'ensemble" })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mes paies');
+  await expect(nav.getByRole('button', { name: 'Mes paies' })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByText('Des rêves, mais')).toBeVisible();
 });
 
-test('chaque section s’ouvre et la barre latérale reste visible', async ({ page }) => {
+test('les modules non développés restent masqués', async ({ page }) => {
+  await page.goto('/');
+  const nav = page.getByRole('navigation', { name: 'Navigation principale' });
+  for (const absent of ['Accueil', 'Objectifs', 'Scénarios', 'Rapports', 'Aide']) await expect(nav.getByRole('button', { name: absent })).toHaveCount(0);
+});
+
+test('chaque section s’ouvre avec son en-tête et la barre latérale reste visible', async ({ page }) => {
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
   for (const libelle of SECTIONS) {
-    await nav.getByRole('button', { name: libelle }).click();
+    await nav.getByRole('button', { name: libelle, exact: true }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(libelle);
     await expect(nav).toBeVisible();
-    await expect(nav.getByRole('button', { name: libelle })).toHaveAttribute('aria-current', 'page');
+    await expect(nav.getByRole('button', { name: libelle, exact: true })).toHaveAttribute('aria-current', 'page');
   }
 });
 
 test('la navigation fonctionne entièrement au clavier', async ({ page }) => {
   await page.goto('/');
-  await page.keyboard.press('Tab'); // Vue d'ensemble
   await page.keyboard.press('Tab'); // Mes paies
+  await page.keyboard.press('Tab'); // Dépenses à prévoir
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mes paies');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dépenses à prévoir');
 });
 
 test('Paramètres décrit l’installation, ici en mode aperçu', async ({ page }) => {

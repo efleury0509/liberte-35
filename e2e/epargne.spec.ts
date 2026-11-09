@@ -33,7 +33,7 @@ const compte = (page: Page, nom: string) => page.getByTestId('compte').filter({ 
 
 test('T, S : comptes, valeur « À compléter » jamais 0 $, total avec comptes exclus', async ({ page }) => {
   await preparer(page);
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await ajouterCompte(page, 'CELI', CELI, '2000');
   await ajouterCompte(page, 'REER', '', '');
   await expect(compte(page, 'REER').getByTestId('valeur')).toHaveText('À compléter');
@@ -46,7 +46,7 @@ test('T, S : comptes, valeur « À compléter » jamais 0 $, total avec comptes 
 
 test('C, V : contribution à chaque paie dans Mes paies ; confirmée, elle s’ajoute à la valeur suivie', async ({ page }) => {
   await preparer(page);
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await ajouterCompte(page, 'CELI', CELI, '2000');
   const fiche = compte(page, CELI);
   await fiche.getByRole('button', { name: 'Ajouter une contribution récurrente…' }).click();
@@ -67,13 +67,13 @@ test('C, V : contribution à chaque paie dans Mes paies ; confirmée, elle s’a
   await ligne.getByRole('button', { name: `Confirmer Contribution — ${CELI}` }).click();
   await expect(ligne.getByTestId('statut')).toContainText('Confirmé');
 
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await expect(compte(page, CELI).getByTestId('valeur')).toHaveText($('2 100,00 $'));
 });
 
 test('F3, M2 : valeur en ligne → fluctuation proposée avec aperçu ; transfert sans effet sur le total', async ({ page }) => {
   await preparer(page);
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await ajouterCompte(page, 'CELI', CELI, '2000');
   await ajouterCompte(page, 'Compte épargne', '', '0');
   const celi = compte(page, CELI);
@@ -105,7 +105,7 @@ test('F3, M2 : valeur en ligne → fluctuation proposée avec aperçu ; transfer
 
 test('W4 (0.9.1) : l’aperçu du retrait d’un transfert montre les deux comptes et le total', async ({ page }) => {
   await preparer(page);
-  await nav(page, 'Mon épargne');
+  await nav(page, 'Épargne');
   await ajouterCompte(page, 'CELI', CELI, '2000');
   await ajouterCompte(page, 'Compte épargne', '', '0');
   const celi = compte(page, CELI);
@@ -120,6 +120,7 @@ test('W4 (0.9.1) : l’aperçu du retrait d’un transfert montre les deux compt
   await expect(apercu).toContainText(`Valeur suivie (${CELI})`);
   await expect(apercu).toContainText('Valeur suivie (Compte épargne)');
   await expect(apercu).toContainText('inchangé');
-  await apercu.getByRole('button', { name: 'Annuler' }).click();
+  await apercu.getByRole('button', { name: 'Abandonner' }).click();
+  await expect(apercu).toHaveCount(0);
   await expect(celi.getByTestId('valeur')).toHaveText($('1 500,00 $'));
 });

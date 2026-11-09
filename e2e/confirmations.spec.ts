@@ -101,6 +101,14 @@ test('un revenu incertain compte dès que sa réception est confirmée ; corrige
   await f.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(ligneCycle(page, '2027-03-04').getByTestId('disponible')).toHaveText(dollars('2 600,00'));
   await remb.getByRole('button', { name: 'Annuler la confirmation' }).click();
+  // V1 : revenir sur un paiement passe toujours par la fenêtre sobre.
+  const fenetre = page.getByTestId('apercu');
+  await expect(fenetre).toHaveAttribute('data-variante', 'annulation');
+  await fenetre.getByRole('button', { name: 'Conserver le paiement' }).click();
+  await expect(fenetre).toHaveCount(0);
+  await expect(ligneCycle(page, '2027-03-04').getByTestId('disponible')).toHaveText(dollars('2 600,00'));
+  await remb.getByRole('button', { name: 'Annuler la confirmation' }).click();
+  await fenetre.getByRole('button', { name: 'Confirmer l’annulation' }).click();
   await expect(remb).toContainText('non compté (incertain)');
   await expect(ligneCycle(page, '2027-03-04').getByTestId('disponible')).toHaveText(dollars('1 800,00'));
 });

@@ -65,9 +65,9 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
       if (d.confirmations.some((f) => f.elementId === c.id)) {
         refus('Ce revenu ou cette dépense a des opérations confirmées : termine-le plutôt que de le supprimer.');
       }
-      if (d.prets.some((p) => p.id === c.id)) refus('Ce versement appartient à un prêt : supprime le prêt depuis Mes dettes.');
-      if (d.cartes.some((k) => k.id === c.id || k.supplements.includes(c.id))) refus('Ce paiement appartient à la carte : gère-le depuis Mes dettes.');
-      if ((d.comptes ?? []).some((k) => k.contributions.includes(c.id))) refus('Cette contribution appartient à un compte : gère-la depuis Mon épargne.');
+      if (d.prets.some((p) => p.id === c.id)) refus('Ce versement appartient à un prêt : supprime le prêt depuis Dettes.');
+      if (d.cartes.some((k) => k.id === c.id || k.supplements.includes(c.id))) refus('Ce paiement appartient à la carte : gère-le depuis Dettes.');
+      if ((d.comptes ?? []).some((k) => k.contributions.includes(c.id))) refus('Cette contribution appartient à un compte : gère-la depuis Épargne.');
       if ((d.depenses ?? []).some((x) => x.id === c.id)) refus('Cette dépense se gère depuis Dépenses à prévoir.');
       d.elements = d.elements.filter((e) => e.id !== c.id);
       d.ajustements = d.ajustements.filter((a) => a.elementId !== c.id);

@@ -5,6 +5,9 @@
   import type { Component } from 'svelte';
   import Icone from './Icone.svelte';
   import Illustration from './Illustration.svelte';
+  import Etoile from './Etoile.svelte';
+  import FormeOrganique from './FormeOrganique.svelte';
+  import { ILLUSTRATIONS } from '../../lib/illustrations';
 
   export interface EntreeNavigation {
     id: string;
@@ -18,9 +21,10 @@
     marque?: string | null;
     version?: string | null;
     reserver?: boolean;
+    libelle?: string;
     onchoisir: (id: string) => void;
   }
-  let { entrees, pied = [], active, marque = null, version = null, reserver = false, onchoisir }: Props = $props();
+  let { entrees, pied = [], active, marque = null, version = null, reserver = false, libelle = 'Navigation principale', onchoisir }: Props = $props();
 </script>
 
 {#snippet bouton(e: EntreeNavigation)}
@@ -32,7 +36,7 @@
   </li>
 {/snippet}
 
-<nav class="navigation-v1" aria-label="Navigation principale">
+<nav class="navigation-v1" aria-label={libelle}>
   <div class="logo">
     <span class="arc"><Illustration nom="arc-en-ciel" largeur={110} hauteur={44} {reserver} /></span>
     <p class="nom">Liberté 35</p>
@@ -48,8 +52,13 @@
     </ul>
   {/if}
   <div class="bas">
-    {#if version}<p class="version">Version {version}</p>{/if}
-    <span class="vagues"><Illustration nom="vagues" largeur={200} hauteur={90} {reserver} /></span>
+    {#if version}<p class="version" data-testid="version-barre">Version {version}</p>{/if}
+    <span class="etoile-bas"><Etoile taille={20} teinte="beurre" /></span>
+    {#if ILLUSTRATIONS.vagues.fichier || reserver}
+      <span class="vagues"><Illustration nom="vagues" largeur={200} hauteur={90} {reserver} /></span>
+    {:else}
+      <span class="vagues decor"><FormeOrganique forme="vague" /></span>
+    {/if}
   </div>
 </nav>
 
@@ -128,12 +137,12 @@
     border-color: transparent;
   }
   button[aria-current='page'] {
-    background: var(--couleur-barre-actif);
+    background: linear-gradient(90deg, var(--couleur-barre-actif), var(--sorbet-peche-moyen));
     color: var(--couleur-barre-actif-texte);
     font-weight: 800;
   }
-  button[aria-current='page']:hover {
-    background: var(--couleur-barre-actif);
+  button[aria-current='page']:hover:not(:disabled) {
+    background: linear-gradient(90deg, var(--couleur-barre-actif), var(--sorbet-peche-moyen));
   }
   .bas {
     margin-top: auto;
@@ -151,5 +160,15 @@
     display: flex;
     width: 100%;
     justify-content: center;
+  }
+  .decor {
+    height: 72px;
+    margin: 0 calc(-1 * var(--espace-3));
+    width: calc(100% + 2 * var(--espace-3));
+    opacity: 0.9;
+  }
+  .etoile-bas {
+    align-self: flex-start;
+    margin: 0 0 var(--espace-2) var(--espace-6);
   }
 </style>

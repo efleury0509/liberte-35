@@ -18,7 +18,7 @@ async function preparer(page: Page) {
 const nav = (page: Page, nom: string) => page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: nom }).click();
 
 async function ajouterPretMinimal(page: Page) {
-  await nav(page, 'Mes dettes');
+  await nav(page, 'Dettes');
   await page.getByRole('button', { name: 'Ajouter un prêt' }).click();
   const f = page.getByTestId('formulaire-ajout-pret');
   await f.getByLabel('Nom du prêt').fill('Prêt auto (fictif)');
@@ -61,7 +61,7 @@ test('C5, P4, H0, F4, S3 : confirmer dans Mes paies, voir l’historique, compl�
 
   // « Voir le prêt » ouvre la fiche dans Mes dettes.
   await ligne.getByRole('button', { name: 'Voir le prêt' }).click();
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mes dettes');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dettes');
   const fiche = page.getByTestId('fiche-pret');
   const versement = fiche.getByTestId('ligne-versement');
   await expect(versement).toHaveCount(1);
@@ -101,7 +101,7 @@ test('C5, P4, H0, F4, S3 : confirmer dans Mes paies, voir l’historique, compl�
 
 test('F2, E2 : fiche presque complète avec échéance finale ; F3 : refus clair', async ({ page }) => {
   await preparer(page);
-  await nav(page, 'Mes dettes');
+  await nav(page, 'Dettes');
   await page.getByRole('button', { name: 'Ajouter un prêt' }).click();
   const f = page.getByTestId('formulaire-ajout-pret');
   await f.getByLabel('Nom du prêt').fill('Prêt perso (fictif)');
@@ -154,7 +154,7 @@ test('L2, L3 : marquer comme remboursé avec un aperçu ; D1 : supprimer avec un
 
 test('sans profil de paie, Mes dettes explique quoi faire', async ({ page }) => {
   await page.goto('/?aujourdhui=2027-01-15');
-  await nav(page, 'Mes dettes');
+  await nav(page, 'Dettes');
   await expect(page.getByText('Crée d’abord ton profil de paie dans « Mes paies »')).toBeVisible();
 });
 

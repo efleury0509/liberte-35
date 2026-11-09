@@ -230,7 +230,7 @@ fn les_paiements_de_la_carte_ne_se_suppriment_pas_comme_des_depenses() {
         vec![ChangementPaie::SupprimerElement { id: "visa".into() }],
     )
     .unwrap_err();
-    assert!(e.to_string().contains("Mes dettes"), "{e}");
+    assert!(e.to_string().contains("depuis Dettes"), "{e}");
 }
 
 #[test]

@@ -19,7 +19,7 @@ async function preparer(page: Page) {
 const nav = (page: Page, nom: string) => page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: nom }).click();
 
 async function ajouterCarte(page: Page) {
-  await nav(page, 'Mes dettes');
+  await nav(page, 'Dettes');
   await page.getByRole('button', { name: 'Ajouter ma carte' }).click();
   const f = page.getByTestId('formulaire-ajout-carte');
   await f.getByLabel('Nom de la carte').fill(NOM);
@@ -63,7 +63,7 @@ test('F1, C1, C2, C4 : la carte se crée sans montant ; son échéance est « À
   await expect(d.getByTestId('raison-a-completer')).toHaveText(`Il manque : Paiement — ${NOM} (11 févr.).`);
 
   await d.getByRole('button', { name: 'Voir la carte' }).click();
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mes dettes');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dettes');
   await expect(page.getByTestId('fiche-carte')).toBeVisible();
 });
 

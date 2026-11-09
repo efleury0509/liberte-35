@@ -41,7 +41,7 @@
   import { estPret } from '../../actions/prets';
   import { comptesDe, estContribution, nomCompte, proposerContributionPonctuelle } from '../../actions/comptes';
   import { estDepenseAPrevoir } from '../../actions/depenses';
-  import { reserveDeDepense } from '../../actions/couvertures';
+  import { modeOccurrence, reserveDeDepense } from '../../actions/couvertures';
   import { choixRapides, estPaiementCarte, estSupplement, laCarte, libelleLigne, proposerSupplement, proposerSuppressionSupplement, raisonsACompleter } from '../../actions/cartes';
   import RevenusDepenses from './RevenusDepenses.svelte';
   import TableauCycles from './TableauCycles.svelte';
@@ -88,6 +88,9 @@
   let fConfMontant = $state('');
   let fConfDate = $state('');
   let fConfSansReserve = $state(false);
+  /** V1 lot 2 : présentation de la fenêtre (annulation sobre, choix de la source). */
+  let varianteApercu: 'normale' | 'annulation' = $state('normale');
+  let source: { cible: CibleConfirmation; saisie: { montant: string; date: string } | null; reserve: string; sansReserve: boolean } | null = $state(null);
   let minuterieAnnulation: ReturnType<typeof setTimeout> | undefined;
   let fOccMontant = $state('');
   let fOccDate = $state('');
@@ -162,9 +165,11 @@
    * vraiment (effet de bord, passé, suppression…), on le montre ; sinon on
    * enregistre tout de suite et on offre « Annuler ».
    */
-  function proposer(fabrique: () => Proposition) {
+  function proposer(fabrique: () => Proposition, options: { variante?: 'normale' | 'annulation'; garderSource?: boolean; toujours?: boolean } = {}) {
     messageAnnulation = null;
     dernier = null;
+    varianteApercu = options.variante ?? 'normale';
+    if (!options.garderSource) source = null;
     let p: Proposition;
     try {
       p = fabrique();
@@ -175,10 +180,35 @@
       void montrer('erreur-saisie');
       return;
     }
-    if (p.apercu) {
+    if (p.apercu || options.toujours) {
       proposition = p;
       void montrer('apercu');
     } else void enregistrer(p, true);
+  }
+
+  /** Revenir sur un paiement enregistré : toujours dans la fenêtre sobre (cahier V1, 5.4). */
+  function proposerAnnulation(cible: CibleConfirmation) {
+    proposer(() => proposerAnnulationConfirmation(donnees!, cible, jour), { variante: 'annulation', toujours: true });
+  }
+
+  /**
+   * Confirmer une dépense qui a une réserve liée : la fenêtre propose
+   * explicitement la source (réserve ou paie). Changer la source ne fait que
+   * recalculer l'aperçu ; rien ne bouge avant « Enregistrer ».
+   */
+  function confirmerAvecSource(cible: CibleConfirmation, saisieDonnee: { montant: string; date: string } | null, sansReserve: boolean, prevu: number | null = null) {
+    // « Confirmer » rapide : le montant prévu, à la date du jour (comme avant).
+    const saisie = saisieDonnee ?? (prevu === null ? null : { montant: enTexte(prevu), date: jour as string });
+    const lien = cible.elementId && donnees ? reserveDeDepense(donnees, cible.elementId) : null;
+    if (!lien || !cible.elementId || modeOccurrence(donnees!, cible.elementId, cible.origine) !== 'reserve') {
+      proposer(() => proposerConfirmation(donnees!, cible, saisieDonnee === null ? null : { ...saisieDonnee, sansReserve }, jour));
+      return;
+    }
+    source = { cible, saisie, reserve: lien.reserve.nom, sansReserve };
+    proposer(() => proposerConfirmation(donnees!, cible, saisie === null ? null : { ...saisie, sansReserve }, jour), {
+      garderSource: true,
+      toujours: true,
+    });
   }
 
   // L'aperçu et les messages sont au-dessus du tableau : quand on agit depuis
@@ -493,12 +523,30 @@
     {proposition}
     {enCours}
     erreur={erreurSaisie}
+    variante={varianteApercu}
+    choix={source ? choixSource : undefined}
     onconfirmer={confirmer}
     onajuster={() => (proposition = null)}
     onannuler={annuler}
   />
 {/if}
 
+
+{#snippet choixSource()}
+  {#if source}
+    {@const s = source}
+    <fieldset class="source" data-testid="choix-source">
+      <legend>Source du paiement</legend>
+      <label class="en-ligne"
+        ><input type="radio" name="source" checked={!s.sansReserve} data-testid="source-reserve" onchange={() => confirmerAvecSource(s.cible, s.saisie, false)} /> Payer avec la réserve « {s.reserve} »</label
+      >
+      <label class="en-ligne"
+        ><input type="radio" name="source" checked={s.sansReserve} data-testid="source-paie" onchange={() => confirmerAvecSource(s.cible, s.saisie, true)} /> Payer depuis ma paie (dépense planifiée)</label
+      >
+      <p class="discret">Choisir la source ne déplace rien : l’aperçu se met à jour, et rien n’est enregistré avant ta confirmation.</p>
+    </fieldset>
+  {/if}
+{/snippet}
 
 {#snippet formulaireProfil(creation: boolean)}
   <form
@@ -633,9 +681,9 @@
     <span class="actions-ligne">
       {#if l.statut === 'confirme'}
         <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'corriger', l.montantPrevu, l.confirmation)}>Corriger</button>
-        <button type="button" class="petit" onclick={() => proposer(() => proposerAnnulationConfirmation(donnees!, cible, jour))}>Annuler la confirmation</button>
+        <button type="button" class="petit" onclick={() => proposerAnnulation(cible)}>Annuler la confirmation</button>
       {:else if l.statut === 'aVenir' || l.statut === 'aVerifier'}
-        <button type="button" class="petit principal" onclick={() => proposer(() => proposerConfirmation(donnees!, cible, null, jour))} aria-label={`Confirmer ${l.libelle}`}>Confirmer</button>
+        <button type="button" class="petit principal" onclick={() => confirmerAvecSource(cible, null, false, l.montantPrevu)} aria-label={`Confirmer ${l.libelle}`}>Confirmer</button>
         <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'confirmer', l.montantPrevu, null)}>Confirmer autrement…</button>
         {#if l.statut === 'aVerifier'}
           <button type="button" class="petit" onclick={() => proposer(() => proposerRetrait(donnees!, cible, true, jour))}>N’a pas eu lieu</button>
@@ -656,7 +704,8 @@
     onsubmit={(e) => {
       e.preventDefault();
       const saisie = { montant: fConfMontant, date: fConfDate, sansReserve: fConfSansReserve };
-      proposer(() => (f.mode === 'corriger' ? proposerCorrection(donnees!, f.cible, saisie, jour) : proposerConfirmation(donnees!, f.cible, saisie, jour)));
+      if (f.mode === 'corriger') proposer(() => proposerCorrection(donnees!, f.cible, saisie, jour));
+      else confirmerAvecSource(f.cible, { montant: fConfMontant, date: fConfDate }, fConfSansReserve);
     }}
   >
     <p class="discret">
@@ -666,7 +715,12 @@
     <label>Montant reçu ou payé ($) <input inputmode="decimal" bind:value={fConfMontant} /></label>
     <label>Date <input type="date" bind:value={fConfDate} /></label>
     {#if f.mode === 'confirmer' && f.cible.elementId && donnees && reserveDeDepense(donnees, f.cible.elementId)}
-      <label class="en-ligne"><input type="checkbox" bind:checked={fConfSansReserve} data-testid="sans-reserve" /> Confirmer sans utiliser la réserve (tout depuis le disponible)</label>
+      {@const lien = reserveDeDepense(donnees, f.cible.elementId)!}
+      <fieldset class="source">
+        <legend>Source du paiement</legend>
+        <label class="en-ligne"><input type="radio" name="source-formulaire" bind:group={fConfSansReserve} value={false} data-testid="source-reserve" /> Payer avec la réserve « {lien.reserve.nom} »</label>
+        <label class="en-ligne"><input type="radio" name="source-formulaire" bind:group={fConfSansReserve} value={true} data-testid="source-paie" /> Payer depuis ma paie (dépense planifiée)</label>
+      </fieldset>
     {/if}
     <button type="submit" class="principal">Enregistrer</button>
     <button type="button" onclick={() => (formConfirmation = null)}>Fermer</button>
@@ -704,7 +758,7 @@
               <span class="actions-ligne">
                 {#if c.paieConfirmation}
                   <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'corriger', c.paie.montant, c.paieConfirmation)}>Corriger</button>
-                  <button type="button" class="petit" onclick={() => proposer(() => proposerAnnulationConfirmation(donnees!, cible, jour))}>Annuler la confirmation</button>
+                  <button type="button" class="petit" onclick={() => proposerAnnulation(cible)}>Annuler la confirmation</button>
                 {:else}
                   <button type="button" class="petit principal" onclick={() => proposer(() => proposerConfirmation(donnees!, cible, null, jour))} aria-label="Confirmer la paie">Confirmer</button>
                   <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'confirmer', c.paie.montant, null)}>Confirmer autrement…</button>
@@ -1030,5 +1084,22 @@
   .total td {
     border-top: 1px solid var(--couleur-bordure);
     font-weight: 600;
+  }
+  .source {
+    flex-basis: 100%;
+    border: var(--epaisseur-bordure) solid var(--couleur-bordure);
+    border-radius: var(--arrondi);
+    padding: var(--espace-2) var(--espace-4) var(--espace-3);
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--espace-2);
+  }
+  .source legend {
+    font-weight: 700;
+    padding: 0 var(--espace-1);
+  }
+  .source .discret {
+    margin: 0;
   }
 </style>

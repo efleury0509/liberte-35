@@ -64,7 +64,7 @@ test('annuler un aperçu n’enregistre rien', async ({ page }) => {
   await page.getByLabel('À partir du').fill('2027-06-10');
   await page.getByLabel('Nouveau salaire net ($)').fill('3000');
   await enregistrer(page);
-  await page.getByTestId('apercu').getByRole('button', { name: 'Annuler' }).click();
+  await page.getByTestId('apercu').getByRole('button', { name: 'Abandonner' }).click();
   await expect(page.getByTestId('apercu')).toHaveCount(0);
   await expect(page.getByTestId('salaire-actuel')).toHaveText(`2${ESP}100,00${ESP}$`);
 });

@@ -3,6 +3,7 @@
   // chacun avec son lien d'action. Emplacement d'illustration à gauche.
   import Illustration from './Illustration.svelte';
   import Icone from './Icone.svelte';
+  import Etoile from './Etoile.svelte';
   import { ArrowRight } from '@lucide/svelte';
 
   export interface Evenement {
@@ -28,6 +29,7 @@
       </li>
     {/each}
   </ul>
+  <span class="etoiles" aria-hidden="true"><Etoile taille={22} teinte="beurre" /><Etoile taille={14} teinte="peche" /></span>
 </section>
 
 <style>
@@ -71,6 +73,13 @@
     display: flex;
     align-items: center;
     gap: var(--espace-2);
+  }
+  .etoiles {
+    margin-left: auto;
+    align-self: flex-start;
+    display: flex;
+    gap: var(--espace-1);
+    align-items: flex-end;
   }
   .point {
     width: 14px;

@@ -83,7 +83,7 @@ export function raisonsACompleter(d: DonneesPaie, c: Cycle): string | null {
 
 function exigerCarte(d: DonneesPaie): { carte: CarteStocke; nom: string } {
   const carte = laCarte(d);
-  if (!carte) throw new ErreurSaisie('Ajoute d’abord ta carte dans Mes dettes.');
+  if (!carte) throw new ErreurSaisie('Ajoute d’abord ta carte dans Dettes.');
   return { carte, nom: nomCarte(d, carte) };
 }
 
