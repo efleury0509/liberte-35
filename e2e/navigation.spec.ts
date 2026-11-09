@@ -42,7 +42,7 @@ test('Paramètres décrit l’installation, ici en mode aperçu', async ({ page 
   await page.goto('/');
   await page.getByRole('button', { name: 'Paramètres' }).click();
   await expect(page.getByTestId('profil')).toHaveText('Aperçu dans le navigateur — rien n’est enregistré');
-  await expect(page.getByTestId('version-schema')).toHaveText('7');
+  await expect(page.getByTestId('version-schema')).toHaveText('8');
   await expect(page.getByTestId('integrite')).toHaveText('Aucun problème détecté');
   await expect(page.getByTestId('bandeau-profil')).toBeVisible();
 });

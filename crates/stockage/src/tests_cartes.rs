@@ -417,7 +417,7 @@ fn n1_mise_a_niveau_de_la_structure_6_vers_7() {
         Box::new(HorlogeFixe("2026-11-08T15:00:00Z".into())),
     )
     .unwrap();
-    assert_eq!(s.version_schema().unwrap(), 7);
+    assert_eq!(s.version_schema().unwrap(), version_schema_attendue());
     let lu = s.lire_paie().unwrap();
     assert_eq!(lu.prets.len(), 1);
     assert!(lu.cartes.is_empty());
@@ -425,5 +425,5 @@ fn n1_mise_a_niveau_de_la_structure_6_vers_7() {
         .unwrap()
         .file_name()
         .to_string_lossy()
-        .contains("v6-vers-v7")));
+        .contains("v6-vers-v")));
 }

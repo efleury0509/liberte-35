@@ -36,7 +36,7 @@ function donnees(elements = ELEMENTS_ETAPE4.map(versStocke)): DonneesPaie {
     elements,
     ajustements: [],
   confirmations: [], prets: [],
-  cartes: [],
+  cartes: [], comptes: [],
 };
 }
 

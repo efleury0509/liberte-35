@@ -213,6 +213,48 @@ CREATE TABLE paiements_carte (
 ) STRICT;
 "#;
 
+/// Version 8 : comptes d'épargne (étape 9). Une contribution est un élément
+/// de dépense fixe rattaché au compte ; la valeur suivie se recalcule à partir
+/// des références datées, des contributions confirmées et des mouvements.
+const V8: &str = r#"
+CREATE TABLE comptes_epargne (
+    id          TEXT PRIMARY KEY,
+    sorte       TEXT NOT NULL CHECK (sorte IN ('celi', 'reer', 'celiapp', 'epargne', 'autre')),
+    type_libre  TEXT CHECK (type_libre IS NULL OR length(trim(type_libre)) > 0),
+    nom         TEXT,
+    vocation    TEXT,
+    institution TEXT,
+    ferme_le    TEXT CHECK (ferme_le GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    CHECK ((sorte = 'autre') = (type_libre IS NOT NULL))
+) STRICT;
+
+CREATE TABLE references_compte (
+    compte_id TEXT NOT NULL REFERENCES comptes_epargne(id) ON DELETE CASCADE,
+    date      TEXT NOT NULL CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    montant   INTEGER NOT NULL CHECK (montant >= 0),
+    note      TEXT,
+    PRIMARY KEY (compte_id, date)
+) STRICT;
+
+CREATE TABLE mouvements_compte (
+    id          TEXT PRIMARY KEY,
+    compte_id   TEXT NOT NULL REFERENCES comptes_epargne(id) ON DELETE CASCADE,
+    date        TEXT NOT NULL CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    sorte       TEXT NOT NULL CHECK (sorte IN ('fluctuation', 'retrait', 'transfert')),
+    montant     INTEGER NOT NULL CHECK (montant <> 0 AND (sorte = 'fluctuation' OR montant > 0)),
+    vers        TEXT REFERENCES comptes_epargne(id) ON DELETE RESTRICT,
+    destination TEXT,
+    note        TEXT,
+    CHECK ((sorte = 'transfert') = (vers IS NOT NULL)),
+    CHECK (vers IS NULL OR vers <> compte_id)
+) STRICT;
+
+CREATE TABLE contributions_compte (
+    element_id TEXT PRIMARY KEY REFERENCES elements(id) ON DELETE RESTRICT,
+    compte_id  TEXT NOT NULL REFERENCES comptes_epargne(id) ON DELETE CASCADE
+) STRICT;
+"#;
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -249,6 +291,11 @@ pub const MIGRATIONS: &[Migration] = &[
         description:
             "Carte Visa : fiche, relevés, soldes actuels, frais, paiements supplémentaires",
         sql: V7,
+    },
+    Migration {
+        version: 8,
+        description: "Épargne : comptes, références, mouvements, contributions",
+        sql: V8,
     },
 ];
 

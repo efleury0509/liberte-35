@@ -80,6 +80,16 @@ et dans le cahier fonctionnel de référence.
   paiement supplémentaire montre son montant et sa date ; un paiement
   supplémentaire non confirmé se supprime (« Annuler » le rétablit).
   Aucun calcul ni structure changés (7).
+- Étape 9 (version 0.9.0) : Mon épargne, les comptes. CELI, REER, CELIAPP,
+  compte épargne ou « Autre… » ; nom, vocation et institution facultatifs. La
+  valeur suivie part d'un solde de référence daté (« À compléter » sans solde,
+  jamais 0 $) et bouge seulement avec ce qui est réel et daté après lui :
+  contributions confirmées, fluctuations (saisies directement, ou proposées à
+  partir de la valeur en ligne, toujours avec un aperçu), retraits et transferts
+  entre comptes. Les contributions vivent dans Mes paies (groupe « Épargne »),
+  où elles s'ajustent et se confirment ; les mouvements n'y entrent jamais.
+  Fermer, rouvrir (reprises choisies) ou supprimer un compte sans historique ;
+  total motivant, distinct du disponible. Base de données en version 8.
 
 ## Organisation du code
 

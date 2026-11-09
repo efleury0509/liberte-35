@@ -183,6 +183,51 @@ pub struct CarteStocke {
     pub supplements: Vec<String>,
 }
 
+/// Solde de référence daté d'un compte d'épargne (étape 9) : le point de
+/// départ de la valeur suivie, ou une correction (Q71, R1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReferenceCompteStockee {
+    pub date: String,
+    pub montant: i64,
+    pub note: Option<String>,
+}
+
+/// Mouvement d'un compte d'épargne (Q73, Q74) : « fluctuation » (+ ou −),
+/// « retrait » ou « transfert » (vers un autre compte). Jamais dans Mes paies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MouvementStocke {
+    pub id: String,
+    pub date: String,
+    pub sorte: String,
+    pub montant: i64,
+    pub vers: Option<String>,
+    pub destination: Option<String>,
+    pub note: Option<String>,
+}
+
+/// Compte d'épargne (étape 9). `contributions` liste les éléments de dépense
+/// fixe qui l'alimentent depuis Mes paies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompteStocke {
+    pub id: String,
+    /// « celi », « reer », « celiapp », « epargne » ou « autre ».
+    pub sorte: String,
+    pub type_libre: Option<String>,
+    pub nom: Option<String>,
+    pub vocation: Option<String>,
+    pub institution: Option<String>,
+    pub ferme_le: Option<String>,
+    #[serde(default)]
+    pub references: Vec<ReferenceCompteStockee>,
+    #[serde(default)]
+    pub mouvements: Vec<MouvementStocke>,
+    #[serde(default)]
+    pub contributions: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DonneesPaie {
@@ -199,6 +244,8 @@ pub struct DonneesPaie {
     pub prets: Vec<PretStocke>,
     #[serde(default)]
     pub cartes: Vec<CarteStocke>,
+    #[serde(default)]
+    pub comptes: Vec<CompteStocke>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -256,6 +303,12 @@ pub enum ChangementPaie {
         carte: CarteStocke,
     },
     SupprimerCarte {
+        id: String,
+    },
+    DefinirCompte {
+        compte: CompteStocke,
+    },
+    SupprimerCompte {
         id: String,
     },
 }
@@ -374,7 +427,134 @@ fn verifier(changement: &ChangementPaie) -> Resultat<()> {
             }
             Ok(())
         }
+        ChangementPaie::DefinirCompte { compte } => verifier_compte(compte),
+        ChangementPaie::SupprimerCompte { id } => {
+            if id.is_empty() {
+                return Err(erreur("Compte à supprimer non précisé."));
+            }
+            Ok(())
+        }
     }
+}
+
+fn verifier_compte(c: &CompteStocke) -> Resultat<()> {
+    if c.id.is_empty() {
+        return Err(erreur("Compte sans identifiant."));
+    }
+    match c.sorte.as_str() {
+        "celi" | "reer" | "celiapp" | "epargne" => {
+            if c.type_libre.is_some() {
+                return Err(erreur("Seul le type « Autre » a un nom libre."));
+            }
+        }
+        "autre" => {
+            if c.type_libre.as_deref().is_none_or(|t| t.trim().is_empty()) {
+                return Err(erreur("Donne un nom au type « Autre »."));
+            }
+        }
+        autre => return Err(erreur(format!("Type de compte inconnu : « {autre} »."))),
+    }
+    if let Some(f) = &c.ferme_le {
+        verifier_date(f)?;
+    }
+    let mut dates = std::collections::HashSet::new();
+    for r in &c.references {
+        verifier_date(&r.date)?;
+        if r.montant < 0 {
+            return Err(erreur("Un solde de référence ne peut pas être négatif."));
+        }
+        if !dates.insert(&r.date) {
+            return Err(erreur(format!(
+                "Deux soldes de référence à la même date ({}).",
+                r.date
+            )));
+        }
+    }
+    let mut ids = std::collections::HashSet::new();
+    for m in &c.mouvements {
+        verifier_date(&m.date)?;
+        if m.id.is_empty() || !ids.insert(&m.id) {
+            return Err(erreur("Mouvement sans identifiant unique."));
+        }
+        match (m.sorte.as_str(), &m.vers) {
+            ("fluctuation", None) => {
+                if m.montant == 0 {
+                    return Err(erreur("Une fluctuation ne peut pas être nulle."));
+                }
+            }
+            ("retrait", None) | ("transfert", Some(_)) => {
+                if m.montant <= 0 {
+                    return Err(erreur("Le montant doit être plus grand que 0."));
+                }
+            }
+            _ => return Err(erreur("Mouvement invalide.")),
+        }
+        if m.vers.as_deref() == Some(c.id.as_str()) {
+            return Err(erreur("Un transfert doit aller vers un autre compte."));
+        }
+    }
+    Ok(())
+}
+
+fn lire_comptes(conn: &rusqlite::Connection) -> Resultat<Vec<CompteStocke>> {
+    let mut req = conn.prepare(
+        "SELECT id, sorte, type_libre, nom, vocation, institution, ferme_le
+         FROM comptes_epargne ORDER BY rowid",
+    )?;
+    let mut comptes = req
+        .query_map([], |r| {
+            Ok(CompteStocke {
+                id: r.get(0)?,
+                sorte: r.get(1)?,
+                type_libre: r.get(2)?,
+                nom: r.get(3)?,
+                vocation: r.get(4)?,
+                institution: r.get(5)?,
+                ferme_le: r.get(6)?,
+                references: Vec::new(),
+                mouvements: Vec::new(),
+                contributions: Vec::new(),
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    for c in &mut comptes {
+        c.references = conn
+            .prepare(
+                "SELECT date, montant, note FROM references_compte WHERE compte_id = ?1 ORDER BY date",
+            )?
+            .query_map([&c.id], |r| {
+                Ok(ReferenceCompteStockee {
+                    date: r.get(0)?,
+                    montant: r.get(1)?,
+                    note: r.get(2)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        c.mouvements = conn
+            .prepare(
+                "SELECT id, date, sorte, montant, vers, destination, note FROM mouvements_compte
+                 WHERE compte_id = ?1 ORDER BY date, rowid",
+            )?
+            .query_map([&c.id], |r| {
+                Ok(MouvementStocke {
+                    id: r.get(0)?,
+                    date: r.get(1)?,
+                    sorte: r.get(2)?,
+                    montant: r.get(3)?,
+                    vers: r.get(4)?,
+                    destination: r.get(5)?,
+                    note: r.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        c.contributions = conn
+            .prepare(
+                "SELECT element_id FROM contributions_compte WHERE compte_id = ?1 ORDER BY rowid",
+            )?
+            .query_map([&c.id], |r| r.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+    Ok(comptes)
 }
 
 fn verifier_taux(t: &str) -> Resultat<()> {
@@ -831,6 +1011,7 @@ impl Stockage {
         let confirmations = lire_confirmations(&self.conn)?;
         let prets = lire_prets(&self.conn)?;
         let cartes = lire_cartes(&self.conn)?;
+        let comptes = lire_comptes(&self.conn)?;
         Ok(DonneesPaie {
             profil,
             salaires,
@@ -841,6 +1022,7 @@ impl Stockage {
             confirmations,
             prets,
             cartes,
+            comptes,
         })
     }
 
@@ -952,6 +1134,16 @@ impl Stockage {
                     if carte {
                         return Err(erreur(
                             "Ce paiement appartient à la carte : gère-le depuis Mes dettes.",
+                        ));
+                    }
+                    let contribution: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM contributions_compte WHERE element_id = ?1)",
+                        [id],
+                        |r| r.get(0),
+                    )?;
+                    if contribution {
+                        return Err(erreur(
+                            "Cette contribution appartient à un compte : gère-la depuis Mon épargne.",
                         ));
                     }
                     // Ses montants, suspensions, périodes et ajustements partent avec lui.
@@ -1145,6 +1337,92 @@ impl Stockage {
                     // Relevés, soldes, frais et liens partent avec elle ; les
                     // éléments de paiement se suppriment ensuite.
                     tx.execute("DELETE FROM cartes WHERE id = ?1", [id])?;
+                }
+                ChangementPaie::DefinirCompte { compte: c } => {
+                    for e in &c.contributions {
+                        let g: Option<(String, String)> = tx
+                            .query_row(
+                                "SELECT nature, genre FROM elements WHERE id = ?1",
+                                [e],
+                                |r| Ok((r.get(0)?, r.get(1)?)),
+                            )
+                            .optional()?;
+                        if !matches!(
+                            g.as_ref().map(|(n, g)| (n.as_str(), g.as_str())),
+                            Some(("depense", "fixe"))
+                        ) {
+                            return Err(erreur(
+                                "Une contribution doit être une dépense fixe existante.",
+                            ));
+                        }
+                    }
+                    for m in &c.mouvements {
+                        if let Some(v) = &m.vers {
+                            let existe: bool = tx.query_row(
+                                "SELECT EXISTS (SELECT 1 FROM comptes_epargne WHERE id = ?1)",
+                                [v],
+                                |r| r.get(0),
+                            )?;
+                            if !existe {
+                                return Err(erreur("Le compte de destination n'existe pas."));
+                            }
+                        }
+                    }
+                    tx.execute(
+                        "INSERT INTO comptes_epargne (id, sorte, type_libre, nom, vocation, institution, ferme_le)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                         ON CONFLICT(id) DO UPDATE SET sorte = excluded.sorte,
+                           type_libre = excluded.type_libre, nom = excluded.nom,
+                           vocation = excluded.vocation, institution = excluded.institution,
+                           ferme_le = excluded.ferme_le",
+                        params![c.id, c.sorte, c.type_libre, c.nom, c.vocation, c.institution, c.ferme_le],
+                    )?;
+                    tx.execute(
+                        "DELETE FROM references_compte WHERE compte_id = ?1",
+                        [&c.id],
+                    )?;
+                    for r in &c.references {
+                        tx.execute(
+                            "INSERT INTO references_compte (compte_id, date, montant, note) VALUES (?1, ?2, ?3, ?4)",
+                            params![c.id, r.date, r.montant, r.note],
+                        )?;
+                    }
+                    tx.execute(
+                        "DELETE FROM mouvements_compte WHERE compte_id = ?1",
+                        [&c.id],
+                    )?;
+                    for m in &c.mouvements {
+                        tx.execute(
+                            "INSERT INTO mouvements_compte (id, compte_id, date, sorte, montant, vers, destination, note)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                            params![m.id, c.id, m.date, m.sorte, m.montant, m.vers, m.destination, m.note],
+                        )?;
+                    }
+                    tx.execute(
+                        "DELETE FROM contributions_compte WHERE compte_id = ?1",
+                        [&c.id],
+                    )?;
+                    for e in &c.contributions {
+                        tx.execute(
+                            "INSERT INTO contributions_compte (element_id, compte_id) VALUES (?1, ?2)",
+                            params![e, c.id],
+                        )?;
+                    }
+                }
+                ChangementPaie::SupprimerCompte { id } => {
+                    let historique: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM confirmations WHERE element_id IN
+                              (SELECT element_id FROM contributions_compte WHERE compte_id = ?1))
+                            OR EXISTS (SELECT 1 FROM mouvements_compte WHERE compte_id = ?1 OR vers = ?1)",
+                        [id],
+                        |r| r.get(0),
+                    )?;
+                    if historique {
+                        return Err(erreur("Ce compte a un historique : ferme-le plutôt."));
+                    }
+                    // Références et liens partent avec lui ; les éléments de
+                    // contribution se suppriment ensuite.
+                    tx.execute("DELETE FROM comptes_epargne WHERE id = ?1", [id])?;
                 }
             }
         }

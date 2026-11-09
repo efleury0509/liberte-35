@@ -39,6 +39,7 @@
     type CibleConfirmation,
   } from '../../actions/confirmations';
   import { estPret } from '../../actions/prets';
+  import { comptesDe, estContribution, nomCompte, proposerContributionPonctuelle } from '../../actions/comptes';
   import { choixRapides, estPaiementCarte, estSupplement, laCarte, libelleLigne, proposerSupplement, proposerSuppressionSupplement, raisonsACompleter } from '../../actions/cartes';
   import RevenusDepenses from './RevenusDepenses.svelte';
   import TableauCycles from './TableauCycles.svelte';
@@ -51,8 +52,10 @@
     onvoirpret?: (id: string) => void;
     /** Étape 8 : ouvrir la carte dans Mes dettes. */
     onvoircarte?: () => void;
+    /** Étape 9 : ouvrir un compte dans Mon épargne. */
+    onvoircompte?: (id: string) => void;
   }
-  let { plateforme, profilInstallation, onchangement, onvoirpret, onvoircarte }: Props = $props();
+  let { plateforme, profilInstallation, onchangement, onvoirpret, onvoircarte, onvoircompte }: Props = $props();
 
   const jour = aujourdhui();
   const ELEMENTS_EXEMPLE = ELEMENTS_ETAPE4.map(versElementStocke);
@@ -195,6 +198,7 @@
       modifPaie = false;
       formConfirmation = null;
       formSupplement = null;
+      formContribution = null;
       remise += 1;
       onchangement();
     } catch (e) {
@@ -300,7 +304,21 @@
   const dettesDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => l.nature === 'depense' && estPret(donnees!, l.elementId)) : []);
   /** Étape 8 (Q65) : paiements de la carte du cycle, dans un seul groupe « Visa ». */
   const carteDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => estPaiementCarte(donnees!, l.elementId)) : []);
-  const estDette = (id: string) => !!donnees && !exemple && (estPret(donnees, id) || estPaiementCarte(donnees, id));
+  const estDette = (id: string) => !!donnees && !exemple && (estPret(donnees, id) || estPaiementCarte(donnees, id) || estContribution(donnees, id));
+  /** Étape 9 : contributions du cycle, groupées sous « Épargne ». */
+  const epargneDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => estContribution(donnees!, l.elementId)) : []);
+  const comptesOuverts = $derived(donnees && !exemple ? comptesDe(donnees).filter((k) => k.fermeLe === null) : []);
+  const compteDeLigne = (id: string) => (donnees ? comptesDe(donnees).find((k) => k.contributions.includes(id)) : undefined);
+  let formContribution: string | null = $state(null);
+  let fConCompte = $state('');
+  let fConMontant = $state('');
+  let fConDate = $state('');
+  function ouvrirContribution(c: Cycle) {
+    formContribution = c.paie.dateOrigine;
+    fConCompte = comptesOuverts.length === 1 ? comptesOuverts[0]!.id : '';
+    fConMontant = '';
+    fConDate = jour >= c.debut && jour <= c.fin ? jour : c.debut;
+  }
   const carte = $derived(donnees && !exemple ? laCarte(donnees) : null);
 
   function ouvrirSupplement(c: Cycle) {
@@ -562,6 +580,8 @@
         <button type="button" onclick={() => proposer(() => proposerSuppressionSupplement(donnees!, cible.elementId, jour))}>Supprimer ce paiement…</button>
       {/if}
       <button type="button" onclick={() => onvoircarte?.()}>Voir la carte</button>
+    {:else if donnees && estContribution(donnees, cible.elementId)}
+      <button type="button" onclick={() => onvoircompte?.(compteDeLigne(cible.elementId)?.id ?? '')}>Voir le compte</button>
     {:else}
       <button
         type="button"
@@ -738,6 +758,31 @@
             </td>
           </tr>
         {/if}
+        {#if comptesOuverts.length > 0 || epargneDe(c).length > 0}
+          <tr class="groupe"><th scope="rowgroup" colspan="4">Épargne</th></tr>
+          {#each epargneDe(c) as l (`${l.elementId}|${l.origine}`)}
+            <tr class:retiree={l.retiree} data-ligne={l.elementId} data-epargne="contribution">
+              <th scope="row">
+                {libelleLigne(donnees!, l)}{l.echeance ? ` (le ${formaterDateCourte(l.echeance)})` : ''}
+                {@render marques(l)}
+              </th>
+              <td class="montant">−{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
+              <td>{@render statutLigne(l)}</td>
+              <td>{@render actionsLigne(c, l)}</td>
+            </tr>
+          {:else}
+            <tr><td colspan="4" class="discret">Aucune contribution dans ce cycle.</td></tr>
+          {/each}
+          {#if comptesOuverts.length > 0}
+            <tr>
+              <td colspan="4">
+                <span class="actions-ligne">
+                  <button type="button" class="petit" onclick={() => ouvrirContribution(c)}>+ Contribution ponctuelle</button>
+                </span>
+              </td>
+            </tr>
+          {/if}
+        {/if}
         <tr class="total">
           <th scope="row">Disponible planifié</th>
           <td class="montant">{c.disponible === null ? 'À compléter' : formaterMontant(c.disponible)}</td>
@@ -749,6 +794,29 @@
         {/if}
       </tbody>
     </table>
+    {#if formContribution === c.paie.dateOrigine}
+      <form
+        class="formulaire occurrence"
+        data-testid="formulaire-contribution-ponctuelle"
+        onsubmit={(e) => {
+          e.preventDefault();
+          proposer(() => proposerContributionPonctuelle(donnees!, { compteId: fConCompte, montant: fConMontant, date: fConDate }, jour));
+        }}
+      >
+        <p class="discret">Une contribution de plus, une seule fois : les contributions récurrentes ne changent pas.</p>
+        <label
+          >Compte
+          <select bind:value={fConCompte}>
+            <option value="" disabled>Choisir…</option>
+            {#each comptesOuverts as k (k.id)}<option value={k.id}>{nomCompte(donnees!, k)}</option>{/each}
+          </select>
+        </label>
+        <label>Montant ($) <input inputmode="decimal" bind:value={fConMontant} /></label>
+        <label>Date <input type="date" bind:value={fConDate} /></label>
+        <button type="submit" class="principal">Enregistrer</button>
+        <button type="button" onclick={() => (formContribution = null)}>Fermer</button>
+      </form>
+    {/if}
     {#if formSupplement === c.paie.dateOrigine}
       <form
         class="formulaire occurrence"

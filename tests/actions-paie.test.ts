@@ -15,7 +15,7 @@ import { paiesEntre } from '../src/noyau/paie';
 import { creerApercu, type DonneesPaie } from '../src/lib/plateforme';
 
 const ESP = ' ';
-const VIDE: DonneesPaie = { profil: null, salaires: [], exceptions: [], seuil: null, elements: [], ajustements: [], confirmations: [], prets: [], cartes: [] };
+const VIDE: DonneesPaie = { profil: null, salaires: [], exceptions: [], seuil: null, elements: [], ajustements: [], confirmations: [], prets: [], cartes: [], comptes: [] };
 const BASE: DonneesPaie = {
   profil: { frequence: 'deuxSemaines', depart: '2027-01-07', jours: null },
   salaires: [{ aPartirDu: '2027-01-07', montant: 210_000 }],
@@ -24,7 +24,7 @@ const BASE: DonneesPaie = {
   elements: [],
   ajustements: [],
   confirmations: [], prets: [],
-  cartes: [],
+  cartes: [], comptes: [],
 };
 const paieDu = (donnees: DonneesPaie, date: string) => {
   const { profil, exceptions } = versNoyau(donnees);

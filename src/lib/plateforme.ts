@@ -161,6 +161,44 @@ export interface PretStocke {
   soldes: SoldePretStocke[];
 }
 
+/** Étape 9 : solde de référence daté d'un compte d'épargne (départ ou correction). */
+export interface ReferenceCompteStockee {
+  date: string;
+  montant: number;
+  note: string | null;
+}
+
+export type SorteMouvement = 'fluctuation' | 'retrait' | 'transfert';
+
+/** Étape 9 (Q73, Q74) : jamais dans Mes paies. Une fluctuation peut être négative. */
+export interface MouvementStocke {
+  id: string;
+  date: string;
+  sorte: SorteMouvement;
+  montant: number;
+  /** Transfert : le compte de destination. */
+  vers: string | null;
+  /** Retrait : destination facultative, en texte libre. */
+  destination: string | null;
+  note: string | null;
+}
+
+export type SorteCompte = 'celi' | 'reer' | 'celiapp' | 'epargne' | 'autre';
+
+/** Étape 9 : compte d'épargne ; `contributions` = éléments de dépense fixe rattachés. */
+export interface CompteStocke {
+  id: string;
+  sorte: SorteCompte;
+  typeLibre: string | null;
+  nom: string | null;
+  vocation: string | null;
+  institution: string | null;
+  fermeLe: string | null;
+  references: ReferenceCompteStockee[];
+  mouvements: MouvementStocke[];
+  contributions: string[];
+}
+
 export interface DonneesPaie {
   profil: ProfilPaieStocke | null;
   salaires: SalaireStocke[];
@@ -172,6 +210,8 @@ export interface DonneesPaie {
   prets: PretStocke[];
   /** Étape 8 : la carte Visa (une seule pour l'instant, Q55). */
   cartes: CarteStocke[];
+  /** Étape 9 : comptes d'épargne, dans l'ordre de création. */
+  comptes: CompteStocke[];
 }
 
 export type ChangementPaie =
@@ -190,7 +230,9 @@ export type ChangementPaie =
   | { type: 'definirPret'; pret: PretStocke }
   | { type: 'supprimerPret'; id: string }
   | { type: 'definirCarte'; carte: CarteStocke }
-  | { type: 'supprimerCarte'; id: string };
+  | { type: 'supprimerCarte'; id: string }
+  | { type: 'definirCompte'; compte: CompteStocke }
+  | { type: 'supprimerCompte'; id: string };
 
 export interface EntreeJournal {
   section: string;
@@ -414,7 +456,7 @@ export function creerApercu(): Plateforme {
       motif: p.motif,
       lisible: true,
       raison: null,
-      versionSchema: 7,
+      versionSchema: 8,
       resume: resume(p),
     }));
   const trouver = (source: SourceCopie): Instantane & { nom: string } => {
@@ -443,7 +485,7 @@ export function creerApercu(): Plateforme {
       source,
       nom: c.nom,
       horodatage: c.horodatage,
-      versionSchema: 7,
+      versionSchema: 8,
       miseANiveau: false,
       resume: resume(c),
       nombreRetires: retires.length,
@@ -460,7 +502,7 @@ export function creerApercu(): Plateforme {
       return {
         profil: 'apercu',
         versionApplication: VERSION_APPLICATION,
-        versionSchema: 7,
+        versionSchema: 8,
         dossierDonnees: '(aucun : aperçu en mémoire)',
         integriteOk: true,
         nombreEntreesJournal: journal.length,

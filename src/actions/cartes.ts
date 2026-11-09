@@ -19,6 +19,7 @@ import { planifier, type Cycle, type Ligne } from '../noyau/cycles';
 import { construireFrequence, exigerProfil, finaliser, nomObjet, trouver } from './elements';
 import { A_COMPLETER, ErreurSaisie, lireDate, lireMontant, versNoyau, type LigneApercu, type Proposition } from './paie';
 import { estPret, lireTaux, objetPret } from './prets';
+import { compteDeContribution, nomCompte, objetCompte } from './comptes';
 
 export const SECTION_DETTES = 'Mes dettes';
 export const PHRASE_ECHEANCE = 'Liberté 35 ne vérifie pas si un paiement a été reçu à temps : seul ton relevé suivant le dit.';
@@ -52,6 +53,8 @@ export function objetJournal(d: DonneesPaie, e: ElementStocke): string {
   const k = carteDuPaiement(d, e.id);
   if (k) return objetCarte(nomCarte(d, k));
   if (estPret(d, e.id)) return objetPret(e.libelle);
+  const compte = compteDeContribution(d, e.id);
+  if (compte) return objetCompte(nomCompte(d, compte));
   return nomObjet(e);
 }
 
@@ -60,6 +63,8 @@ export function libelleLigne(d: DonneesPaie, l: Pick<Ligne, 'elementId' | 'libel
   const k = carteDuPaiement(d, l.elementId);
   if (k && k.id !== l.elementId) return `Paiement supplémentaire — ${nomCarte(d, k)}`;
   if (k || estPret(d, l.elementId)) return `Paiement — ${l.libelle}`;
+  const compte = compteDeContribution(d, l.elementId);
+  if (compte) return `Contribution — ${nomCompte(d, compte)}`;
   return l.libelle;
 }
 

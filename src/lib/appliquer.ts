@@ -3,7 +3,7 @@
 // une erreur est un texte prêt à afficher. Sert à l'aperçu dans un navigateur,
 // au calcul des conséquences avant d'enregistrer et à « Annuler » (étape 4b).
 
-import type { CarteStocke, ChangementPaie, DonneesPaie } from './plateforme';
+import type { CarteStocke, ChangementPaie, CompteStocke, DonneesPaie } from './plateforme';
 
 export const donneesVides = (): DonneesPaie => ({
   profil: null,
@@ -15,6 +15,7 @@ export const donneesVides = (): DonneesPaie => ({
   confirmations: [],
   prets: [],
   cartes: [],
+  comptes: [],
 });
 
 // Copie par sérialisation, comme le pont Tauri : les objets réactifs de
@@ -66,6 +67,7 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
       }
       if (d.prets.some((p) => p.id === c.id)) refus('Ce versement appartient à un prêt : supprime le prêt depuis Mes dettes.');
       if (d.cartes.some((k) => k.id === c.id || k.supplements.includes(c.id))) refus('Ce paiement appartient à la carte : gère-le depuis Mes dettes.');
+      if ((d.comptes ?? []).some((k) => k.contributions.includes(c.id))) refus('Cette contribution appartient à un compte : gère-la depuis Mon épargne.');
       d.elements = d.elements.filter((e) => e.id !== c.id);
       d.ajustements = d.ajustements.filter((a) => a.elementId !== c.id);
       break;
@@ -132,6 +134,44 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
       const i = d.cartes.findIndex((x) => x.id === k.id);
       if (i >= 0) d.cartes[i] = carte;
       else d.cartes = [...d.cartes, carte];
+      break;
+    }
+    case 'definirCompte': {
+      const k = c.compte;
+      d.comptes ??= [];
+      const fixe = (id: string) => d.elements.some((e) => e.id === id && e.nature === 'depense' && e.genre === 'fixe');
+      if (!['celi', 'reer', 'celiapp', 'epargne', 'autre'].includes(k.sorte)) refus(`Type de compte inconnu : « ${k.sorte} ».`);
+      if (k.sorte === 'autre' ? !k.typeLibre?.trim() : k.typeLibre !== null) refus('Donne un nom au type « Autre ».');
+      if (k.contributions.some((e) => !fixe(e)) || new Set(k.contributions).size !== k.contributions.length) refus('Une contribution doit être une dépense fixe existante.');
+      if (k.references.some((r) => r.montant < 0)) refus('Un solde de référence ne peut pas être négatif.');
+      if (new Set(k.references.map((r) => r.date)).size !== k.references.length) refus('Deux soldes de référence à la même date.');
+      for (const m of k.mouvements) {
+        if (m.sorte === 'fluctuation' ? m.montant === 0 : m.montant <= 0) refus('Le montant doit être plus grand que 0.');
+        if ((m.sorte === 'transfert') !== (m.vers !== null)) refus('Mouvement invalide.');
+        if (m.vers === k.id) refus('Un transfert doit aller vers un autre compte.');
+        if (m.vers !== null && !d.comptes.some((x) => x.id === m.vers)) refus('Le compte de destination n’existe pas.');
+      }
+      const compte: CompteStocke = {
+        ...k,
+        references: [...k.references].sort(parDate((r) => r.date)),
+        mouvements: [...k.mouvements].sort(parDate((m) => m.date)),
+      };
+      const i = d.comptes.findIndex((x) => x.id === k.id);
+      if (i >= 0) d.comptes[i] = compte;
+      else d.comptes = [...d.comptes, compte];
+      break;
+    }
+    case 'supprimerCompte': {
+      d.comptes ??= [];
+      const k = d.comptes.find((x) => x.id === c.id);
+      if (
+        (k && d.confirmations.some((f) => f.elementId !== null && k.contributions.includes(f.elementId))) ||
+        (k && k.mouvements.length > 0) ||
+        d.comptes.some((x) => x.mouvements.some((m) => m.vers === c.id))
+      ) {
+        refus('Ce compte a un historique : ferme-le plutôt.');
+      }
+      d.comptes = d.comptes.filter((x) => x.id !== c.id);
       break;
     }
     case 'supprimerCarte': {
@@ -245,6 +285,14 @@ function inverseUn(d: DonneesPaie, c: ChangementPaie): ChangementPaie[] {
     case 'supprimerCarte': {
       const avant = d.cartes.find((k) => k.id === c.id);
       return avant ? [{ type: 'definirCarte', carte: avant }] : [];
+    }
+    case 'definirCompte': {
+      const avant = (d.comptes ?? []).find((k) => k.id === c.compte.id);
+      return [avant ? { type: 'definirCompte', compte: avant } : { type: 'supprimerCompte', id: c.compte.id }];
+    }
+    case 'supprimerCompte': {
+      const avant = (d.comptes ?? []).find((k) => k.id === c.id);
+      return avant ? [{ type: 'definirCompte', compte: avant }] : [];
     }
   }
 }

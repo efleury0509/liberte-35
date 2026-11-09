@@ -5,6 +5,7 @@
   import Parametres from './composants/Parametres.svelte';
   import MesPaies from './composants/paies/MesPaies.svelte';
   import MesDettes from './composants/dettes/MesDettes.svelte';
+  import MonEpargne from './composants/epargne/MonEpargne.svelte';
   import { SECTION_PAR_DEFAUT, trouverSection, type IdSection } from './lib/navigation';
   import { obtenirPlateforme, type EtatApplication } from './lib/plateforme';
   import { TEXTES } from './lib/textes.fr';
@@ -25,6 +26,12 @@
   /** Étape 8 : « Voir la carte » depuis Mes paies. */
   function voirCarte() {
     voirPret('carte');
+  }
+  /** Étape 9 : « Voir le compte » depuis Mes paies. */
+  let compteOuvert: string | null = $state(null);
+  function voirCompte(id: string) {
+    compteOuvert = id;
+    sectionActive = 'mon-epargne';
   }
 
   async function chargerEtat() {
@@ -56,6 +63,7 @@
     version={etat?.versionApplication}
     onchoisir={(id) => {
       pretOuvert = null;
+      compteOuvert = null;
       sectionActive = id;
     }}
   />
@@ -79,10 +87,14 @@
       {#if section.id === 'parametres'}
         <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} />
       {:else if section.id === 'mes-paies' && !erreur}
-        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} onvoircarte={voirCarte} />
+        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} onvoircarte={voirCarte} onvoircompte={voirCompte} />
       {:else if section.id === 'mes-dettes' && !erreur}
         {#key pretOuvert}
           <MesDettes {plateforme} onchangement={chargerEtat} ouvert={pretOuvert} />
+        {/key}
+      {:else if section.id === 'mon-epargne' && !erreur}
+        {#key compteOuvert}
+          <MonEpargne {plateforme} onchangement={chargerEtat} ouvert={compteOuvert} />
         {/key}
       {:else}
         <SectionAVenir etape={section.etape} />

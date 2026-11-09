@@ -520,6 +520,9 @@ export function proposerSuppression(d: DonneesPaie, id: string, jour: DateCivile
   if ((d.cartes ?? []).some((k) => k.id === id || k.supplements.includes(id))) {
     throw new ErreurSaisie('Ce paiement appartient à la carte : gère-le depuis Mes dettes.');
   }
+  if ((d.comptes ?? []).some((k) => k.contributions.includes(id))) {
+    throw new ErreurSaisie('Cette contribution appartient à un compte : gère-la depuis Mon épargne.');
+  }
   // Q16 : après une confirmation, on termine ; on ne supprime plus.
   if ((d.confirmations ?? []).some((f) => f.elementId === id)) {
     throw new ErreurSaisie(`« ${e.libelle} » a des opérations confirmées : il ne peut plus être supprimé ; termine-le plutôt (Gérer → Terminer).`);
