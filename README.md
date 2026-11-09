@@ -103,6 +103,13 @@ et dans le cahier fonctionnel de référence.
   couverte sort du disponible ; payées avec la réserve dans un seul aperçu ;
   suggestion par paie (redistribuer, augmenter, créer) ; les 12 prochains
   mois. Base de données en version 9.
+- V1, fabrication intermédiaire (version 0.11.0) : nouvelle identité visuelle
+  « rétro funky » (thème crème et prune, polices Fraunces et Nunito embarquées,
+  icônes Lucide), barre latérale prune avec les sections développées, en-têtes
+  de section, fenêtre de confirmation modale (« Abandonner »), fenêtre sobre
+  pour revenir sur un paiement, choix explicite de la source d'un paiement lié
+  à une réserve. Aucun calcul ni structure de données changés (toujours 9).
+  Polices sous licence OFL : voir le dossier `licences/`.
 
 ## Organisation du code
 
