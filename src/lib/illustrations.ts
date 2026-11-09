@@ -11,7 +11,9 @@ export type NomIllustration =
   | 'popcorn'
   | 'livres-plante'
   | 'cloche'
-  | 'calendrier';
+  | 'calendrier'
+  | 'arc-en-ciel'
+  | 'vagues';
 
 export interface Illustration {
   /** Texte de remplacement ; vide pour une illustration purement décorative. */
@@ -30,4 +32,6 @@ export const ILLUSTRATIONS: Record<NomIllustration, Illustration> = {
   'livres-plante': { alt: '', fichier: null },
   cloche: { alt: '', fichier: null },
   calendrier: { alt: '', fichier: null },
+  'arc-en-ciel': { alt: '', fichier: null },
+  vagues: { alt: '', fichier: null },
 };

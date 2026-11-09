@@ -31,6 +31,10 @@
   --sorbet-lilas-pale: #f0e6f6;
   --sorbet-sauge-pale: #e7f0dc;
   --sorbet-beurre-pale: #fcefcf;
+  --sorbet-peche-moyen: #fbc3a3;
+  --sorbet-sauge-moyen: #cfe3bb;
+  --sorbet-rose-moyen: #f8d3da;
+  --sorbet-lilas-moyen: #e3d3f1;
 
   /* Rôles (utilisés par les composants) */
   --couleur-fond: var(--creme-100);
@@ -89,16 +93,35 @@
   --taille-h3: 16px;
   --taille-montant: 36px;
 
+  /* Échelle V1 généreuse (lot 1b). Les écrans y passent lot par lot :
+     16 px pour le texte courant, une densité adaptée pour les tableaux. */
+  --texte-courant: 16px;
+  --texte-dense: 14px;
+  --texte-petit: 13px;
+  --titre-page: 48px;
+  --sous-titre-page: 19px;
+  --titre-carte: 21px;
+  --titre-bloc: 18px;
+  --montant-cle: 56px;
+  --montant-moyen: 40px;
+  --hauteur-bandeau-carte: 58px;
+
   /* Espacements et formes */
   --espace-1: 4px;
   --espace-2: 8px;
   --espace-3: 12px;
   --espace-4: 16px;
   --espace-6: 24px;
+  --espace-5: 20px;
   --espace-8: 32px;
+  --espace-10: 40px;
+  --espace-12: 48px;
   --arrondi: 10px;
   --arrondi-carte: 18px;
   --arrondi-pilule: 999px;
+  --arrondi-grand: 22px;
+  --arrondi-panneau: 14px;
+  --bordure-structure: 2px solid var(--prune-700);
   --epaisseur-bordure: 1.5px;
   --ombre-carte: 0 2px 0 rgb(61 15 49 / 0.06);
   --ombre-flottante: 0 8px 28px rgb(61 15 49 / 0.22);

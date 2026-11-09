@@ -52,6 +52,8 @@ describe('Thème V1 — lisibilité', () => {
     ['--etat-alerte-texte', '--etat-alerte-fond'],
     ['--etat-neutre-texte', '--etat-neutre-fond'],
     ['--couleur-attention', '--couleur-attention-fond'],
+    ...['sauge', 'peche', 'rose', 'lilas'].map((t) => ['--couleur-titre', `--sorbet-${t}-moyen`]),
+    ...['sauge', 'peche', 'rose', 'lilas', 'beurre'].map((t) => ['--couleur-texte', `--sorbet-${t}-pale`]),
     ['--couleur-erreur', '--couleur-erreur-fond'],
   ])('%s sur %s : contraste AA (≥ 4,5)', (texte, fond) => {
     expect(contraste(texte, fond)).toBeGreaterThanOrEqual(4.5);
@@ -81,6 +83,17 @@ describe('Thème V1 — polices embarquées', () => {
   it('les titres et le texte utilisent ces polices', () => {
     expect(brut.get('--police-titre')).toMatch(/^'Fraunces'/);
     expect(brut.get('--police')).toMatch(/^'Nunito'/);
+  });
+});
+
+describe('Échelle V1 (lot 1b)', () => {
+  it('16 px pour le texte courant, une densité plus serrée pour les tableaux', () => {
+    expect(brut.get('--texte-courant')).toBe('16px');
+    expect(parseInt(brut.get('--texte-dense')!)).toBeLessThan(16);
+  });
+  it('la galerie et le banc d’essai ne s’ouvrent jamais dans l’application installée', () => {
+    const main = readFileSync('src/main.ts', 'utf8');
+    expect(main).toContain("dansTauri() ? null : parametres.get('galerie')");
   });
 });
 

@@ -9,17 +9,19 @@
     /** Nom lisible par les lecteurs d'écran (ex. « Fonds d'urgence »). */
     libelle: string;
     teinte?: 'fraiche' | 'chaude';
+    /** Masquer le pourcentage écrit (la barre garde son nom accessible). */
+    sansPourcentage?: boolean;
   }
-  let { valeur, cible, libelle, teinte = 'fraiche' }: Props = $props();
+  let { valeur, cible, libelle, teinte = 'fraiche', sansPourcentage = false }: Props = $props();
   const p = $derived(progression(valeur, cible));
 </script>
 
 {#if p.calculable}
   <div class="progression" data-testid="progression">
-    <div class="piste" role="progressbar" aria-label={libelle} aria-valuemin={0} aria-valuemax={100} aria-valuenow={p.largeur}>
+    <div class="piste {teinte}" role="progressbar" aria-label={libelle} aria-valuemin={0} aria-valuemax={100} aria-valuenow={p.largeur}>
       <div class="remplie {teinte}" style:width="{p.largeur}%"></div>
     </div>
-    <span class="pourcentage">{p.pourcentage} %</span>
+    {#if !sansPourcentage}<span class="pourcentage">{p.pourcentage} %</span>{/if}
   </div>
 {:else}
   <span class="a-completer" data-testid="progression-a-completer">Progression : à compléter</span>
@@ -33,10 +35,13 @@
   }
   .piste {
     flex: 1;
-    height: 10px;
+    height: 12px;
     border-radius: var(--arrondi-pilule);
-    background: var(--progression-fond);
+    background: var(--sorbet-sauge-pale);
     overflow: hidden;
+  }
+  .piste.chaude {
+    background: var(--sorbet-peche-pale);
   }
   .remplie {
     height: 100%;

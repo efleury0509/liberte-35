@@ -3,6 +3,7 @@ import './styles/base.css';
 import { mount } from 'svelte';
 import App from './App.svelte';
 import Galerie from './composants/base/Galerie.svelte';
+import AccueilDemo from './composants/base/AccueilDemo.svelte';
 import { dansTauri } from './lib/plateforme';
 
 const cible = document.getElementById('app');
@@ -11,6 +12,7 @@ if (!cible) {
 }
 
 // La galerie des fondations visuelles n'existe que dans l'aperçu navigateur.
-const galerie = !dansTauri() && new URLSearchParams(location.search).has('galerie');
+const parametres = new URLSearchParams(location.search);
+const galerie = dansTauri() ? null : parametres.get('galerie');
 
-export default mount(galerie ? Galerie : App, { target: cible });
+export default mount(galerie === null ? App : galerie === 'accueil' ? AccueilDemo : Galerie, { target: cible });
