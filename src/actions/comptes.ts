@@ -14,6 +14,7 @@ import type { CompteStocke, DonneesPaie, ElementStocke, EntreeJournal, Mouvement
 import { ajouterJours, formaterDateCourte, type DateCivile } from '../noyau/dates';
 import { arrondirDecimal, formaterMontant, type Cents } from '../noyau/montants';
 import { planifier } from '../noyau/cycles';
+import { appliquerChangements } from '../lib/appliquer';
 import { construireFrequence, decrireQuand, exigerProfil, finaliser, proposerFin, proposerMontant, trouver, type Quand } from './elements';
 import { A_COMPLETER, ErreurSaisie, lireDate, lireMontant, versNoyau, type LigneApercu, type Proposition } from './paie';
 
@@ -376,18 +377,46 @@ export function proposerReference(d: DonneesPaie, id: string, s: { montant: stri
   );
 }
 
+/**
+ * Correction 0.9.1 (W1 à W6) : ce qu'un retrait change, avant → après,
+ * calculé avec les règles existantes sur les comptes touchés et le total.
+ */
+function effetsDuRetrait(d: DonneesPaie, changements: Proposition['changements'], ids: readonly string[]): { lignes: LigneApercu[]; notes: string[] } {
+  const apres = appliquerChangements(d, changements);
+  const valeur = (donnees: DonneesPaie, id: string) => {
+    const k = comptesDe(donnees).find((x) => x.id === id);
+    const v = k ? valeurDuCompte(donnees, k) : null;
+    return v ? formaterMontant(v.montant) : A_COMPLETER;
+  };
+  const lignes: LigneApercu[] = [];
+  const notes: string[] = [];
+  for (const id of ids) {
+    const k = comptesDe(d).find((x) => x.id === id);
+    if (!k) continue;
+    const [a, b] = [valeur(d, id), valeur(apres, id)];
+    lignes.push({ libelle: `Valeur suivie (${nomCompte(d, k)})`, avant: a, apres: b });
+    if (k.fermeLe === null && a !== A_COMPLETER && b === A_COMPLETER) notes.push(`${nomCompte(d, k)} ne sera plus compté dans le total (à compléter).`);
+  }
+  const [ta, tb] = [totalEpargne(d).montant ?? '—', totalEpargne(apres).montant ?? '—'];
+  lignes.push({ libelle: 'Total suivi', avant: ta, apres: ta === tb ? 'inchangé' : tb });
+  return { lignes, notes };
+}
+
 export function proposerRetraitReference(d: DonneesPaie, id: string, date: string, jour: DateCivile): Proposition {
   const { compte, nom } = exigerCompte(d, id);
   const r = compte.references.find((x) => x.date === date);
   if (!r) throw new ErreurSaisie('Ce solde de référence n’existe plus.');
   const texte = `${formaterMontant(r.montant)} au ${avecAnnee(r.date)}`;
+  const changements: Proposition['changements'] = [{ type: 'definirCompte', compte: { ...compte, references: compte.references.filter((x) => x.date !== date) } }];
+  const effets = effetsDuRetrait(d, changements, [compte.id]);
   return finaliser(
     d,
     {
       titre: `Retirer le solde de référence du ${avecAnnee(date)}`,
-      lignes: [{ libelle: 'Solde de référence', avant: texte, apres: 'Retiré' }],
-      changements: [{ type: 'definirCompte', compte: { ...compte, references: compte.references.filter((x) => x.date !== date) } }],
+      lignes: [{ libelle: 'Solde de référence', avant: texte, apres: 'Retiré' }, ...effets.lignes],
+      changements,
       journal: [entree(nom, 'solde de référence retiré', texte, null)],
+      apres: effets.notes,
       apercuForce: true,
     },
     jour,
@@ -550,13 +579,16 @@ export function proposerRetraitMouvement(d: DonneesPaie, compteId: string, mouve
     const dest = comptesDe(d).find((x) => x.id === m.vers);
     if (dest) journal.push(entree(nomCompte(d, dest), 'transfert reçu retiré', texte, null));
   }
+  const changements: Proposition['changements'] = [{ type: 'definirCompte', compte: { ...compte, mouvements: compte.mouvements.filter((x) => x.id !== mouvementId) } }];
+  const effets = effetsDuRetrait(d, changements, m.vers ? [compte.id, m.vers] : [compte.id]);
   return finaliser(
     d,
     {
       titre: `Retirer : ${texte}`,
-      lignes: [{ libelle: 'Mouvement', avant: texte, apres: 'Retiré' }],
-      changements: [{ type: 'definirCompte', compte: { ...compte, mouvements: compte.mouvements.filter((x) => x.id !== mouvementId) } }],
+      lignes: [{ libelle: 'Mouvement', avant: texte, apres: 'Retiré' }, ...effets.lignes],
+      changements,
       journal,
+      apres: effets.notes,
       apercuForce: true,
     },
     jour,

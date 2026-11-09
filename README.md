@@ -90,6 +90,9 @@ et dans le cahier fonctionnel de référence.
   où elles s'ajustent et se confirment ; les mouvements n'y entrent jamais.
   Fermer, rouvrir (reprises choisies) ou supprimer un compte sans historique ;
   total motivant, distinct du disponible. Base de données en version 8.
+- Correction 0.9.1 : l'aperçu du retrait d'un solde de référence ou d'un
+  mouvement montre ses effets, avant → après, sur la valeur suivie de chaque
+  compte touché et sur le total. Aucun calcul ni structure changés (8).
 
 ## Organisation du code
 

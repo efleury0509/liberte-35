@@ -18,6 +18,7 @@ import {
   proposerReouverture,
   proposerRetraitCompte,
   proposerRetraitMouvement,
+  proposerRetraitReference,
   proposerSuppressionCompte,
   proposerSuppressionContribution,
   proposerTransfert,
@@ -460,5 +461,85 @@ describe('J, N — Journal et non-régression', () => {
     expect(retabli.comptes).toEqual(avant.comptes);
     expect(apres.prets).toEqual([]);
     expect(apres.cartes).toEqual([]);
+  });
+});
+
+// Correction 0.9.1 : l'aperçu d'un retrait montre ses effets (W1 à W6).
+describe('W — Effets dans l’aperçu d’un retrait (0.9.1)', () => {
+  const effets = (p: Proposition) => p.lignes.slice(1).map((l) => [l.libelle, l.avant, l.apres]);
+  /** CELI 2 000 $ au 1er janv., corrigé à 2 500 $ au 1er févr. ; épargne 0 $ ; REER à compléter. */
+  const depart = () => {
+    const t = trois();
+    t.d = appliquer(t.d, proposerReference(t.d, t.celi, { montant: '2500', date: '2027-02-01', note: '' }, JOUR));
+    return t;
+  };
+
+  it('W1 : retirer la correction du 1er févr. : valeur et total, avant → après', () => {
+    const { d, celi } = depart();
+    const p = proposerRetraitReference(d, celi, '2027-02-01', JOUR);
+    expect(p.apercu).toBe(true);
+    expect(effets(p)).toEqual([
+      [`Valeur suivie (${CELI})`, $('2 500,00 $'), $('2 000,00 $')],
+      ['Total suivi', $('2 500,00 $'), $('2 000,00 $')],
+    ]);
+  });
+
+  it('W2 : retirer le seul solde de référence : « À compléter », compte plus compté', () => {
+    const { d, ep } = depart();
+    const p = proposerRetraitReference(d, ep, '2027-01-01', JOUR);
+    expect(effets(p)).toEqual([
+      ['Valeur suivie (Compte épargne)', $('0,00 $'), 'À compléter'],
+      ['Total suivi', $('2 500,00 $'), 'inchangé'],
+    ]);
+    expect(p.consequences).toContain('Compte épargne ne sera plus compté dans le total (à compléter).');
+  });
+
+  it('W3 : retirer une fluctuation de −80 $ ou un retrait de 300 $', () => {
+    let { d, celi } = depart();
+    d = fluctuation(d, celi, { montant: '-80', date: '2027-02-10' });
+    d = appliquer(d, proposerRetraitCompte(d, celi, { montant: '300', date: '2027-02-11', destination: '', note: '' }, JOUR));
+    const [fl, re] = d.comptes[0]!.mouvements;
+    expect(effets(proposerRetraitMouvement(d, celi, fl!.id, JOUR))).toEqual([
+      [`Valeur suivie (${CELI})`, $('2 120,00 $'), $('2 200,00 $')],
+      ['Total suivi', $('2 120,00 $'), $('2 200,00 $')],
+    ]);
+    expect(effets(proposerRetraitMouvement(d, celi, re!.id, JOUR))).toEqual([
+      [`Valeur suivie (${CELI})`, $('2 120,00 $'), $('2 420,00 $')],
+      ['Total suivi', $('2 120,00 $'), $('2 420,00 $')],
+    ]);
+  });
+
+  it('W4 : retirer un transfert : les deux comptes, total inchangé', () => {
+    let { d, celi, ep } = trois();
+    d = appliquer(d, proposerTransfert(d, celi, { vers: ep, montant: '500', date: '2027-02-12', note: '' }, JOUR));
+    expect(effets(proposerRetraitMouvement(d, celi, d.comptes[0]!.mouvements[0]!.id, JOUR))).toEqual([
+      [`Valeur suivie (${CELI})`, $('1 500,00 $'), $('2 000,00 $')],
+      ['Valeur suivie (Compte épargne)', $('500,00 $'), $('0,00 $')],
+      ['Total suivi', $('2 000,00 $'), 'inchangé'],
+    ]);
+  });
+
+  it('W5 : retirer un transfert vers le REER « À compléter » : le total monte', () => {
+    let { d, celi, reer } = trois();
+    d = appliquer(d, proposerTransfert(d, celi, { vers: reer, montant: '200', date: '2027-02-12', note: '' }, JOUR));
+    expect(effets(proposerRetraitMouvement(d, celi, d.comptes[0]!.mouvements[0]!.id, JOUR))).toEqual([
+      [`Valeur suivie (${CELI})`, $('1 800,00 $'), $('2 000,00 $')],
+      ['Valeur suivie (REER)', 'À compléter', 'À compléter'],
+      ['Total suivi', $('1 800,00 $'), $('2 000,00 $')],
+    ]);
+  });
+
+  it('W6 : retirer un mouvement d’un compte fermé : valeur affichée, total inchangé', () => {
+    let { d, ep } = trois();
+    d = fluctuation(d, ep, { montant: '40', date: '2027-02-10' });
+    d = appliquer(d, proposerFermeture(d, ep, '2027-03-01', JOUR));
+    const p = proposerRetraitMouvement(d, ep, d.comptes[1]!.mouvements[0]!.id, JOUR);
+    expect(effets(p)).toEqual([
+      ['Valeur suivie (Compte épargne)', $('40,00 $'), $('0,00 $')],
+      ['Total suivi', $('2 000,00 $'), 'inchangé'],
+    ]);
+    // Rien d'autre ne change : mêmes changements, même journal qu'en 0.9.0.
+    expect(p.changements).toHaveLength(1);
+    expect(p.journal.map((e) => e.champ)).toEqual(['mouvement retiré']);
   });
 });

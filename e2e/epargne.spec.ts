@@ -102,3 +102,24 @@ test('F3, M2 : valeur en ligne → fluctuation proposée avec aperçu ; transfer
   await page.getByTestId('enregistre').getByRole('button', { name: 'Annuler' }).click();
   await expect(celi.getByTestId('valeur')).toHaveText($('2 060,00 $'));
 });
+
+test('W4 (0.9.1) : l’aperçu du retrait d’un transfert montre les deux comptes et le total', async ({ page }) => {
+  await preparer(page);
+  await nav(page, 'Mon épargne');
+  await ajouterCompte(page, 'CELI', CELI, '2000');
+  await ajouterCompte(page, 'Compte épargne', '', '0');
+  const celi = compte(page, CELI);
+  await celi.getByRole('button', { name: 'Voir le détail' }).click();
+  await celi.getByRole('button', { name: 'Transfert…' }).click();
+  const t = page.getByTestId('formulaire-transfert');
+  await t.getByLabel('Vers le compte').selectOption({ label: 'Compte épargne' });
+  await t.getByLabel('Montant ($)').fill('500');
+  await t.getByRole('button', { name: 'Enregistrer' }).click();
+  await celi.getByTestId('historique').getByRole('button', { name: 'Retirer…' }).first().click();
+  const apercu = page.getByTestId('apercu');
+  await expect(apercu).toContainText(`Valeur suivie (${CELI})`);
+  await expect(apercu).toContainText('Valeur suivie (Compte épargne)');
+  await expect(apercu).toContainText('inchangé');
+  await apercu.getByRole('button', { name: 'Annuler' }).click();
+  await expect(celi.getByTestId('valeur')).toHaveText($('1 500,00 $'));
+});
