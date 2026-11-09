@@ -169,7 +169,7 @@ label.en-ligne {
 /* ---- Composants de base partagés ---- */
 .carte {
   background: var(--couleur-surface);
-  border: var(--epaisseur-bordure) solid var(--couleur-bordure);
+  border: 2px solid var(--couleur-bordure);
   border-radius: var(--arrondi-carte);
   box-shadow: var(--ombre-carte);
   padding: var(--espace-4) var(--espace-6);
@@ -178,7 +178,7 @@ label.en-ligne {
 .encadre {
   padding: var(--espace-3);
   background: var(--couleur-surface);
-  border: var(--epaisseur-bordure) solid var(--couleur-bordure);
+  border: var(--epaisseur-bordure) solid var(--couleur-bordure-forte);
   border-radius: var(--arrondi);
 }
 .encadre > p {

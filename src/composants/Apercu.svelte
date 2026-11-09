@@ -50,7 +50,7 @@
         <tr><th scope="col"></th><th scope="col">{variante === 'annulation' ? 'Maintenant' : 'Avant'}</th><th scope="col">{variante === 'annulation' ? 'Après l’annulation' : 'Après'}</th></tr>
       </thead>
       <tbody>
-        {#each proposition.lignes as l (l.libelle)}
+        {#each proposition.lignes as l, i (i)}
           <tr>
             <th scope="row">{l.libelle}</th>
             <td>{l.avant}</td>
@@ -62,7 +62,7 @@
     {#if proposition.consequences.length > 0}
       <h3>{variante === 'annulation' ? 'Effets sur les soldes' : 'Conséquences'}</h3>
       <ul data-testid="consequences">
-        {#each proposition.consequences as c (c)}
+        {#each proposition.consequences as c, i (i)}
           <li>{c}</li>
         {/each}
       </ul>

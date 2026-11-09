@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   // Étape A : les réserves d'un compte (virtuelles : elles découpent la valeur
   // suivie, elles ne l'augmentent jamais). Réserves + non réservé = valeur suivie.
-  import { tick } from 'svelte';
   import type { Proposition } from '../../actions/paie';
   import {
     proposerAffectation,
@@ -11,7 +11,6 @@
     proposerModificationReserve,
     proposerReaffectation,
     proposerRepartition,
-    proposerReserve,
     proposerRepriseReserve,
     proposerRetourRepartition,
     proposerSuppressionReserve,
@@ -20,6 +19,8 @@
     type VueReserve,
   } from '../../actions/reserves';
   import { partsDe } from '../../actions/couvertures';
+  import { proposerReserveAvecAffectation } from '../../actions/epargneV1';
+  import FenetreFormulaire from '../base/FenetreFormulaire.svelte';
   import { avecAnnee } from '../../actions/comptes';
   import { formaterMontant } from '../../noyau/montants';
   import type { DateCivile } from '../../noyau/dates';
@@ -32,8 +33,13 @@
     contributions: { id: string; texte: string; arretee: boolean }[];
     jour: DateCivile;
     proposer: (f: () => Proposition) => void;
+    /** Message d'erreur de la dernière proposition (affiché dans la fenêtre ouverte). */
+    erreur?: string | null;
+    contexteCompte?: string;
+    /** Prévient le parent qu'une fenêtre de réserve est ouverte ou fermée. */
+    onformulaire?: (ouvert: boolean) => void;
   }
-  let { donnees, compteId, ferme, contributions, jour, proposer }: Props = $props();
+  let { donnees, compteId, ferme, contributions, jour, proposer, erreur = null, contexteCompte = '', onformulaire }: Props = $props();
 
   const vue = $derived(vueReserves(donnees, compteId, jour));
   const compte = $derived(donnees.comptes.find((k) => k.id === compteId)!);
@@ -41,6 +47,29 @@
 
   type Form = 'nouvelle' | 'modifier' | 'affecter' | 'reaffecter' | 'liberer' | 'suspendre' | 'reprendre' | 'arreter' | 'ajuster' | 'repartir' | 'repartir-paie';
   let form: Form | null = $state(null);
+  const TITRES: Record<Form, string> = {
+    nouvelle: 'Nouvelle réserve',
+    modifier: 'Modifier la réserve',
+    affecter: 'Affecter à la réserve',
+    reaffecter: 'Réaffecter',
+    liberer: 'Libérer',
+    suspendre: 'Suspendre la réserve',
+    reprendre: 'Reprendre la réserve',
+    arreter: 'Arrêter la réserve',
+    ajuster: 'Ajuster mes réserves',
+    repartir: 'Répartir la contribution',
+    'repartir-paie': 'Répartir une seule paie',
+  };
+  let fPremiere = $state('');
+  // Prévenir le parent seulement quand l'état ouvert/fermé change.
+  let dernierEtat = false;
+  $effect(() => {
+    const ouvert = form !== null;
+    if (ouvert !== dernierEtat) {
+      dernierEtat = ouvert;
+      untrack(() => onformulaire?.(ouvert));
+    }
+  });
   let cible: string | null = $state(null);
   let ouverteHisto: string | null = $state(null);
   let fNom = $state('');
@@ -64,7 +93,7 @@
   function ouvrir(f: Form, id: string | null = null) {
     form = f;
     cible = id;
-    fNom = fCible = fFreq = fNote = fMontant = fVers = '';
+    fNom = fCible = fFreq = fNote = fMontant = fVers = fPremiere = '';
     fDate = f === 'nouvelle' || f === 'modifier' ? '' : jour;
     fSorte = 'permanente';
     fMode = 'une';
@@ -81,8 +110,6 @@
     if ((f === 'repartir' || f === 'repartir-paie') && id) {
       for (const p of partsDe(compte, id, jour)) fParts[p.reserveId] = String(p.montant / 100).replace('.', ',');
     }
-    const testid = f === 'nouvelle' || f === 'modifier' ? 'reserve' : f === 'repartir-paie' ? 'repartir' : f;
-    void tick().then(() => document.querySelector(`[data-testid="formulaire-${testid}"]`)?.scrollIntoView?.({ block: 'center' }));
   }
   const fermer = () => (form = null);
   const autres = (id: string) => vue.actives.filter((r) => r.id !== id && r.etat === 'active');
@@ -93,6 +120,54 @@
   const particulieres = (elementId: string) => (compte.repartitions ?? []).filter((r) => r.elementId === elementId && r.origine !== null && r.origine >= jour);
   const saisieReserve = () => ({ nom: fNom, sorte: fSorte, cible: fCible, date: fDate, frequenceMois: fFreq, depenseId: '', note: fNote });
 </script>
+
+{#snippet formAjuster()}
+  <form
+          class="formulaire"
+          data-testid="formulaire-ajuster"
+          onsubmit={(e) => {
+            e.preventDefault();
+            proposer(() => proposerAjusterReserves(donnees, compteId, fMode, fVers, jour));
+          }}
+        >
+          <fieldset class="choix">
+            <label class="en-ligne"><input type="radio" bind:group={fMode} value="une" /> Réduire une réserve</label>
+            <label class="en-ligne"><input type="radio" bind:group={fMode} value="prorata" /> Réduire toutes, au prorata</label>
+          </fieldset>
+          {#if fMode === 'une'}
+            <label
+              >Réserve
+              <select bind:value={fVers}>
+                <option value="" disabled>Choisir…</option>
+                {#each vue.actives.filter((x) => x.solde > 0) as x (x.id)}<option value={x.id}>{x.nom} ({x.soldeTexte})</option>{/each}
+              </select>
+            </label>
+          {/if}
+          <button type="submit" class="principal">Voir l’aperçu</button>
+          <button type="button" onclick={fermer}>Abandonner</button>
+        </form>
+{/snippet}
+
+{#snippet formRepartir(c: { id: string; texte: string })}
+  <form
+              class="formulaire"
+              data-testid="formulaire-repartir"
+              onsubmit={(e) => {
+                e.preventDefault();
+                proposer(() => proposerRepartition(donnees, c.id, fParts, form === 'repartir-paie' ? fDate : null, jour));
+              }}
+            >
+              <p class="discret">
+                Montants en $ ; ce qui reste va au non réservé. Si le montant réel diffère, les parts suivent la même proportion (au cent près, le reste au non réservé). Rien ne compte avant la confirmation dans Mes paies.
+              </p>
+              {#if form === 'repartir-paie'}<label>Paie du <input type="date" bind:value={fDate} /></label>{/if}
+              {#each vue.actives.filter((x) => x.etat === 'active') as x (x.id)}
+                <label>{x.nom} ($) <input inputmode="decimal" bind:value={fParts[x.id]} /></label>
+              {/each}
+              <button type="submit" class="principal">Enregistrer</button>
+              <button type="button" onclick={fermer}>Abandonner</button>
+            </form>
+{/snippet}
 
 {#snippet ligneReserve(r: VueReserve)}
   <li data-testid="reserve" data-reserve={r.nom}>
@@ -143,20 +218,17 @@
         </ul>
       {/if}
     {/if}
-    {#if cible === r.id && form}
-      {@render formulaire(r)}
-    {/if}
   </li>
 {/snippet}
 
 {#snippet formulaire(r: VueReserve | null)}
   {#if form === 'nouvelle' || (form === 'modifier' && r)}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-reserve"
       onsubmit={(e) => {
         e.preventDefault();
-        proposer(() => (form === 'nouvelle' ? proposerReserve(donnees, compteId, saisieReserve(), jour) : proposerModificationReserve(donnees, compteId, r!.id, saisieReserve(), jour)));
+        proposer(() => (form === 'nouvelle' ? proposerReserveAvecAffectation(donnees, compteId, saisieReserve(), fPremiere, jour) : proposerModificationReserve(donnees, compteId, r!.id, saisieReserve(), jour)));
       }}
     >
       {#if r?.depense}
@@ -186,12 +258,15 @@
         {/if}
       {/if}
       <label>Note (facultative) <input bind:value={fNote} /></label>
+      {#if form === 'nouvelle' && vue.valeurConnue && vue.depassement === null}
+        <label>Première affectation ($, facultative — depuis le non réservé : {vue.nonReserve}) <input inputmode="decimal" bind:value={fPremiere} data-testid="premiere-affectation" /></label>
+      {/if}
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={fermer}>Fermer</button>
+      <button type="button" onclick={fermer}>Abandonner</button>
     </form>
   {:else if (form === 'affecter' || form === 'liberer' || form === 'reaffecter') && r}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-{form}"
       onsubmit={(e) => {
         e.preventDefault();
@@ -218,11 +293,11 @@
       <label>Date <input type="date" bind:value={fDate} /></label>
       <label>Note (facultative) <input bind:value={fNote} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={fermer}>Fermer</button>
+      <button type="button" onclick={fermer}>Abandonner</button>
     </form>
   {:else if (form === 'suspendre' || form === 'reprendre') && r}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-{form}"
       onsubmit={(e) => {
         e.preventDefault();
@@ -234,11 +309,11 @@
       </p>
       <label>{form === 'suspendre' ? 'Suspendre à partir du' : 'Reprendre à partir du'} <input type="date" bind:value={fDate} /></label>
       <button type="submit" class="principal">Voir l’aperçu</button>
-      <button type="button" onclick={fermer}>Fermer</button>
+      <button type="button" onclick={fermer}>Abandonner</button>
     </form>
   {:else if form === 'arreter' && r}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-arreter"
       onsubmit={(e) => {
         e.preventDefault();
@@ -257,7 +332,7 @@
       {/if}
       <label>Arrêtée le <input type="date" bind:value={fDate} /></label>
       <button type="submit" class="principal">Voir l’aperçu</button>
-      <button type="button" onclick={fermer}>Fermer</button>
+      <button type="button" onclick={fermer}>Abandonner</button>
     </form>
   {/if}
 {/snippet}
@@ -272,32 +347,6 @@
     <div class="attention encadre" data-testid="depassement">
       <p>Tes réserves dépassent la valeur du compte de <strong>{vue.depassement}</strong>. Rien n’est changé seul ; tu ne peux plus affecter tant que l’écart reste.</p>
       {#if !ferme}<button type="button" onclick={() => ouvrir('ajuster')}>Ajuster mes réserves…</button>{/if}
-      {#if form === 'ajuster'}
-        <form
-          class="formulaire"
-          data-testid="formulaire-ajuster"
-          onsubmit={(e) => {
-            e.preventDefault();
-            proposer(() => proposerAjusterReserves(donnees, compteId, fMode, fVers, jour));
-          }}
-        >
-          <fieldset class="choix">
-            <label class="en-ligne"><input type="radio" bind:group={fMode} value="une" /> Réduire une réserve</label>
-            <label class="en-ligne"><input type="radio" bind:group={fMode} value="prorata" /> Réduire toutes, au prorata</label>
-          </fieldset>
-          {#if fMode === 'une'}
-            <label
-              >Réserve
-              <select bind:value={fVers}>
-                <option value="" disabled>Choisir…</option>
-                {#each vue.actives.filter((x) => x.solde > 0) as x (x.id)}<option value={x.id}>{x.nom} ({x.soldeTexte})</option>{/each}
-              </select>
-            </label>
-          {/if}
-          <button type="submit" class="principal">Voir l’aperçu</button>
-          <button type="button" onclick={fermer}>Fermer</button>
-        </form>
-      {/if}
     </div>
   {/if}
 
@@ -310,7 +359,6 @@
   {/if}
   {#if !ferme}
     <p class="boutons"><button type="button" onclick={() => ouvrir('nouvelle')}>Nouvelle réserve…</button></p>
-    {#if form === 'nouvelle'}{@render formulaire(null)}{/if}
   {/if}
   {#if vue.arretees.length > 0}
     <details>
@@ -340,29 +388,22 @@
             <button type="button" class="petit" onclick={() => ouvrir('repartir', c.id)}>Répartir…</button>
             <button type="button" class="petit" onclick={() => ouvrir('repartir-paie', c.id)}>Répartir une seule paie…</button>
           </div>
-          {#if (form === 'repartir' || form === 'repartir-paie') && cible === c.id}
-            <form
-              class="formulaire encadre"
-              data-testid="formulaire-repartir"
-              onsubmit={(e) => {
-                e.preventDefault();
-                proposer(() => proposerRepartition(donnees, c.id, fParts, form === 'repartir-paie' ? fDate : null, jour));
-              }}
-            >
-              <p class="discret">
-                Montants en $ ; ce qui reste va au non réservé. Si le montant réel diffère, les parts suivent la même proportion (au cent près, le reste au non réservé). Rien ne compte avant la confirmation dans Mes paies.
-              </p>
-              {#if form === 'repartir-paie'}<label>Paie du <input type="date" bind:value={fDate} /></label>{/if}
-              {#each vue.actives.filter((x) => x.etat === 'active') as x (x.id)}
-                <label>{x.nom} ($) <input inputmode="decimal" bind:value={fParts[x.id]} /></label>
-              {/each}
-              <button type="submit" class="principal">Enregistrer</button>
-              <button type="button" onclick={fermer}>Fermer</button>
-            </form>
-          {/if}
         </li>
       {/each}
     </ul>
+  {/if}
+  {#if form}
+    {@const r = cible ? ([...vue.actives, ...vue.arretees].find((x) => x.id === cible) ?? null) : null}
+    {@const c = cible ? contributions.find((x) => x.id === cible) : undefined}
+    <FenetreFormulaire titre={TITRES[form]} contexte={r ? `${contexteCompte} · réserve « ${r.nom} » (${r.soldeTexte})` : c ? `${contexteCompte} · ${c.texte}` : contexteCompte} {erreur} onabandonner={fermer}>
+      {#if form === 'ajuster'}
+        {@render formAjuster()}
+      {:else if (form === 'repartir' || form === 'repartir-paie') && c}
+        {@render formRepartir(c)}
+      {:else}
+        {@render formulaire(r)}
+      {/if}
+    </FenetreFormulaire>
   {/if}
 </div>
 

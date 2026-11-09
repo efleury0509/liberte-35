@@ -5,6 +5,15 @@
   import { onMount, tick } from 'svelte';
   import Apercu from '../Apercu.svelte';
   import ReservesCompte from './ReservesCompte.svelte';
+  import CarteBandeau from '../base/CarteBandeau.svelte';
+  import BarreProgression from '../base/BarreProgression.svelte';
+  import LigneMontant from '../base/LigneMontant.svelte';
+  import Pastille from '../base/Pastille.svelte';
+  import FenetreFormulaire from '../base/FenetreFormulaire.svelte';
+  import Icone from '../base/Icone.svelte';
+  import type { Teinte } from '../base/TitrePastille.svelte';
+  import { PiggyBank, ArrowLeftRight } from '@lucide/svelte';
+  import { proposerDeplacement, syntheseEpargne, texteMontant } from '../../actions/epargneV1';
   import { comptesAdmissibles } from '../../actions/comptes';
   import { vueReserves } from '../../actions/reserves';
   import { ErreurSaisie, type Proposition } from '../../actions/paie';
@@ -53,7 +62,22 @@
   let donnees: DonneesPaie | null = $state(null);
   let erreurChargement: string | null = $state(null);
   let fiche: string | null = $state(null);
-  type Formulaire = 'ajout' | 'renseignements' | 'contribution' | 'fluctuation' | 'correction' | 'retrait' | 'transfert' | 'fermeture' | 'reouverture' | 'montant' | 'arret' | 'reprise';
+  type Formulaire = 'ajout' | 'renseignements' | 'contribution' | 'fluctuation' | 'correction' | 'retrait' | 'transfert' | 'fermeture' | 'reouverture' | 'montant' | 'arret' | 'reprise' | 'deplacer';
+  const TITRES: Record<Formulaire, string> = {
+    ajout: 'Ajouter un compte',
+    renseignements: 'Nom, vocation, institution',
+    contribution: 'Ajouter une contribution récurrente',
+    fluctuation: 'Fluctuation',
+    correction: 'Solde du compte',
+    retrait: 'Retrait',
+    transfert: 'Transfert',
+    fermeture: 'Fermer le compte',
+    reouverture: 'Rouvrir le compte',
+    montant: 'Changer le montant de la contribution',
+    arret: 'Dernière contribution',
+    reprise: 'Reprendre la contribution',
+    deplacer: 'Déplacer de l’argent',
+  };
   let formulaire: Formulaire | null = $state(null);
   let cibleContribution: string | null = $state(null);
   let proposition: Proposition | null = $state(null);
@@ -80,6 +104,11 @@
   let fPrisSur = $state('');
   let fComplement = $state('');
   let fChoix: Record<string, string> = $state({});
+  let fSource = $state('');
+  let fCible = $state('');
+  /** Un formulaire de réserve est ouvert dans ReservesCompte (sa fenêtre affiche l'erreur). */
+  let formulaireReserve = $state(false);
+  let compteFormulaire: string | null = $state(null);
 
   onMount(async () => {
     try {
@@ -180,14 +209,16 @@
     fReprendre = [];
     fPrisSur = fComplement = '';
     fChoix = {};
+    fSource = f === 'deplacer' ? 'non-reserve' : '';
+    fCible = '';
     if (f === 'ajout') fiche = null;
+    compteFormulaire = v?.id ?? null;
     if (f === 'renseignements' && v) {
       fNom = donnees ? (comptesDe(donnees).find((k) => k.id === v.id)?.nom ?? '') : '';
       fVocation = v.vocation ?? '';
       fInstitution = v.institution ?? '';
     }
     if (f === 'contribution') fDate = '';
-    void montrer(`formulaire-${f}`);
   }
 
   function basculer(id: string) {
@@ -199,13 +230,49 @@
 
   /** Réserves actives avec un solde, pour « Pris sur » et la fermeture. */
   const reservesAvecSolde = (id: string) => (donnees ? vueReserves(donnees, id, jour).actives.filter((r) => r.solde > 0) : []);
+  const synthese = $derived(donnees ? syntheseEpargne(donnees) : null);
+  const TEINTES: Teinte[] = ['sauge', 'peche', 'lilas', 'rose', 'beurre'];
+  const reservesDuCompte = (id: string) => (donnees ? vueReserves(donnees, id, jour) : null);
+  const contexte = (v: VueCompte) => `${v.nom} · valeur suivie ${v.valeur}`;
   const autresOuverts = (id: string) => (donnees ? comptesDe(donnees).filter((k) => k.id !== id && k.fermeLe === null) : []);
 </script>
 
 {#snippet formulaires(v: VueCompte)}
-  {#if formulaire === 'fluctuation'}
+  {#if formulaire === 'deplacer'}
+    {@const vr = reservesDuCompte(v.id)}
     <form
-      class="formulaire encadre"
+      class="formulaire"
+      data-testid="formulaire-deplacer"
+      onsubmit={(e) => {
+        e.preventDefault();
+        proposer(() => proposerDeplacement(donnees!, v.id, fSource, fCible, { montant: fMontant, date: fDate, note: fNote }, jour));
+      }}
+    >
+      <p class="discret">Entre les réserves de ce compte et son non réservé. La valeur du compte ne change pas.</p>
+      <label
+        >De
+        <select bind:value={fSource}>
+          <option value="non-reserve">Non réservé ({vr?.nonReserve})</option>
+          {#each vr?.actives ?? [] as r (r.id)}<option value={r.id}>Réserve « {r.nom} » ({r.soldeTexte})</option>{/each}
+        </select>
+      </label>
+      <label
+        >Vers
+        <select bind:value={fCible}>
+          <option value="" disabled>Choisir…</option>
+          <option value="non-reserve">Non réservé</option>
+          {#each (vr?.actives ?? []).filter((r) => r.etat === 'active') as r (r.id)}<option value={r.id}>Réserve « {r.nom} »</option>{/each}
+        </select>
+      </label>
+      <label>Montant ($) <input inputmode="decimal" bind:value={fMontant} /></label>
+      <label>Date <input type="date" bind:value={fDate} /></label>
+      <label>Note (facultative) <input bind:value={fNote} /></label>
+      <button type="submit" class="principal">Voir l’aperçu</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
+    </form>
+  {:else if formulaire === 'fluctuation'}
+    <form
+      class="formulaire"
       data-testid="formulaire-fluctuation"
       onsubmit={(e) => {
         e.preventDefault();
@@ -225,11 +292,11 @@
       <label>Date <input type="date" bind:value={fDate} /></label>
       <label>Note (facultative) <input bind:value={fNote} /></label>
       <button type="submit" class="principal">Voir l’aperçu</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'correction'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-correction"
       onsubmit={(e) => {
         e.preventDefault();
@@ -241,11 +308,11 @@
       <label>En date du <input type="date" bind:value={fDate} /></label>
       <label>Note (facultative) <input bind:value={fNote} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'retrait'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-retrait"
       onsubmit={(e) => {
         e.preventDefault();
@@ -259,11 +326,11 @@
       {@render prisSur(v)}
       <label>Note (facultative) <input bind:value={fNote} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'transfert'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-transfert"
       onsubmit={(e) => {
         e.preventDefault();
@@ -285,11 +352,11 @@
       <label>Note (facultative) <input bind:value={fNote} /></label>
       {@render prisSur(v)}
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'contribution'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-contribution"
       onsubmit={(e) => {
         e.preventDefault();
@@ -307,11 +374,11 @@
       </label>
       <label>Première contribution le <input type="date" bind:value={fDate} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'montant' && cibleContribution}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-montant"
       onsubmit={(e) => {
         e.preventDefault();
@@ -321,11 +388,11 @@
       <label>À partir du <input type="date" bind:value={fDate} /></label>
       <label>Nouveau montant ($) <input inputmode="decimal" bind:value={fMontant} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'arret' && cibleContribution}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-arret"
       onsubmit={(e) => {
         e.preventDefault();
@@ -334,11 +401,11 @@
     >
       <label>Dernière contribution le <input type="date" bind:value={fDate} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'reprise' && cibleContribution}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-reprise"
       onsubmit={(e) => {
         e.preventDefault();
@@ -347,11 +414,11 @@
     >
       <label>Reprendre à partir du <input type="date" bind:value={fDate} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'renseignements'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-renseignements"
       onsubmit={(e) => {
         e.preventDefault();
@@ -362,11 +429,11 @@
       <label>Vocation (facultative) <input bind:value={fVocation} /></label>
       <label>Institution (facultative) <input bind:value={fInstitution} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'fermeture'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-fermeture"
       onsubmit={(e) => {
         e.preventDefault();
@@ -389,11 +456,11 @@
         <p class="discret">Aucun autre compte ouvert avec une valeur connue : les réserves ne peuvent qu’être libérées.</p>
       {/if}
       <button type="submit" class="principal">Voir l’aperçu</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'reouverture'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-reouverture"
       onsubmit={(e) => {
         e.preventDefault();
@@ -410,7 +477,7 @@
         </fieldset>
       {/if}
       <button type="submit" class="principal">Voir l’aperçu</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {/if}
 {/snippet}
@@ -481,7 +548,20 @@
     <p class="discret" data-testid="a-venir">À venir, pas encore confirmé (jamais ajouté à la valeur) : {v.aVenir.join(' · ')}</p>
   {/if}
 
-  <ReservesCompte donnees={donnees!} compteId={v.id} ferme={v.fermeLe !== null} contributions={v.contributions} {jour} {proposer} />
+  <ReservesCompte
+    donnees={donnees!}
+    compteId={v.id}
+    ferme={v.fermeLe !== null}
+    contributions={v.contributions}
+    {jour}
+    {proposer}
+    erreur={proposition ? null : erreurSaisie}
+    contexteCompte={contexte(v)}
+    onformulaire={(ouvert) => {
+      formulaireReserve = ouvert;
+      if (ouvert) erreurSaisie = null;
+    }}
+  />
 
   <h4>Historique</h4>
   {#if v.historique.length === 0}
@@ -505,52 +585,95 @@
   {/if}
 {/snippet}
 
-{#snippet carte(v: VueCompte)}
-  <article class="carte" data-compte={v.id} data-testid="compte">
-    <div class="entete">
-      <h3>{v.nom}{v.vocation && !v.nom.includes(v.vocation) ? ` — ${v.vocation}` : ''}</h3>
-      <button type="button" class="lien" aria-expanded={fiche === v.id} onclick={() => basculer(v.id)}>{fiche === v.id ? 'Masquer' : 'Voir le détail'}</button>
-    </div>
-    <p class="resume">
-      <span>Valeur suivie : <strong data-testid="valeur">{v.valeur}</strong></span>
-      <span class="discret">{v.type}{v.fermeLe ? ` · fermé le ${v.fermeLe}` : ''}</span>
-    </p>
-    {#if fiche === v.id}
-      {@render details(v)}
-      <p class="boutons">
-        {#if v.fermeLe}
-          <button type="button" class="principal" onclick={() => ouvrir('reouverture', v)}>Rouvrir…</button>
-        {:else}
-          <button type="button" onclick={() => ouvrir('fluctuation', v)} title={EXPLICATION_FLUCTUATION}>Fluctuation…</button>
-          <button type="button" onclick={() => ouvrir('correction', v)} title={EXPLICATION_CORRECTION}>{v.derniereReference ? 'Corriger le solde…' : 'Indiquer le solde…'}</button>
-          <button type="button" onclick={() => ouvrir('retrait', v)}>Retrait…</button>
-          {#if autresOuverts(v.id).length > 0}<button type="button" onclick={() => ouvrir('transfert', v)}>Transfert…</button>{/if}
-          <button type="button" onclick={() => ouvrir('contribution', v)}>Ajouter une contribution récurrente…</button>
-          <button type="button" onclick={() => ouvrir('renseignements', v)}>Nom, vocation, institution…</button>
-          <button type="button" onclick={() => ouvrir('fermeture', v)}>Fermer le compte…</button>
+{#snippet carte(v: VueCompte, i: number)}
+  {@const vr = reservesDuCompte(v.id)}
+  <div class="compte-v1" class:ouvert={fiche === v.id} data-compte={v.id} data-testid="compte">
+    <CarteBandeau titre={`${v.nom}${v.vocation && !v.nom.includes(v.vocation) ? ` — ${v.vocation}` : ''}`} teinte={TEINTES[i % TEINTES.length]} icone={PiggyBank}>
+      {#snippet badge()}<Pastille>{v.type}{v.fermeLe ? ` · fermé le ${v.fermeLe}` : ''}</Pastille>{/snippet}
+      <div class="sommaire">
+        <div class="valeur-compte">
+          <span class="montant-grand" class:inconnu={v.valeurCents === null} data-testid="valeur">{v.valeur}</span>
+          <span class="libelle-valeur">Valeur suivie</span>
+        </div>
+        <ul class="lignes">
+          <LigneMontant libelle="Non réservé" montant={vr?.nonReserveCents ?? null} />
+        </ul>
+        {#if vr && vr.actives.length > 0}
+          <div class="panneau-reserves">
+            <h4>Réserves dans ce compte ({vr.actives.length})</h4>
+            <ul>
+              {#each vr.actives as r (r.id)}
+                <li>
+                  <span class="nom-reserve">{r.nom}{r.etat === 'suspendue' ? ' (suspendue)' : ''}</span>
+                  <span class="chiffres-reserve">{r.soldeTexte}{r.cibleCents !== null ? ` / ${r.cible}` : ''}</span>
+                  {#if r.cibleCents !== null}<span class="barre"><BarreProgression valeur={vr.valeurConnue ? r.solde : null} cible={r.cibleCents} libelle={r.nom} /></span>{/if}
+                </li>
+              {/each}
+            </ul>
+          </div>
         {/if}
-        <button type="button" onclick={() => proposer(() => proposerSuppressionCompte(donnees!, v.id, jour))}>Supprimer…</button>
-      </p>
-      <p class="discret aide">
-        Fluctuation : {EXPLICATION_FLUCTUATION.toLowerCase()} Corriger le solde : {EXPLICATION_CORRECTION.toLowerCase()}
-      </p>
-      {@render formulaires(v)}
+        {#if vr?.depassement}<p class="attention">Les réserves dépassent la valeur de {vr.depassement}.</p>{/if}
+        <p class="actions-carte">
+          {#if !v.fermeLe && vr && vr.actives.length > 0}
+            <button type="button" class="petit" onclick={() => ouvrir('deplacer', v)}><Icone icone={ArrowLeftRight} taille={16} /> Déplacer de l’argent…</button>
+          {/if}
+          <button type="button" class="lien" aria-expanded={fiche === v.id} onclick={() => basculer(v.id)}>{fiche === v.id ? 'Masquer' : 'Voir le détail'}</button>
+        </p>
+      </div>
+      {#if fiche === v.id}
+        <div class="detail-compte">
+          {@render details(v)}
+          <p class="boutons">
+            {#if v.fermeLe}
+              <button type="button" class="principal" onclick={() => ouvrir('reouverture', v)}>Rouvrir…</button>
+            {:else}
+              <button type="button" onclick={() => ouvrir('fluctuation', v)} title={EXPLICATION_FLUCTUATION}>Fluctuation…</button>
+              <button type="button" onclick={() => ouvrir('correction', v)} title={EXPLICATION_CORRECTION}>{v.derniereReference ? 'Corriger le solde…' : 'Indiquer le solde…'}</button>
+              <button type="button" onclick={() => ouvrir('retrait', v)}>Retrait…</button>
+              {#if autresOuverts(v.id).length > 0}<button type="button" onclick={() => ouvrir('transfert', v)}>Transfert…</button>{/if}
+              <button type="button" onclick={() => ouvrir('contribution', v)}>Ajouter une contribution récurrente…</button>
+              <button type="button" onclick={() => ouvrir('renseignements', v)}>Nom, vocation, institution…</button>
+              <button type="button" onclick={() => ouvrir('fermeture', v)}>Fermer le compte…</button>
+            {/if}
+            <button type="button" onclick={() => proposer(() => proposerSuppressionCompte(donnees!, v.id, jour))}>Supprimer…</button>
+          </p>
+          <p class="discret aide">
+            Fluctuation : {EXPLICATION_FLUCTUATION.toLowerCase()} Corriger le solde : {EXPLICATION_CORRECTION.toLowerCase()}
+          </p>
+        </div>
+      {/if}
+    </CarteBandeau>
+    {#if compteFormulaire === v.id && formulaire && formulaire !== 'ajout'}
+      <FenetreFormulaire titre={TITRES[formulaire]} contexte={contexte(v)} erreur={proposition ? null : erreurSaisie} onabandonner={() => (formulaire = null)}>
+        {@render formulaires(v)}
+      </FenetreFormulaire>
     {/if}
-  </article>
+  </div>
 {/snippet}
 
 <section aria-label="Mes comptes d’épargne">
   {#if erreurChargement}
     <p role="alert" class="erreur">{erreurChargement}</p>
   {:else if donnees}
-    {#if total}
-      <div class="total" data-testid="total-epargne">
-        <p class="montant-total">
-          Total suivi : <strong>{total.montant ?? '—'}</strong>
-          {#if total.nombre > 0}<span class="discret"> — {total.nombre} compte{total.nombre > 1 ? 's' : ''} · {total.dates}</span>{/if}
-        </p>
-        {#if total.exclus.length > 0}<p class="attention" data-testid="total-exclus">Non compté : {total.exclus.join(', ')}.</p>{/if}
-        <p class="discret">{total.phrase}</p>
+    {#if total && synthese}
+      <div class="synthese bandeau-prune" data-testid="total-epargne">
+        <div class="kpi principal-kpi">
+          <span class="etiquette">Total suivi</span>
+          <span class="kpi-montant">{total.montant ?? 'À compléter'}</span>
+          <span class="detail">Total suivi : {total.montant ?? '—'}{total.nombre > 0 ? ` — ${total.nombre} compte${total.nombre > 1 ? 's' : ''} · ${total.dates}` : ''}</span>
+        </div>
+        <div class="kpi">
+          <span class="etiquette">dont réservé</span>
+          <span class="kpi-montant petit-kpi" data-testid="total-reserve">{texteMontant(synthese.reserve)}</span>
+        </div>
+        <div class="kpi">
+          <span class="etiquette">dont non réservé</span>
+          <span class="kpi-montant petit-kpi" data-testid="total-non-reserve">{texteMontant(synthese.nonReserve)}</span>
+        </div>
+        <div class="notes">
+          {#if total.exclus.length > 0}<p class="exclus" data-testid="total-exclus">Non compté : {total.exclus.join(', ')}.</p>{/if}
+          <p>{total.phrase}</p>
+        </div>
       </div>
     {/if}
 
@@ -560,8 +683,9 @@
     </div>
 
     {#if formulaire === 'ajout'}
+      <FenetreFormulaire titre={TITRES.ajout} erreur={proposition ? null : erreurSaisie} onabandonner={() => (formulaire = null)}>
       <form
-        class="formulaire encadre"
+        class="formulaire"
         data-testid="formulaire-ajout"
         onsubmit={(e) => {
           e.preventDefault();
@@ -583,29 +707,34 @@
         <label>Solde de départ ($, facultatif) <input inputmode="decimal" bind:value={fMontant} /></label>
         <label>En date du <input type="date" bind:value={fDate} /></label>
         <button type="submit" class="principal">Enregistrer</button>
-        <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+        <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
       </form>
+      </FenetreFormulaire>
     {/if}
 
     {#if liste.ouverts.length === 0 && formulaire !== 'ajout'}
       <p class="discret">Aucun compte pour l’instant.</p>
     {/if}
-    {#each liste.ouverts as v (v.id)}
-      {@render carte(v)}
-    {/each}
+    <div class="grille-comptes">
+      {#each liste.ouverts as v, i (v.id)}
+        {@render carte(v, i)}
+      {/each}
+    </div>
 
     {#if liste.fermes.length > 0}
       <details class="fermes" open={liste.fermes.some((v) => v.id === fiche)}>
         <summary>Comptes fermés ({liste.fermes.length})</summary>
-        {#each liste.fermes as v (v.id)}
-          {@render carte(v)}
-        {/each}
+        <div class="grille-comptes">
+          {#each liste.fermes as v, i (v.id)}
+            {@render carte(v, i)}
+          {/each}
+        </div>
       </details>
     {/if}
   {/if}
 </section>
 
-{#if erreurSaisie && !proposition}
+{#if erreurSaisie && !proposition && formulaire === null && !formulaireReserve}
   <p role="alert" class="erreur" data-testid="erreur-saisie">{erreurSaisie}</p>
 {/if}
 {#if dernier}
@@ -633,38 +762,148 @@
 
 <style>
   section {
-    max-width: 1100px;
+    max-width: var(--largeur-contenu);
+    font-size: var(--texte-courant);
   }
-  .total {
-    border: 1px solid var(--couleur-bordure);
-    border-radius: var(--arrondi);
-    padding: var(--espace-3) var(--espace-6);
+  .synthese {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 2fr;
+    gap: var(--espace-6);
+    align-items: center;
     margin: 0 0 var(--espace-6);
+    padding: var(--espace-4) var(--espace-8);
   }
-  .total p {
-    margin: var(--espace-1) 0;
+  .kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: var(--espace-4);
+    border-right: 2px solid color-mix(in srgb, var(--couleur-bandeau-texte) 25%, transparent);
   }
-  .montant-total {
-    font-size: 17px;
+  .etiquette {
+    font-size: var(--texte-petit);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.85;
+  }
+  .kpi-montant {
+    font-family: var(--police-titre);
+    font-variation-settings: 'SOFT' 100;
+    font-weight: 900;
+    font-size: 34px;
+    line-height: 1.1;
+    color: var(--couleur-bandeau-texte);
+  }
+  .petit-kpi {
+    font-size: 26px;
+  }
+  .detail {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .notes p {
+    margin: 0;
+    font-size: var(--texte-petit);
+  }
+  .notes .exclus {
+    font-weight: 700;
+    color: var(--sorbet-beurre);
+  }
+  .grille-comptes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: var(--espace-6);
+    align-items: start;
+    margin-bottom: var(--espace-6);
+  }
+  .compte-v1.ouvert {
+    grid-column: 1 / -1;
+  }
+  .sommaire {
+    display: flex;
+    flex-direction: column;
+    gap: var(--espace-3);
+  }
+  .valeur-compte {
+    display: flex;
+    flex-direction: column;
+  }
+  .montant-grand.inconnu {
+    font-size: 26px;
+    color: var(--etat-a-completer-texte);
+  }
+  .libelle-valeur {
+    font-size: var(--texte-courant);
+  }
+  .lignes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .panneau-reserves {
+    background: var(--couleur-panneau);
+    border-radius: var(--arrondi-panneau);
+    padding: var(--espace-3) var(--espace-4);
+  }
+  .panneau-reserves h4 {
+    margin: 0 0 var(--espace-2);
+    font-size: var(--texte-dense);
+    color: var(--couleur-texte);
+  }
+  .panneau-reserves ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--espace-2);
+  }
+  .panneau-reserves li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px var(--espace-3);
+    font-size: var(--texte-dense);
+  }
+  .nom-reserve {
+    font-weight: 700;
+  }
+  .chiffres-reserve {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .barre {
+    grid-column: 1 / -1;
+  }
+  .actions-carte {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--espace-3);
+    margin: 0;
+  }
+  .actions-carte button.petit {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--espace-1);
+  }
+  .detail-compte {
+    margin-top: var(--espace-4);
+    padding-top: var(--espace-4);
+    border-top: 2px dashed var(--couleur-bordure);
   }
   h2 {
     font-size: 17px;
     margin: 0 0 var(--espace-2);
   }
-  h3 {
-    font-size: var(--taille-texte);
-    margin: 0;
-  }
   h4 {
     font-size: var(--taille-petit);
     color: var(--couleur-texte-discret);
     margin: var(--espace-4) 0 var(--espace-2);
-  }
-  .resume {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--espace-2) var(--espace-6);
-    margin: var(--espace-2) 0 0;
   }
   .fiche {
     display: grid;

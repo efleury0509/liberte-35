@@ -510,6 +510,8 @@ export interface VueReserve {
   solde: Cents;
   soldeTexte: string;
   cible: string;
+  /** Pour la barre de progression : null quand la cible est inconnue (jamais 0). */
+  cibleCents: Cents | null;
   date: string | null;
   depense: string | null;
   manque: string | null;
@@ -559,6 +561,7 @@ export function vueReserves(d: DonneesPaie, compteId: string, jour: DateCivile):
       solde,
       soldeTexte: etat.nonReserve === null && solde === 0 ? '—' : formaterMontant(solde),
       cible: aCompleter ? A_COMPLETER : cible === null ? '—' : formaterMontant(cible),
+      cibleCents: aCompleter ? null : cible,
       date: date ? avecAnnee(date) : null,
       depense: nomDep,
       manque: ecart !== null && ecart > 0 && !(r.sorte === 'permanente' && utilisee) ? formaterMontant(ecart) : null,
