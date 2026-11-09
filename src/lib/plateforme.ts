@@ -304,8 +304,8 @@ export function creerApercu(): Plateforme {
   // une copie faite « aujourd'hui » reste d'aujourd'hui, même après minuit UTC.
   const maintenant = () => {
     const h = new Date();
-    const [a, m, j] = aujourdhui().split('-').map(Number);
-    const local = new Date(a, m - 1, j, h.getHours(), h.getMinutes(), h.getSeconds());
+    const jour = aujourdhui();
+    const local = new Date(Number(jour.slice(0, 4)), Number(jour.slice(5, 7)) - 1, Number(jour.slice(8, 10)), h.getHours(), h.getMinutes(), h.getSeconds());
     return local.toISOString().slice(0, 19) + 'Z';
   };
   const instantane = (): Instantane => ({ donnees: cloner(donnees), journal: [...journal], horodatage: maintenant() });
