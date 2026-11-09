@@ -1,32 +1,93 @@
 /*
-  Jetons visuels TEMPORAIRES.
-  Toute l'apparence passe par ces variables : la direction artistique
-  finale remplacera ce fichier sans toucher aux calculs (architecture, section 7).
-  Thème sombre et neutre, volontairement sans identité graphique.
+  Jetons visuels — direction artistique V1 « rétro funky contemporain ».
+  Toute l'apparence passe par ces variables : aucun composant ne code une
+  couleur en dur (test « theme »). Teintes relevées sur la maquette
+  d'Accueil 2, puis ajustées pour la lisibilité (contraste AA, test « theme »).
 */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* Couleurs */
-  --couleur-fond: #16171a;
-  --couleur-surface: #1f2125;
-  --couleur-surface-active: #2a2d33;
-  --couleur-bordure: #33363c;
-  --couleur-texte: #e6e7ea;
-  --couleur-texte-discret: #a3a7af;
-  --couleur-accent: #8fb3d9;
-  --couleur-accent-texte: #0f141a;
-  --couleur-attention: #e0b45c;
-  --couleur-attention-fond: #2f2717;
-  --couleur-succes: #7cc49a;
-  --couleur-erreur: #e08a7c;
-  --couleur-focus: #f2d27a;
+  /* Palette de base : prune et crème */
+  --prune-900: #3d0f31;
+  --prune-800: #45173a;
+  --prune-700: #5c1b46;
+  --prune-600: #7a2a5c;
+  --prune-300: #c9a4b6;
+  --prune-200: #e7d2d9;
+  --creme-50: #fffaf4;
+  --creme-100: #fcf1e6;
+  --creme-200: #f7e6d7;
 
-  /* Typographie : polices du système, rien n'est téléchargé. */
-  --police: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  /* Accents Sorbet rétro (fonds, pastilles, barres ; jamais du texte) */
+  --sorbet-peche: #f9a06f;
+  --sorbet-orange: #f5873a;
+  --sorbet-rose: #f6c3cd;
+  --sorbet-lilas: #d9c6ec;
+  --sorbet-sauge: #bcd6a0;
+  --sorbet-vert: #7fb05c;
+  --sorbet-beurre: #f6d27f;
+  --sorbet-peche-pale: #fde6d8;
+  --sorbet-rose-pale: #fbe4e9;
+  --sorbet-lilas-pale: #f0e6f6;
+  --sorbet-sauge-pale: #e7f0dc;
+  --sorbet-beurre-pale: #fcefcf;
+
+  /* Rôles (utilisés par les composants) */
+  --couleur-fond: var(--creme-100);
+  --couleur-surface: var(--creme-50);
+  --couleur-surface-active: var(--sorbet-rose-pale);
+  --couleur-panneau: var(--sorbet-lilas-pale);
+  --couleur-bordure: var(--prune-200);
+  --couleur-bordure-forte: var(--prune-300);
+  --couleur-texte: var(--prune-900);
+  --couleur-texte-discret: #6b4a60;
+  --couleur-titre: var(--prune-900);
+  --couleur-lien: var(--prune-600);
+  --couleur-accent: var(--sorbet-peche);
+  --couleur-accent-survol: #f78c55;
+  --couleur-accent-texte: var(--prune-900);
+  --couleur-attention: #8e4708;
+  --couleur-attention-fond: var(--sorbet-beurre-pale);
+  --couleur-succes: #3d6b2a;
+  --couleur-succes-fond: var(--sorbet-sauge-pale);
+  --couleur-erreur: #a8312a;
+  --couleur-erreur-fond: #fbe2de;
+  --couleur-focus: #b0407f;
+
+  /* Bandeaux et barre latérale prune */
+  --couleur-bandeau: var(--prune-700);
+  --couleur-bandeau-texte: var(--creme-50);
+  --couleur-barre: var(--prune-800);
+  --couleur-barre-texte: var(--creme-100);
+  --couleur-barre-actif: var(--sorbet-peche);
+  --couleur-barre-actif-texte: var(--prune-900);
+
+  /* États financiers : toujours distincts, « à compléter » n'est jamais 0 $ */
+  --etat-confirme-texte: var(--couleur-succes);
+  --etat-confirme-fond: var(--sorbet-sauge-pale);
+  --etat-prevu-texte: #5a3d78;
+  --etat-prevu-fond: var(--sorbet-lilas-pale);
+  --etat-a-completer-texte: var(--couleur-attention);
+  --etat-a-completer-fond: var(--sorbet-beurre-pale);
+  --etat-alerte-texte: var(--couleur-erreur);
+  --etat-alerte-fond: var(--couleur-erreur-fond);
+  --etat-neutre-texte: var(--couleur-texte-discret);
+  --etat-neutre-fond: var(--creme-200);
+
+  /* Barres de progression */
+  --progression-fond: var(--creme-200);
+  --progression-remplie: var(--sorbet-vert);
+  --progression-chaude: var(--sorbet-orange);
+
+  /* Typographie : polices embarquées (Fraunces, Nunito ; licence OFL) */
+  --police: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  --police-titre: 'Fraunces', Georgia, serif;
   --taille-texte: 15px;
   --taille-petit: 13px;
-  --taille-titre: 24px;
+  --taille-titre: 34px;
+  --taille-h2: 20px;
+  --taille-h3: 16px;
+  --taille-montant: 36px;
 
   /* Espacements et formes */
   --espace-1: 4px;
@@ -35,6 +96,13 @@
   --espace-4: 16px;
   --espace-6: 24px;
   --espace-8: 32px;
-  --arrondi: 8px;
+  --arrondi: 10px;
+  --arrondi-carte: 18px;
+  --arrondi-pilule: 999px;
+  --epaisseur-bordure: 1.5px;
+  --ombre-carte: 0 2px 0 rgb(61 15 49 / 0.06);
+  --ombre-flottante: 0 8px 28px rgb(61 15 49 / 0.22);
+  --voile: rgb(61 15 49 / 0.45);
   --largeur-barre: 240px;
+  --largeur-contenu: 1400px;
 }

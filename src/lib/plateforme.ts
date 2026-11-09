@@ -397,7 +397,7 @@ export interface Plateforme {
   surAvisCopie(rappel: (a: AvisCopie) => void): () => void;
 }
 
-function dansTauri(): boolean {
+export function dansTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 

@@ -401,22 +401,12 @@
     gap: var(--espace-2);
     margin-top: var(--espace-1);
   }
-  .boutons,
-  .formulaire {
+  .boutons {
     display: flex;
     flex-wrap: wrap;
     gap: var(--espace-3);
     align-items: flex-end;
     margin-top: var(--espace-3);
-  }
-  .encadre {
-    padding: var(--espace-3);
-    border: 1px solid var(--couleur-bordure);
-    border-radius: var(--arrondi);
-  }
-  .encadre > p {
-    flex-basis: 100%;
-    margin: 0;
   }
   .choix {
     flex-basis: 100%;
@@ -427,25 +417,8 @@
     flex-wrap: wrap;
     gap: var(--espace-2) var(--espace-6);
   }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--espace-1);
-    font-size: var(--taille-petit);
-    color: var(--couleur-texte-discret);
-  }
-  label.en-ligne {
-    flex-direction: row;
-    align-items: center;
-    color: inherit;
-    font-size: var(--taille-texte);
-  }
-  .discret {
-    color: var(--couleur-texte-discret);
-    font-size: var(--taille-petit);
-  }
   .attention {
-    color: var(--couleur-attention);
+    font-size: inherit;
   }
   details summary {
     cursor: pointer;

@@ -75,7 +75,7 @@
 
 <style>
   .a-verifier {
-    color: var(--couleur-attention, #e0b45c);
+    color: var(--couleur-attention);
     white-space: nowrap;
   }
   .ligne-detail > td {
@@ -105,9 +105,6 @@
   tbody th {
     font-weight: 400;
     white-space: nowrap;
-  }
-  .montant {
-    text-align: right;
   }
   tr.choisi {
     background: var(--couleur-surface-active);

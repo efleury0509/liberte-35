@@ -1,3 +1,25 @@
+/*
+  Base commune : polices embarquées, éléments natifs et composants de base
+  partagés (cartes, encadrés, formulaires, boutons, états). Les composants
+  ne gardent dans leur propre style que ce qui leur est particulier.
+*/
+
+/* ---- Polices (fichiers locaux : aucune ressource Internet) ---- */
+@font-face {
+  font-family: 'Nunito';
+  src: url('../assets/polices/Nunito-variable.woff2') format('woff2');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../assets/polices/Fraunces-variable.woff2') format('woff2');
+  font-weight: 500 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 *,
 *::before,
 *::after {
@@ -25,48 +47,217 @@ body {
   outline-offset: 2px;
 }
 
-/* Boutons et champs temporaires, neutres. */
+/* ---- Titres : rétro, ronds, généreux ---- */
+h1,
+h2,
+h3 {
+  font-family: var(--police-titre);
+  font-variation-settings: 'SOFT' 100;
+  color: var(--couleur-titre);
+  line-height: 1.2;
+}
+h1 {
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+h2 {
+  font-weight: 700;
+}
+h3 {
+  font-weight: 650;
+}
+h4,
+h5 {
+  font-family: var(--police);
+  font-weight: 700;
+}
+
+/* ---- Boutons ---- */
 button {
   font: inherit;
+  font-weight: 700;
   color: var(--couleur-texte);
-  background: var(--couleur-surface-active);
-  border: 1px solid var(--couleur-bordure);
-  border-radius: var(--arrondi);
+  background: var(--couleur-surface);
+  border: var(--epaisseur-bordure) solid var(--couleur-bordure-forte);
+  border-radius: var(--arrondi-pilule);
   padding: var(--espace-1) var(--espace-4);
   min-height: 36px;
   cursor: pointer;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s;
 }
-
+button:hover:not(:disabled) {
+  background: var(--couleur-surface-active);
+  border-color: var(--prune-600);
+}
 button.principal {
   background: var(--couleur-accent);
   color: var(--couleur-accent-texte);
   border-color: var(--couleur-accent);
-  font-weight: 600;
+  font-weight: 800;
 }
-
+button.principal:hover:not(:disabled) {
+  background: var(--couleur-accent-survol);
+  border-color: var(--couleur-accent-survol);
+}
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+button.petit {
+  min-height: 28px;
+  padding: 0 var(--espace-3);
+}
+/* Bouton-lien : action secondaire discrète dans une phrase ou une ligne. */
+button.lien {
+  border: none;
+  background: none;
+  min-height: 0;
+  padding: 0;
+  color: var(--couleur-lien);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 700;
+}
+button.lien:hover:not(:disabled) {
+  background: none;
+  color: var(--couleur-texte);
+}
 
+/* ---- Champs ---- */
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: var(--couleur-texte);
-  background: var(--couleur-fond);
-  border: 1px solid var(--couleur-bordure);
+  background: var(--couleur-surface);
+  border: var(--epaisseur-bordure) solid var(--couleur-bordure-forte);
   border-radius: var(--arrondi);
   padding: var(--espace-1) var(--espace-2);
   min-height: 36px;
 }
-
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--prune-600);
+}
+input[type='checkbox'],
+input[type='radio'] {
+  min-height: 0;
+  accent-color: var(--prune-600);
+}
 input[type='date'] {
-  color-scheme: dark;
+  color-scheme: light;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-1);
+  font-size: var(--taille-petit);
+  color: var(--couleur-texte-discret);
+  font-weight: 600;
+}
+label.en-ligne {
+  flex-direction: row;
+  align-items: center;
+  color: inherit;
+  font-size: var(--taille-texte);
+  font-weight: 400;
 }
 
+/* ---- Composants de base partagés ---- */
+.carte {
+  background: var(--couleur-surface);
+  border: var(--epaisseur-bordure) solid var(--couleur-bordure);
+  border-radius: var(--arrondi-carte);
+  box-shadow: var(--ombre-carte);
+  padding: var(--espace-4) var(--espace-6);
+  margin: 0 0 var(--espace-4);
+}
+.encadre {
+  padding: var(--espace-3);
+  background: var(--couleur-surface);
+  border: var(--epaisseur-bordure) solid var(--couleur-bordure);
+  border-radius: var(--arrondi);
+}
+.encadre > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.panneau {
+  background: var(--couleur-panneau);
+  border-radius: var(--arrondi);
+  padding: var(--espace-3) var(--espace-4);
+}
+.bandeau-prune {
+  background: var(--couleur-bandeau);
+  color: var(--couleur-bandeau-texte);
+  border-radius: var(--arrondi-carte);
+  padding: var(--espace-3) var(--espace-6);
+}
+.bandeau-prune :is(h1, h2, h3) {
+  color: var(--couleur-bandeau-texte);
+}
+.entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espace-3);
+}
+.formulaire {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-3);
+  align-items: flex-end;
+  margin-top: var(--espace-3);
+}
+.discret {
+  color: var(--couleur-texte-discret);
+  font-size: var(--taille-petit);
+}
+.attention {
+  color: var(--couleur-attention);
+  font-size: var(--taille-petit);
+}
+.erreur {
+  color: var(--couleur-erreur);
+}
 .montant {
   text-align: right;
   white-space: nowrap;
+}
+.montant-grand {
+  font-family: var(--police-titre);
+  font-variation-settings: 'SOFT' 100;
+  font-weight: 800;
+  font-size: var(--taille-montant);
+  line-height: 1.1;
+  font-variant-numeric: lining-nums;
+}
+
+/* Bandeau « Enregistré » flottant, toujours visible, avec son « Annuler ». */
+.enregistre {
+  position: fixed;
+  bottom: var(--espace-4);
+  left: calc(50% + var(--largeur-barre) / 2);
+  transform: translateX(-50%);
+  z-index: 10;
+  box-shadow: var(--ombre-flottante);
+  display: flex;
+  gap: var(--espace-3);
+  align-items: center;
+  max-width: 1100px;
+  padding: var(--espace-2) var(--espace-4);
+  border-radius: var(--arrondi-carte);
+  background: var(--couleur-surface);
+  border: var(--epaisseur-bordure) solid var(--couleur-bordure-forte);
+}
+.enregistre .fermer,
+button.fermer {
+  min-width: 32px;
+  padding: 0 var(--espace-2);
 }
 
 @media (prefers-reduced-motion: reduce) {

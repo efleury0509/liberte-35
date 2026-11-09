@@ -363,20 +363,9 @@
   form[data-testid='formulaire-element'] {
     margin-bottom: var(--espace-6);
   }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--espace-1);
-    font-size: var(--taille-petit);
-    color: var(--couleur-texte-discret);
-  }
   label.case {
     flex-direction: row;
     align-items: center;
     min-height: 36px;
-  }
-  .discret {
-    color: var(--couleur-texte-discret);
-    font-size: var(--taille-petit);
   }
 </style>

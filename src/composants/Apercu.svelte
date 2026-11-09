@@ -94,9 +94,6 @@
     margin: 0;
     padding-left: var(--espace-6);
   }
-  .erreur {
-    color: var(--couleur-erreur);
-  }
   .boutons {
     display: flex;
     gap: var(--espace-2);

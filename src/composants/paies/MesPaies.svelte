@@ -921,9 +921,6 @@
 
 <style>
   .carte {
-    border: 1px solid var(--couleur-bordure);
-    border-radius: var(--arrondi);
-    padding: var(--espace-4) var(--espace-6);
     margin: 0 0 var(--espace-6);
     max-width: 1100px;
   }
@@ -935,32 +932,12 @@
     font-size: var(--taille-texte);
     margin: var(--espace-6) 0 var(--espace-2);
   }
-  .boutons,
-  .formulaire {
+  .boutons {
     display: flex;
     flex-wrap: wrap;
     gap: var(--espace-3);
     align-items: flex-end;
     margin-top: var(--espace-3);
-  }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--espace-1);
-    font-size: var(--taille-petit);
-    color: var(--couleur-texte-discret);
-  }
-  label.en-ligne {
-    flex-direction: row;
-    align-items: center;
-    color: inherit;
-  }
-  .discret {
-    color: var(--couleur-texte-discret);
-    font-size: var(--taille-petit);
-  }
-  .erreur {
-    color: var(--couleur-erreur);
   }
   .outil-exemple {
     margin: 0 0 var(--espace-4);
@@ -982,9 +959,6 @@
     text-align: left;
     padding: var(--espace-1) var(--espace-3) var(--espace-1) 0;
     font-weight: 400;
-  }
-  .montant {
-    text-align: right;
   }
   .groupe th {
     padding-top: var(--espace-3);
@@ -1010,10 +984,6 @@
     color: var(--couleur-texte-discret);
     font-size: var(--taille-petit);
     text-decoration: none;
-  }
-  .petit {
-    min-height: 28px;
-    padding: 0 var(--espace-3);
   }
   .occurrence {
     padding: var(--espace-3);
@@ -1041,7 +1011,7 @@
     white-space: nowrap;
   }
   .statut.a-verifier {
-    color: var(--couleur-attention, #e0b45c);
+    color: var(--couleur-attention);
   }
   .statut.confirme {
     color: var(--couleur-texte);
@@ -1054,35 +1024,7 @@
   }
   .lien {
     margin-left: var(--espace-2);
-    min-height: 0;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--couleur-accent);
-    text-decoration: underline;
     font-size: var(--taille-petit);
-    cursor: pointer;
-  }
-  .fermer {
-    min-width: 32px;
-    padding: 0 var(--espace-2);
-  }
-  .enregistre {
-    /* Toujours visible, même quand on agit depuis le bas de la page. */
-    position: fixed;
-    bottom: var(--espace-4);
-    left: calc(50% + 120px);
-    transform: translateX(-50%);
-    z-index: 10;
-    box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
-    display: flex;
-    gap: var(--espace-3);
-    align-items: center;
-    max-width: 1100px;
-    padding: var(--espace-2) var(--espace-4);
-    border-radius: var(--arrondi);
-    background: var(--couleur-surface);
-    border: 1px solid var(--couleur-bordure);
   }
   .total th,
   .total td {

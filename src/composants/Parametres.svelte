@@ -80,7 +80,4 @@
     color: var(--couleur-succes);
   }
 
-  .erreur {
-    color: var(--couleur-erreur);
-  }
 </style>

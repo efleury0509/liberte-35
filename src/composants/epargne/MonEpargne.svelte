@@ -647,19 +647,6 @@
   .montant-total {
     font-size: 17px;
   }
-  .carte {
-    border: 1px solid var(--couleur-bordure);
-    border-radius: var(--arrondi);
-    padding: var(--espace-4) var(--espace-6);
-    margin: 0 0 var(--espace-4);
-  }
-  .entete {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--espace-3);
-  }
   h2 {
     font-size: 17px;
     margin: 0 0 var(--espace-2);
@@ -691,22 +678,12 @@
   dd {
     margin: 0;
   }
-  .boutons,
-  .formulaire {
+  .boutons {
     display: flex;
     flex-wrap: wrap;
     gap: var(--espace-3);
     align-items: flex-end;
     margin-top: var(--espace-3);
-  }
-  .encadre {
-    padding: var(--espace-3);
-    border: 1px solid var(--couleur-bordure);
-    border-radius: var(--arrondi);
-  }
-  .encadre > p {
-    flex-basis: 100%;
-    margin: 0;
   }
   .choix {
     flex-basis: 100%;
@@ -716,19 +693,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--espace-2) var(--espace-6);
-  }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--espace-1);
-    font-size: var(--taille-petit);
-    color: var(--couleur-texte-discret);
-  }
-  label.en-ligne {
-    flex-direction: row;
-    align-items: center;
-    color: inherit;
-    font-size: var(--taille-texte);
   }
   .contributions,
   .historique {
@@ -755,40 +719,9 @@
   .aide {
     margin: var(--espace-2) 0 0;
   }
-  .discret {
-    color: var(--couleur-texte-discret);
-    font-size: var(--taille-petit);
-  }
-  .attention {
-    color: var(--couleur-attention);
-    font-size: var(--taille-petit);
-  }
-  .erreur {
-    color: var(--couleur-erreur);
-  }
   .fermes summary {
     cursor: pointer;
     margin: var(--espace-6) 0 var(--espace-3);
     font-weight: 600;
-  }
-  .fermer {
-    min-width: 32px;
-    padding: 0 var(--espace-2);
-  }
-  .enregistre {
-    position: fixed;
-    bottom: var(--espace-4);
-    left: calc(50% + 120px);
-    transform: translateX(-50%);
-    z-index: 10;
-    box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
-    display: flex;
-    gap: var(--espace-3);
-    align-items: center;
-    max-width: 1100px;
-    padding: var(--espace-2) var(--espace-4);
-    border-radius: var(--arrondi);
-    background: var(--couleur-surface);
-    border: 1px solid var(--couleur-bordure);
   }
 </style>

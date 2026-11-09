@@ -240,10 +240,6 @@
     font-size: var(--taille-texte);
     margin: var(--espace-6) 0 var(--espace-1);
   }
-  .discret {
-    color: var(--couleur-texte-discret);
-    font-size: var(--taille-petit);
-  }
   .copies {
     list-style: none;
     padding: 0;
@@ -255,7 +251,7 @@
     align-items: center;
     gap: var(--espace-4);
     padding: var(--espace-2) 0;
-    border-bottom: 1px solid var(--couleur-bordure, #e5e5e5);
+    border-bottom: 1px solid var(--couleur-bordure);
   }
   .copies li div {
     display: flex;
@@ -264,15 +260,8 @@
   .libelle {
     font-weight: 500;
   }
-  .erreur {
-    color: var(--couleur-erreur);
-  }
   .succes {
     color: var(--couleur-succes);
-  }
-  .attention {
-    color: var(--couleur-attention);
-    font-size: var(--taille-petit);
   }
   .apercu {
     border: 1px solid var(--couleur-accent);
