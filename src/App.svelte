@@ -6,6 +6,7 @@
   import MesPaies from './composants/paies/MesPaies.svelte';
   import MesDettes from './composants/dettes/MesDettes.svelte';
   import MonEpargne from './composants/epargne/MonEpargne.svelte';
+  import DepensesAPrevoir from './composants/depenses/DepensesAPrevoir.svelte';
   import { SECTION_PAR_DEFAUT, trouverSection, type IdSection } from './lib/navigation';
   import { obtenirPlateforme, type EtatApplication } from './lib/plateforme';
   import { TEXTES } from './lib/textes.fr';
@@ -87,7 +88,7 @@
       {#if section.id === 'parametres'}
         <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} />
       {:else if section.id === 'mes-paies' && !erreur}
-        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} onvoircarte={voirCarte} onvoircompte={voirCompte} />
+        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} onvoircarte={voirCarte} onvoircompte={voirCompte} onvoirdepenses={() => (sectionActive = 'depenses-a-prevoir')} />
       {:else if section.id === 'mes-dettes' && !erreur}
         {#key pretOuvert}
           <MesDettes {plateforme} onchangement={chargerEtat} ouvert={pretOuvert} />
@@ -96,6 +97,8 @@
         {#key compteOuvert}
           <MonEpargne {plateforme} onchangement={chargerEtat} ouvert={compteOuvert} />
         {/key}
+      {:else if section.id === 'depenses-a-prevoir' && !erreur}
+        <DepensesAPrevoir {plateforme} onchangement={chargerEtat} onvoircompte={voirCompte} />
       {:else}
         <SectionAVenir etape={section.etape} />
       {/if}

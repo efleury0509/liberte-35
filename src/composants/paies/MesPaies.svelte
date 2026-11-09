@@ -40,6 +40,8 @@
   } from '../../actions/confirmations';
   import { estPret } from '../../actions/prets';
   import { comptesDe, estContribution, nomCompte, proposerContributionPonctuelle } from '../../actions/comptes';
+  import { estDepenseAPrevoir } from '../../actions/depenses';
+  import { reserveDeDepense } from '../../actions/couvertures';
   import { choixRapides, estPaiementCarte, estSupplement, laCarte, libelleLigne, proposerSupplement, proposerSuppressionSupplement, raisonsACompleter } from '../../actions/cartes';
   import RevenusDepenses from './RevenusDepenses.svelte';
   import TableauCycles from './TableauCycles.svelte';
@@ -52,10 +54,12 @@
     onvoirpret?: (id: string) => void;
     /** Étape 8 : ouvrir la carte dans Mes dettes. */
     onvoircarte?: () => void;
+    /** Étape A : ouvrir Dépenses à prévoir. */
+    onvoirdepenses?: () => void;
     /** Étape 9 : ouvrir un compte dans Mon épargne. */
     onvoircompte?: (id: string) => void;
   }
-  let { plateforme, profilInstallation, onchangement, onvoirpret, onvoircarte, onvoircompte }: Props = $props();
+  let { plateforme, profilInstallation, onchangement, onvoirpret, onvoircarte, onvoircompte, onvoirdepenses }: Props = $props();
 
   const jour = aujourdhui();
   const ELEMENTS_EXEMPLE = ELEMENTS_ETAPE4.map(versElementStocke);
@@ -83,6 +87,7 @@
   let formConfirmation: { cible: CibleConfirmation; mode: 'confirmer' | 'corriger' } | null = $state(null);
   let fConfMontant = $state('');
   let fConfDate = $state('');
+  let fConfSansReserve = $state(false);
   let minuterieAnnulation: ReturnType<typeof setTimeout> | undefined;
   let fOccMontant = $state('');
   let fOccDate = $state('');
@@ -143,7 +148,7 @@
     if (!noyau?.profil) return null;
     return cyclesAffiches(
       noyau.profil,
-      { exceptions: noyau.exceptions, elements: noyau.elements, ajustements: noyau.ajustements, confirmations: noyau.confirmations, seuil: noyau.seuil },
+      { exceptions: noyau.exceptions, elements: noyau.elements, ajustements: noyau.ajustements, confirmations: noyau.confirmations, seuil: noyau.seuil, couvertures: noyau.couvertures },
       jour,
       nombreCycles,
       nombrePrecedents,
@@ -266,6 +271,7 @@
     // Q20 : la date du jour par défaut ; pour corriger, la date déjà confirmée.
     fConfMontant = enTexte(mode === 'corriger' && confirmation ? confirmation.montant : prevu);
     fConfDate = mode === 'corriger' && confirmation ? confirmation.date : jour;
+    fConfSansReserve = false;
   }
 
   function choisirCycle(dateOrigine: DateCivile) {
@@ -304,7 +310,17 @@
   const dettesDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => l.nature === 'depense' && estPret(donnees!, l.elementId)) : []);
   /** Étape 8 (Q65) : paiements de la carte du cycle, dans un seul groupe « Visa ». */
   const carteDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => estPaiementCarte(donnees!, l.elementId)) : []);
-  const estDette = (id: string) => !!donnees && !exemple && (estPret(donnees, id) || estPaiementCarte(donnees, id) || estContribution(donnees, id));
+  const estDette = (id: string) => !!donnees && !exemple && (estPret(donnees, id) || estPaiementCarte(donnees, id) || estContribution(donnees, id) || estDepenseAPrevoir(donnees, id));
+  /** Étape A : dépenses à prévoir du cycle, avec leur couverture par la réserve liée. */
+  const aPrevoirDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => estDepenseAPrevoir(donnees!, l.elementId)) : []);
+  const couvertureDe = (l: Ligne): string | null => {
+    if (!donnees || !reserveDeDepense(donnees, l.elementId)) return null;
+    if (l.statut === 'confirme') return l.couvert ? `payée avec la réserve : ${formaterMontant(l.couvert)}` : 'payée depuis le disponible';
+    if (l.montant === null || l.couvert === null) return 'couverture à compléter';
+    if (l.couvert === 0) return 'depuis le disponible';
+    if (l.couvert >= l.montant) return 'couverte par la réserve';
+    return `réserve ${formaterMontant(l.couvert)} + disponible ${formaterMontant(l.montant - l.couvert)}`;
+  };
   /** Étape 9 : contributions du cycle, groupées sous « Épargne ». */
   const epargneDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => estContribution(donnees!, l.elementId)) : []);
   const comptesOuverts = $derived(donnees && !exemple ? comptesDe(donnees).filter((k) => k.fermeLe === null) : []);
@@ -582,6 +598,8 @@
       <button type="button" onclick={() => onvoircarte?.()}>Voir la carte</button>
     {:else if donnees && estContribution(donnees, cible.elementId)}
       <button type="button" onclick={() => onvoircompte?.(compteDeLigne(cible.elementId)?.id ?? '')}>Voir le compte</button>
+    {:else if donnees && estDepenseAPrevoir(donnees, cible.elementId)}
+      <button type="button" onclick={() => onvoirdepenses?.()}>Voir dans Dépenses à prévoir</button>
     {:else}
       <button
         type="button"
@@ -637,7 +655,7 @@
     data-testid="formulaire-confirmation"
     onsubmit={(e) => {
       e.preventDefault();
-      const saisie = { montant: fConfMontant, date: fConfDate };
+      const saisie = { montant: fConfMontant, date: fConfDate, sansReserve: fConfSansReserve };
       proposer(() => (f.mode === 'corriger' ? proposerCorrection(donnees!, f.cible, saisie, jour) : proposerConfirmation(donnees!, f.cible, saisie, jour)));
     }}
   >
@@ -647,6 +665,9 @@
     </p>
     <label>Montant reçu ou payé ($) <input inputmode="decimal" bind:value={fConfMontant} /></label>
     <label>Date <input type="date" bind:value={fConfDate} /></label>
+    {#if f.mode === 'confirmer' && f.cible.elementId && donnees && reserveDeDepense(donnees, f.cible.elementId)}
+      <label class="en-ligne"><input type="checkbox" bind:checked={fConfSansReserve} data-testid="sans-reserve" /> Confirmer sans utiliser la réserve (tout depuis le disponible)</label>
+    {/if}
     <button type="submit" class="principal">Enregistrer</button>
     <button type="button" onclick={() => (formConfirmation = null)}>Fermer</button>
   </form>
@@ -757,6 +778,22 @@
               </span>
             </td>
           </tr>
+        {/if}
+        {#if aPrevoirDe(c).length > 0}
+          <tr class="groupe"><th scope="rowgroup" colspan="4">Dépenses à prévoir</th></tr>
+          {#each aPrevoirDe(c) as l (`${l.elementId}|${l.origine}`)}
+            {@const couv = couvertureDe(l)}
+            <tr class:retiree={l.retiree} data-ligne={l.elementId} data-a-prevoir="oui">
+              <th scope="row">
+                {l.libelle}{l.echeance ? ` (le ${formaterDateCourte(l.echeance)})` : ''}{l.estimation ? ' — estimation' : ''}
+                {@render marques(l)}
+                {#if couv}<span class="note" data-testid="couverture-ligne">{couv}</span>{/if}
+              </th>
+              <td class="montant">−{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
+              <td>{@render statutLigne(l)}</td>
+              <td>{@render actionsLigne(c, l)}</td>
+            </tr>
+          {/each}
         {/if}
         {#if comptesOuverts.length > 0 || epargneDe(c).length > 0}
           <tr class="groupe"><th scope="rowgroup" colspan="4">Épargne</th></tr>
@@ -912,6 +949,11 @@
     gap: var(--espace-1);
     font-size: var(--taille-petit);
     color: var(--couleur-texte-discret);
+  }
+  label.en-ligne {
+    flex-direction: row;
+    align-items: center;
+    color: inherit;
   }
   .discret {
     color: var(--couleur-texte-discret);

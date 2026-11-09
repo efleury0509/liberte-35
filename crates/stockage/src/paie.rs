@@ -205,6 +205,91 @@ pub struct MouvementStocke {
     pub vers: Option<String>,
     pub destination: Option<String>,
     pub note: Option<String>,
+    /// Étape A : lien vers une occurrence de dépense (« id|date ») réglée
+    /// avec une réserve.
+    #[serde(default)]
+    pub lien: Option<String>,
+}
+
+/// Étape A : période de suspension d'une réserve (fin absente : en cours).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuspensionReserveStockee {
+    pub debut: String,
+    pub fin: Option<String>,
+}
+
+/// Étape A : mouvement interne d'une réserve. Jamais dans Mes paies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MouvementReserveStocke {
+    pub id: String,
+    pub date: String,
+    /// affectation, liberation, reaffectation, utilisation, prelevement, transfert.
+    pub sorte: String,
+    pub montant: i64,
+    /// Réaffectation : la réserve qui reçoit.
+    pub vers: Option<String>,
+    /// Utilisation : « dépense|date » ; prélèvement ou transfert : le mouvement du compte.
+    pub lien: Option<String>,
+    pub note: Option<String>,
+}
+
+/// Étape A : réserve virtuelle dans un compte d'épargne.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReserveStockee {
+    pub id: String,
+    pub nom: String,
+    /// « permanente » ou « ponctuelle ».
+    pub sorte: String,
+    pub cible: Option<i64>,
+    pub date: Option<String>,
+    pub frequence_mois: Option<i64>,
+    /// B1 : la dépense à prévoir qui porte date, fréquence et montant.
+    pub depense_id: Option<String>,
+    pub arretee_le: Option<String>,
+    pub transferee_vers: Option<String>,
+    pub note: Option<String>,
+    #[serde(default)]
+    pub suspensions: Vec<SuspensionReserveStockee>,
+    #[serde(default)]
+    pub mouvements: Vec<MouvementReserveStocke>,
+}
+
+/// Étape A (A5) : répartition d'une contribution entre réserves ; `origine`
+/// absente pour la répartition habituelle, présente pour une seule paie (P6).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartStockee {
+    pub reserve_id: String,
+    pub montant: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepartitionStockee {
+    pub element_id: String,
+    pub origine: Option<String>,
+    pub parts: Vec<PartStockee>,
+}
+
+/// Étape A : dépense à prévoir (un élément de dépense, plus sa fiche).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeDepenseStocke {
+    pub origine: String,
+    /// « disponible » ou « reserve ».
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DepenseStockee {
+    pub id: String,
+    pub note: Option<String>,
+    #[serde(default)]
+    pub modes: Vec<ModeDepenseStocke>,
 }
 
 /// Compte d'épargne (étape 9). `contributions` liste les éléments de dépense
@@ -226,6 +311,10 @@ pub struct CompteStocke {
     pub mouvements: Vec<MouvementStocke>,
     #[serde(default)]
     pub contributions: Vec<String>,
+    #[serde(default)]
+    pub reserves: Vec<ReserveStockee>,
+    #[serde(default)]
+    pub repartitions: Vec<RepartitionStockee>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -246,6 +335,8 @@ pub struct DonneesPaie {
     pub cartes: Vec<CarteStocke>,
     #[serde(default)]
     pub comptes: Vec<CompteStocke>,
+    #[serde(default)]
+    pub depenses: Vec<DepenseStockee>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -309,6 +400,12 @@ pub enum ChangementPaie {
         compte: CompteStocke,
     },
     SupprimerCompte {
+        id: String,
+    },
+    DefinirDepense {
+        depense: DepenseStockee,
+    },
+    SupprimerDepense {
         id: String,
     },
 }
@@ -428,6 +525,24 @@ fn verifier(changement: &ChangementPaie) -> Resultat<()> {
             Ok(())
         }
         ChangementPaie::DefinirCompte { compte } => verifier_compte(compte),
+        ChangementPaie::DefinirDepense { depense } => {
+            if depense.id.is_empty() {
+                return Err(erreur("Dépense à prévoir sans identifiant."));
+            }
+            for m in &depense.modes {
+                verifier_date(&m.origine)?;
+                if m.mode != "disponible" && m.mode != "reserve" {
+                    return Err(erreur("Mode de paiement inconnu."));
+                }
+            }
+            Ok(())
+        }
+        ChangementPaie::SupprimerDepense { id } => {
+            if id.is_empty() {
+                return Err(erreur("Dépense à supprimer non précisée."));
+            }
+            Ok(())
+        }
         ChangementPaie::SupprimerCompte { id } => {
             if id.is_empty() {
                 return Err(erreur("Compte à supprimer non précisé."));
@@ -493,6 +608,83 @@ fn verifier_compte(c: &CompteStocke) -> Resultat<()> {
             return Err(erreur("Un transfert doit aller vers un autre compte."));
         }
     }
+    let ids_reserves: std::collections::HashSet<&str> =
+        c.reserves.iter().map(|r| r.id.as_str()).collect();
+    if ids_reserves.len() != c.reserves.len() {
+        return Err(erreur("Deux réserves ont le même identifiant."));
+    }
+    let mut ids_mv = std::collections::HashSet::new();
+    for r in &c.reserves {
+        if r.id.is_empty() || r.nom.trim().is_empty() {
+            return Err(erreur("Donne un nom à la réserve."));
+        }
+        if r.sorte != "permanente" && r.sorte != "ponctuelle" {
+            return Err(erreur("Sorte de réserve inconnue."));
+        }
+        if r.cible.is_some_and(|x| x < 0) {
+            return Err(erreur("Une cible ne peut pas être négative."));
+        }
+        if r.frequence_mois.is_some_and(|x| x <= 0) {
+            return Err(erreur("Fréquence de réserve invalide."));
+        }
+        if r.sorte == "ponctuelle" && r.depense_id.is_none() && r.date.is_none() {
+            return Err(erreur("Une réserve ponctuelle a besoin d'une date."));
+        }
+        for d in [&r.date, &r.arretee_le].into_iter().flatten() {
+            verifier_date(d)?;
+        }
+        for su in &r.suspensions {
+            verifier_date(&su.debut)?;
+            if let Some(f) = &su.fin {
+                verifier_date(f)?;
+            }
+        }
+        for m in &r.mouvements {
+            verifier_date(&m.date)?;
+            if m.id.is_empty() || !ids_mv.insert(&m.id) {
+                return Err(erreur("Mouvement de réserve sans identifiant unique."));
+            }
+            if m.montant <= 0 {
+                return Err(erreur("Le montant doit être plus grand que 0."));
+            }
+            match m.sorte.as_str() {
+                "reaffectation" => {
+                    if !m
+                        .vers
+                        .as_deref()
+                        .is_some_and(|v| v != r.id && ids_reserves.contains(v))
+                    {
+                        return Err(erreur("Réaffectation vers une réserve inconnue."));
+                    }
+                }
+                "affectation" | "liberation" | "utilisation" | "prelevement" | "transfert" => {}
+                _ => return Err(erreur("Mouvement de réserve invalide.")),
+            }
+        }
+    }
+    let mut cles = std::collections::HashSet::new();
+    for rp in &c.repartitions {
+        if !c.contributions.contains(&rp.element_id) {
+            return Err(erreur(
+                "Une répartition doit viser une contribution du compte.",
+            ));
+        }
+        if let Some(o) = &rp.origine {
+            verifier_date(o)?;
+        }
+        if !cles.insert((&rp.element_id, &rp.origine)) {
+            return Err(erreur("Répartition en double."));
+        }
+        let mut vues = std::collections::HashSet::new();
+        for p in &rp.parts {
+            if p.montant <= 0
+                || !ids_reserves.contains(p.reserve_id.as_str())
+                || !vues.insert(&p.reserve_id)
+            {
+                return Err(erreur("Part de répartition invalide."));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -514,6 +706,8 @@ fn lire_comptes(conn: &rusqlite::Connection) -> Resultat<Vec<CompteStocke>> {
                 references: Vec::new(),
                 mouvements: Vec::new(),
                 contributions: Vec::new(),
+                reserves: Vec::new(),
+                repartitions: Vec::new(),
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -532,7 +726,7 @@ fn lire_comptes(conn: &rusqlite::Connection) -> Resultat<Vec<CompteStocke>> {
             .collect::<Result<Vec<_>, _>>()?;
         c.mouvements = conn
             .prepare(
-                "SELECT id, date, sorte, montant, vers, destination, note FROM mouvements_compte
+                "SELECT id, date, sorte, montant, vers, destination, note, lien FROM mouvements_compte
                  WHERE compte_id = ?1 ORDER BY date, rowid",
             )?
             .query_map([&c.id], |r| {
@@ -544,6 +738,7 @@ fn lire_comptes(conn: &rusqlite::Connection) -> Resultat<Vec<CompteStocke>> {
                     vers: r.get(4)?,
                     destination: r.get(5)?,
                     note: r.get(6)?,
+                    lien: r.get(7)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -553,8 +748,108 @@ fn lire_comptes(conn: &rusqlite::Connection) -> Resultat<Vec<CompteStocke>> {
             )?
             .query_map([&c.id], |r| r.get(0))?
             .collect::<Result<Vec<_>, _>>()?;
+        c.reserves = conn
+            .prepare(
+                "SELECT id, nom, sorte, cible, date, frequence_mois, depense_id, arretee_le, transferee_vers, note
+                 FROM reserves_compte WHERE compte_id = ?1 ORDER BY rowid",
+            )?
+            .query_map([&c.id], |r| {
+                Ok(ReserveStockee {
+                    id: r.get(0)?,
+                    nom: r.get(1)?,
+                    sorte: r.get(2)?,
+                    cible: r.get(3)?,
+                    date: r.get(4)?,
+                    frequence_mois: r.get(5)?,
+                    depense_id: r.get(6)?,
+                    arretee_le: r.get(7)?,
+                    transferee_vers: r.get(8)?,
+                    note: r.get(9)?,
+                    suspensions: Vec::new(),
+                    mouvements: Vec::new(),
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        for res in &mut c.reserves {
+            res.suspensions = conn
+                .prepare("SELECT debut, fin FROM suspensions_reserve WHERE reserve_id = ?1 ORDER BY debut")?
+                .query_map([&res.id], |r| Ok(SuspensionReserveStockee { debut: r.get(0)?, fin: r.get(1)? }))?
+                .collect::<Result<Vec<_>, _>>()?;
+            res.mouvements = conn
+                .prepare(
+                    "SELECT id, date, sorte, montant, vers, lien, note FROM mouvements_reserve
+                     WHERE reserve_id = ?1 ORDER BY date, rowid",
+                )?
+                .query_map([&res.id], |r| {
+                    Ok(MouvementReserveStocke {
+                        id: r.get(0)?,
+                        date: r.get(1)?,
+                        sorte: r.get(2)?,
+                        montant: r.get(3)?,
+                        vers: r.get(4)?,
+                        lien: r.get(5)?,
+                        note: r.get(6)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+        }
+        let lignes: Vec<(String, String, String, i64)> = conn
+            .prepare(
+                "SELECT element_id, origine, reserve_id, montant FROM repartitions
+                 WHERE compte_id = ?1 ORDER BY rowid",
+            )?
+            .query_map([&c.id], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        for (e, o, res, montant) in lignes {
+            let origine = if o.is_empty() { None } else { Some(o) };
+            let part = PartStockee {
+                reserve_id: res,
+                montant,
+            };
+            match c
+                .repartitions
+                .iter_mut()
+                .find(|x| x.element_id == e && x.origine == origine)
+            {
+                Some(x) => x.parts.push(part),
+                None => c.repartitions.push(RepartitionStockee {
+                    element_id: e,
+                    origine,
+                    parts: vec![part],
+                }),
+            }
+        }
     }
     Ok(comptes)
+}
+
+fn lire_depenses(conn: &rusqlite::Connection) -> Resultat<Vec<DepenseStockee>> {
+    let mut depenses = conn
+        .prepare("SELECT element_id, note FROM depenses_prevoir ORDER BY rowid")?
+        .query_map([], |r| {
+            Ok(DepenseStockee {
+                id: r.get(0)?,
+                note: r.get(1)?,
+                modes: Vec::new(),
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    for d in &mut depenses {
+        d.modes = conn
+            .prepare(
+                "SELECT origine, mode FROM modes_depense WHERE element_id = ?1 ORDER BY origine",
+            )?
+            .query_map([&d.id], |r| {
+                Ok(ModeDepenseStocke {
+                    origine: r.get(0)?,
+                    mode: r.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+    Ok(depenses)
 }
 
 fn verifier_taux(t: &str) -> Resultat<()> {
@@ -1012,6 +1307,7 @@ impl Stockage {
         let prets = lire_prets(&self.conn)?;
         let cartes = lire_cartes(&self.conn)?;
         let comptes = lire_comptes(&self.conn)?;
+        let depenses = lire_depenses(&self.conn)?;
         Ok(DonneesPaie {
             profil,
             salaires,
@@ -1023,6 +1319,7 @@ impl Stockage {
             prets,
             cartes,
             comptes,
+            depenses,
         })
     }
 
@@ -1145,6 +1442,14 @@ impl Stockage {
                         return Err(erreur(
                             "Cette contribution appartient à un compte : gère-la depuis Mon épargne.",
                         ));
+                    }
+                    let depense: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM depenses_prevoir WHERE element_id = ?1)",
+                        [id],
+                        |r| r.get(0),
+                    )?;
+                    if depense {
+                        return Err(erreur("Cette dépense se gère depuis Dépenses à prévoir."));
                     }
                     // Ses montants, suspensions, périodes et ajustements partent avec lui.
                     tx.execute("DELETE FROM elements WHERE id = ?1", [id])?;
@@ -1393,10 +1698,41 @@ impl Stockage {
                     )?;
                     for m in &c.mouvements {
                         tx.execute(
-                            "INSERT INTO mouvements_compte (id, compte_id, date, sorte, montant, vers, destination, note)
-                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                            params![m.id, c.id, m.date, m.sorte, m.montant, m.vers, m.destination, m.note],
+                            "INSERT INTO mouvements_compte (id, compte_id, date, sorte, montant, vers, destination, note, lien)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                            params![m.id, c.id, m.date, m.sorte, m.montant, m.vers, m.destination, m.note, m.lien],
                         )?;
+                    }
+                    tx.execute("DELETE FROM reserves_compte WHERE compte_id = ?1", [&c.id])?;
+                    for r in &c.reserves {
+                        tx.execute(
+                            "INSERT INTO reserves_compte (id, compte_id, nom, sorte, cible, date, frequence_mois, depense_id, arretee_le, transferee_vers, note)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                            params![r.id, c.id, r.nom, r.sorte, r.cible, r.date, r.frequence_mois, r.depense_id, r.arretee_le, r.transferee_vers, r.note],
+                        )?;
+                        for su in &r.suspensions {
+                            tx.execute(
+                                "INSERT INTO suspensions_reserve (reserve_id, debut, fin) VALUES (?1, ?2, ?3)",
+                                params![r.id, su.debut, su.fin],
+                            )?;
+                        }
+                        for m in &r.mouvements {
+                            tx.execute(
+                                "INSERT INTO mouvements_reserve (id, reserve_id, date, sorte, montant, vers, lien, note)
+                                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                                params![m.id, r.id, m.date, m.sorte, m.montant, m.vers, m.lien, m.note],
+                            )?;
+                        }
+                    }
+                    tx.execute("DELETE FROM repartitions WHERE compte_id = ?1", [&c.id])?;
+                    for rp in &c.repartitions {
+                        for p in &rp.parts {
+                            tx.execute(
+                                "INSERT INTO repartitions (compte_id, element_id, origine, reserve_id, montant)
+                                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                                params![c.id, rp.element_id, rp.origine.clone().unwrap_or_default(), p.reserve_id, p.montant],
+                            )?;
+                        }
                     }
                     tx.execute(
                         "DELETE FROM contributions_compte WHERE compte_id = ?1",
@@ -1408,6 +1744,38 @@ impl Stockage {
                             params![e, c.id],
                         )?;
                     }
+                }
+                ChangementPaie::DefinirDepense { depense: dp } => {
+                    let g: Option<(String, String)> = tx
+                        .query_row(
+                            "SELECT nature, genre FROM elements WHERE id = ?1",
+                            [&dp.id],
+                            |r| Ok((r.get(0)?, r.get(1)?)),
+                        )
+                        .optional()?;
+                    if !matches!(
+                        g.as_ref().map(|(n, g)| (n.as_str(), g.as_str())),
+                        Some(("depense", "fixe"))
+                    ) {
+                        return Err(erreur(
+                            "Une dépense à prévoir doit être une dépense fixe existante.",
+                        ));
+                    }
+                    tx.execute(
+                        "INSERT INTO depenses_prevoir (element_id, note) VALUES (?1, ?2)
+                         ON CONFLICT(element_id) DO UPDATE SET note = excluded.note",
+                        params![dp.id, dp.note],
+                    )?;
+                    tx.execute("DELETE FROM modes_depense WHERE element_id = ?1", [&dp.id])?;
+                    for m in &dp.modes {
+                        tx.execute(
+                            "INSERT INTO modes_depense (element_id, origine, mode) VALUES (?1, ?2, ?3)",
+                            params![dp.id, m.origine, m.mode],
+                        )?;
+                    }
+                }
+                ChangementPaie::SupprimerDepense { id } => {
+                    tx.execute("DELETE FROM depenses_prevoir WHERE element_id = ?1", [id])?;
                 }
                 ChangementPaie::SupprimerCompte { id } => {
                     let historique: bool = tx.query_row(

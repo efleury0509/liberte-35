@@ -58,6 +58,8 @@ fn compte(id: &str, sorte: &str) -> CompteStocke {
         references: vec![],
         mouvements: vec![],
         contributions: vec![],
+        reserves: vec![],
+        repartitions: vec![],
     }
 }
 
@@ -70,6 +72,7 @@ fn mouvement(id: &str, sorte: &str, montant: i64, vers: Option<&str>) -> Mouveme
         vers: vers.map(Into::into),
         destination: None,
         note: None,
+        lien: None,
     }
 }
 
@@ -367,5 +370,5 @@ fn n1_mise_a_niveau_de_la_structure_7_vers_8() {
         .unwrap()
         .file_name()
         .to_string_lossy()
-        .contains("v7-vers-v8")));
+        .contains("v7-vers-v")));
 }

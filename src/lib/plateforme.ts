@@ -181,6 +181,60 @@ export interface MouvementStocke {
   /** Retrait : destination facultative, en texte libre. */
   destination: string | null;
   note: string | null;
+  /** Étape A : dépense réglée avec une réserve (« id|date »). */
+  lien?: string | null;
+}
+
+/** Étape A : suspension d'une réserve (fin nulle : en cours). */
+export interface SuspensionReserveStockee {
+  debut: string;
+  fin: string | null;
+}
+
+export type SorteMouvementReserve = 'affectation' | 'liberation' | 'reaffectation' | 'utilisation' | 'prelevement' | 'transfert';
+
+/** Étape A : mouvement interne d'une réserve, jamais dans Mes paies. */
+export interface MouvementReserveStocke {
+  id: string;
+  date: string;
+  sorte: SorteMouvementReserve;
+  montant: number;
+  /** Réaffectation : la réserve qui reçoit. */
+  vers: string | null;
+  /** Utilisation : « dépense|date » ; prélèvement ou transfert : mouvement du compte. */
+  lien: string | null;
+  note: string | null;
+}
+
+/** Étape A : réserve virtuelle dans un compte. */
+export interface ReserveStockee {
+  id: string;
+  nom: string;
+  sorte: 'permanente' | 'ponctuelle';
+  cible: number | null;
+  date: string | null;
+  frequenceMois: number | null;
+  /** B1 : la dépense à prévoir porte date, fréquence et montant. */
+  depenseId: string | null;
+  arreteeLe: string | null;
+  transfereeVers: string | null;
+  note: string | null;
+  suspensions: SuspensionReserveStockee[];
+  mouvements: MouvementReserveStocke[];
+}
+
+/** Étape A (A5) : répartition d'une contribution ; `origine` nulle = habituelle. */
+export interface RepartitionStockee {
+  elementId: string;
+  origine: string | null;
+  parts: { reserveId: string; montant: number }[];
+}
+
+/** Étape A : dépense à prévoir (élément de dépense + fiche). */
+export interface DepenseStockee {
+  id: string;
+  note: string | null;
+  modes: { origine: string; mode: 'disponible' | 'reserve' }[];
 }
 
 export type SorteCompte = 'celi' | 'reer' | 'celiapp' | 'epargne' | 'autre';
@@ -197,6 +251,8 @@ export interface CompteStocke {
   references: ReferenceCompteStockee[];
   mouvements: MouvementStocke[];
   contributions: string[];
+  reserves?: ReserveStockee[];
+  repartitions?: RepartitionStockee[];
 }
 
 export interface DonneesPaie {
@@ -212,6 +268,8 @@ export interface DonneesPaie {
   cartes: CarteStocke[];
   /** Étape 9 : comptes d'épargne, dans l'ordre de création. */
   comptes: CompteStocke[];
+  /** Étape A : dépenses à prévoir. */
+  depenses?: DepenseStockee[];
 }
 
 export type ChangementPaie =
@@ -232,7 +290,9 @@ export type ChangementPaie =
   | { type: 'definirCarte'; carte: CarteStocke }
   | { type: 'supprimerCarte'; id: string }
   | { type: 'definirCompte'; compte: CompteStocke }
-  | { type: 'supprimerCompte'; id: string };
+  | { type: 'supprimerCompte'; id: string }
+  | { type: 'definirDepense'; depense: DepenseStockee }
+  | { type: 'supprimerDepense'; id: string };
 
 export interface EntreeJournal {
   section: string;
@@ -456,7 +516,7 @@ export function creerApercu(): Plateforme {
       motif: p.motif,
       lisible: true,
       raison: null,
-      versionSchema: 8,
+      versionSchema: 9,
       resume: resume(p),
     }));
   const trouver = (source: SourceCopie): Instantane & { nom: string } => {
@@ -485,7 +545,7 @@ export function creerApercu(): Plateforme {
       source,
       nom: c.nom,
       horodatage: c.horodatage,
-      versionSchema: 8,
+      versionSchema: 9,
       miseANiveau: false,
       resume: resume(c),
       nombreRetires: retires.length,
@@ -502,7 +562,7 @@ export function creerApercu(): Plateforme {
       return {
         profil: 'apercu',
         versionApplication: VERSION_APPLICATION,
-        versionSchema: 8,
+        versionSchema: 9,
         dossierDonnees: '(aucun : aperçu en mémoire)',
         integriteOk: true,
         nombreEntreesJournal: journal.length,

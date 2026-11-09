@@ -93,6 +93,16 @@ et dans le cahier fonctionnel de référence.
 - Correction 0.9.1 : l'aperçu du retrait d'un solde de référence ou d'un
   mouvement montre ses effets, avant → après, sur la valeur suivie de chaque
   compte touché et sur le total. Aucun calcul ni structure changés (8).
+- Étape A (version 0.10.0) : réserves et dépenses à prévoir. Les réserves
+  découpent la valeur suivie d'un compte (réserves + non réservé = valeur
+  suivie) : affecter, réaffecter, libérer, suspendre, arrêter ; répartition
+  d'une contribution (habituelle ou pour une seule paie) ; « pris sur » lors
+  d'un retrait ou d'un transfert ; dépassement affiché et « Ajuster mes
+  réserves » ; fermeture assistée. Dépenses à prévoir : fixes, irrégulières,
+  dans le bon cycle de Mes paies ; avec une réserve liée, seule la partie non
+  couverte sort du disponible ; payées avec la réserve dans un seul aperçu ;
+  suggestion par paie (redistribuer, augmenter, créer) ; les 12 prochains
+  mois. Base de données en version 9.
 
 ## Organisation du code
 

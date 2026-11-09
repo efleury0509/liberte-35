@@ -69,6 +69,7 @@ const entreeDe = (n: DonneesNoyau) => ({
   ajustements: n.ajustements,
   confirmations: n.confirmations,
   seuil: n.seuil,
+  couvertures: n.couvertures,
 });
 
 export function analyser(d: DonneesPaie, changements: readonly ChangementPaie[], jour: DateCivile): Analyse {

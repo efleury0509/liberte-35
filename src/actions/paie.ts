@@ -3,6 +3,7 @@
 // puis enregistré seulement après confirmation, avec ses entrées de journal
 // (A10). Rien ici ne calcule de montant : le noyau s'en charge.
 
+import { couvertures } from './couvertures';
 import { planifier, comparerRattachements, type AjustementOccurrence, type ConfirmationOccurrence, type ElementPlanifie, type Plan } from '../noyau/cycles';
 import { ajouterJours, dateCivile, ecartEnJours, formaterDateCourte, formaterDateLongue, type DateCivile } from '../noyau/dates';
 import { arrondirDecimal, formaterMontant, type Cents } from '../noyau/montants';
@@ -61,6 +62,8 @@ export interface DonneesNoyau {
   elements: ElementPlanifie[];
   ajustements: AjustementOccurrence[];
   confirmations: ConfirmationOccurrence[];
+  /** Étape A : part des dépenses à prévoir couverte par une réserve. */
+  couvertures: Map<string, Cents | null>;
 }
 
 export function versNoyau(d: DonneesPaie): DonneesNoyau {
@@ -82,7 +85,7 @@ export function versNoyau(d: DonneesPaie): DonneesNoyau {
     ...(e.dateReelle ? { dateReelle: dateCivile(e.dateReelle) } : {}),
     ...(e.montant !== null ? { montant: e.montant } : {}),
   }));
-  return {
+  const base = {
     profil,
     exceptions,
     seuil: d.seuil,
@@ -90,6 +93,7 @@ export function versNoyau(d: DonneesPaie): DonneesNoyau {
     ajustements: (d.ajustements ?? []).map(versAjustementNoyau),
     confirmations: (d.confirmations ?? []).map(versConfirmationNoyau),
   };
+  return { ...base, couvertures: couvertures(d, base) };
 }
 
 // ---------------------------------------------------------------------------

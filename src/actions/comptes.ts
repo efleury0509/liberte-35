@@ -15,6 +15,8 @@ import { ajouterJours, formaterDateCourte, type DateCivile } from '../noyau/date
 import { arrondirDecimal, formaterMontant, type Cents } from '../noyau/montants';
 import { planifier } from '../noyau/cycles';
 import { appliquerChangements } from '../lib/appliquer';
+import { reservesDe, soldeReserve } from './couvertures';
+import type { MouvementReserveStocke, ReserveStockee } from '../lib/plateforme';
 import { construireFrequence, decrireQuand, exigerProfil, finaliser, proposerFin, proposerMontant, trouver, type Quand } from './elements';
 import { A_COMPLETER, ErreurSaisie, lireDate, lireMontant, versNoyau, type LigneApercu, type Proposition } from './paie';
 
@@ -31,7 +33,7 @@ export const EXPLICATION_CORRECTION = 'Repartir d’une nouvelle valeur à la da
 export const PHRASE_TOTAL = 'Ce total n’est pas de l’argent disponible dans tes cycles de paie.';
 export const PHRASE_RETRAIT = 'Cet argent n’est pas ajouté à Mes paies. Pour le planifier dans un cycle, ajoute toi-même un revenu ponctuel.';
 
-const avecAnnee = (d: string) => `${formaterDateCourte(d as DateCivile)} ${d.slice(0, 4)}`;
+export const avecAnnee = (d: string) => `${formaterDateCourte(d as DateCivile)} ${d.slice(0, 4)}`;
 const signe = (c: Cents) => `${c < 0 ? '−' : '+'}${formaterMontant(Math.abs(c))}`;
 const texteOuNull = (t: string) => (t.trim() === '' ? null : t.trim());
 
@@ -54,18 +56,86 @@ export const compteDeContribution = (d: DonneesPaie, elementId: string): CompteS
   comptesDe(d).find((k) => k.contributions.includes(elementId)) ?? null;
 export const estContribution = (d: DonneesPaie, elementId: string) => compteDeContribution(d, elementId) !== null;
 
-function exigerCompte(d: DonneesPaie, id: string): { compte: CompteStocke; nom: string } {
+export function exigerCompte(d: DonneesPaie, id: string): { compte: CompteStocke; nom: string } {
   const compte = comptesDe(d).find((k) => k.id === id);
   if (!compte) throw new ErreurSaisie('Ce compte n’existe plus.');
   return { compte, nom: nomCompte(d, compte) };
 }
-function exigerOuvert(d: DonneesPaie, id: string) {
+export function exigerOuvert(d: DonneesPaie, id: string) {
   const r = exigerCompte(d, id);
   if (r.compte.fermeLe !== null) throw new ErreurSaisie('Ce compte est fermé : rouvre-le d’abord.');
   return r;
 }
 
-const entree = (nom: string, champ: string, avant: string | null, apres: string | null, motif: string | null = null): EntreeJournal => ({
+// ---------------------------------------------------------------------------
+// Étape A : réserves d'un compte (soldes réels) et part non réservée.
+
+export interface EtatReserves {
+  soldes: Map<string, Cents>;
+  totalReserves: Cents;
+  /** Valeur suivie − réserves ; null si la valeur est à compléter. Négatif : dépassement (Q89). */
+  nonReserve: Cents | null;
+}
+
+export const reservesActives = (k: CompteStocke): ReserveStockee[] => reservesDe(k).filter((r) => r.arreteeLe === null);
+
+export function etatReserves(d: DonneesPaie, k: CompteStocke): EtatReserves {
+  const soldes = new Map<string, Cents>();
+  for (const r of reservesDe(k)) soldes.set(r.id, soldeReserve(d, k, r));
+  const totalReserves = reservesActives(k).reduce((t, r) => t + (soldes.get(r.id) ?? 0), 0);
+  const v = valeurDuCompte(d, k);
+  return { soldes, totalReserves, nonReserve: v ? v.montant - totalReserves : null };
+}
+
+const nouveauMouvementReserve = (m: Omit<MouvementReserveStocke, 'id'>): MouvementReserveStocke => ({ id: crypto.randomUUID(), ...m });
+
+/**
+ * Q88 : une sortie (retrait, transfert) est prise sur le non réservé par
+ * défaut, ou sur une réserve choisie. Si le non réservé ne suffit pas, on
+ * demande de choisir une réserve pour le reste, au lieu de refuser.
+ */
+function prelever(
+  d: DonneesPaie,
+  k: CompteStocke,
+  montant: Cents,
+  date: string,
+  lien: string,
+  prisSur: string,
+  complement: string,
+): { reserves: ReserveStockee[]; lignes: LigneApercu[] } {
+  if (reservesActives(k).length === 0) return { reserves: reservesDe(k), lignes: [] };
+  const etat = etatReserves(d, k);
+  const nomR = (id: string) => reservesDe(k).find((r) => r.id === id)?.nom ?? '?';
+  const parts: { reserveId: string; montant: Cents }[] = [];
+  if (prisSur !== '') {
+    const solde = etat.soldes.get(prisSur) ?? 0;
+    if (montant > solde) throw new ErreurSaisie(`La réserve « ${nomR(prisSur)} » n’a que ${formaterMontant(solde)}.`);
+    parts.push({ reserveId: prisSur, montant });
+  } else {
+    const libre = Math.max(0, etat.nonReserve ?? montant);
+    if (montant > libre) {
+      const reste = montant - libre;
+      if (complement === '') {
+        throw new ErreurSaisie(`Le non réservé ne suffit pas (${formaterMontant(libre)}) : choisis une réserve pour les ${formaterMontant(reste)} restants.`);
+      }
+      const solde = etat.soldes.get(complement) ?? 0;
+      if (reste > solde) throw new ErreurSaisie(`La réserve « ${nomR(complement)} » n’a que ${formaterMontant(solde)}.`);
+      parts.push({ reserveId: complement, montant: reste });
+    }
+  }
+  const lignes: LigneApercu[] = parts.map((p) => ({
+    libelle: `Pris sur la réserve « ${nomR(p.reserveId)} »`,
+    avant: formaterMontant(etat.soldes.get(p.reserveId) ?? 0),
+    apres: formaterMontant((etat.soldes.get(p.reserveId) ?? 0) - p.montant),
+  }));
+  const reserves = reservesDe(k).map((r) => {
+    const p = parts.find((x) => x.reserveId === r.id);
+    return p ? { ...r, mouvements: [...r.mouvements, nouveauMouvementReserve({ date, sorte: 'prelevement', montant: p.montant, vers: null, lien, note: null })] } : r;
+  });
+  return { reserves, lignes };
+}
+
+export const entreeCompte = (nom: string, champ: string, avant: string | null, apres: string | null, motif: string | null = null): EntreeJournal => ({
   section: SECTION_EPARGNE,
   objet: objetCompte(nom),
   champ,
@@ -224,7 +294,7 @@ export function proposerAjoutCompte(d: DonneesPaie, s: SaisieCompte, jour: DateC
   const nom = nomCompte(futur, compte);
   const valeur = solde === null ? A_COMPLETER : `${formaterMontant(solde)} au ${avecAnnee(compte.references[0]!.date)}`;
   const description = [typeAffiche(compte), ...(compte.vocation ? [`vocation : ${compte.vocation}`] : []), `solde de départ : ${valeur}`].join(' ; ');
-  return finaliser(d, { titre: `Ajouter le compte « ${nom} »`, lignes: [{ libelle: nom, avant: '—', apres: description }], changements: [{ type: 'definirCompte', compte }], journal: [entree(nom, 'création', null, description)] }, jour);
+  return finaliser(d, { titre: `Ajouter le compte « ${nom} »`, lignes: [{ libelle: nom, avant: '—', apres: description }], changements: [{ type: 'definirCompte', compte }], journal: [entreeCompte(nom, 'création', null, description)] }, jour);
 }
 
 export function proposerRenseignementsCompte(d: DonneesPaie, id: string, s: { nom: string; vocation: string; institution: string }, jour: DateCivile): Proposition {
@@ -235,7 +305,7 @@ export function proposerRenseignementsCompte(d: DonneesPaie, id: string, s: { no
   for (const [champ, cle] of [['Nom', 'nom'], ['Vocation', 'vocation'], ['Institution', 'institution']] as const) {
     if (compte[cle] === apres[cle]) continue;
     lignes.push({ libelle: champ, avant: compte[cle] ?? '—', apres: apres[cle] ?? '—' });
-    journal.push(entree(nom, champ.toLowerCase(), compte[cle], apres[cle]));
+    journal.push(entreeCompte(nom, champ.toLowerCase(), compte[cle], apres[cle]));
   }
   if (lignes.length === 0) throw new ErreurSaisie('Rien ne change.');
   return finaliser(d, { titre: `Compléter « ${nom} »`, lignes, changements: [{ type: 'definirCompte', compte: apres }], journal }, jour);
@@ -282,7 +352,7 @@ export function proposerContribution(d: DonneesPaie, compteId: string, s: { mont
         { type: 'definirElement', element },
         { type: 'definirCompte', compte: { ...compte, contributions: [...compte.contributions, element.id] } },
       ],
-      journal: [entree(nom, 'contribution', null, texte)],
+      journal: [entreeCompte(nom, 'contribution', null, texte)],
     },
     jour,
   );
@@ -307,7 +377,7 @@ export function proposerContributionPonctuelle(d: DonneesPaie, s: { compteId: st
         { type: 'definirElement', element },
         { type: 'definirCompte', compte: { ...compte, contributions: [...compte.contributions, element.id] } },
       ],
-      journal: [entree(nom, 'contribution ponctuelle', null, texte)],
+      journal: [entreeCompte(nom, 'contribution ponctuelle', null, texte)],
     },
     jour,
   );
@@ -344,7 +414,7 @@ export function proposerSuppressionContribution(d: DonneesPaie, elementId: strin
         { type: 'definirCompte', compte: { ...k, contributions: k.contributions.filter((x) => x !== elementId) } },
         { type: 'supprimerElement', id: elementId },
       ],
-      journal: [entree(nom, 'contribution', texte, null)],
+      journal: [entreeCompte(nom, 'contribution', texte, null)],
     },
     jour,
   );
@@ -369,7 +439,7 @@ export function proposerReference(d: DonneesPaie, id: string, s: { montant: stri
       titre: premiere ? `Solde de départ de « ${nom} »` : `Corriger le solde de « ${nom} »`,
       lignes: [{ libelle: 'Valeur suivie', avant: avant ? formaterMontant(avant.montant) : A_COMPLETER, apres: `repart de ${apres}` }],
       changements: [{ type: 'definirCompte', compte: { ...compte, references: [...compte.references, { date, montant, note }] } }],
-      journal: [entree(nom, premiere ? 'solde de départ' : 'correction du solde', avant ? formaterMontant(avant.montant) : null, apres, note)],
+      journal: [entreeCompte(nom, premiere ? 'solde de départ' : 'correction du solde', avant ? formaterMontant(avant.montant) : null, apres, note)],
       avant: premiere ? [] : ['L’historique reste visible : rien n’est réécrit. Ce qui est daté de ce jour ou avant est déjà compris dans ce solde.'],
       apercuForce: !premiere,
     },
@@ -415,7 +485,7 @@ export function proposerRetraitReference(d: DonneesPaie, id: string, date: strin
       titre: `Retirer le solde de référence du ${avecAnnee(date)}`,
       lignes: [{ libelle: 'Solde de référence', avant: texte, apres: 'Retiré' }, ...effets.lignes],
       changements,
-      journal: [entree(nom, 'solde de référence retiré', texte, null)],
+      journal: [entreeCompte(nom, 'solde de référence retiré', texte, null)],
       apres: effets.notes,
       apercuForce: true,
     },
@@ -438,14 +508,14 @@ function lireMontantSigne(texte: string, nom: string): Cents | null {
 }
 
 /** Un mouvement daté le jour d'une référence ou avant y est déjà compris. */
-function verifierApresReference(d: DonneesPaie, k: CompteStocke, date: string) {
+export function verifierApresReference(d: DonneesPaie, k: CompteStocke, date: string) {
   const r = derniereReference(k);
   if (r && date <= r.date) {
     throw new ErreurSaisie(`Ce mouvement serait daté avant ta référence du ${avecAnnee(r.date)} (ou le même jour) : il y est déjà compris.`);
   }
 }
 
-function nouveauMouvement(m: Omit<MouvementStocke, 'id'>): MouvementStocke {
+export function nouveauMouvement(m: Omit<MouvementStocke, 'id'>): MouvementStocke {
   return { id: crypto.randomUUID(), ...m };
 }
 
@@ -506,7 +576,7 @@ export function proposerFluctuation(d: DonneesPaie, id: string, s: SaisieFluctua
       titre: `Fluctuation — ${nom} : ${texte}`,
       lignes,
       changements: [{ type: 'definirCompte', compte: { ...compte, mouvements: [...compte.mouvements, mouvement] } }],
-      journal: [entree(nom, 'fluctuation', null, texte, note)],
+      journal: [entreeCompte(nom, 'fluctuation', null, texte, note)],
       avant: avertissements,
       apres: ['Une fluctuation n’apparaît jamais dans Mes paies.'],
       apercuForce: true, // Q73 : aperçu et confirmation obligatoires
@@ -515,7 +585,12 @@ export function proposerFluctuation(d: DonneesPaie, id: string, s: SaisieFluctua
   );
 }
 
-export function proposerRetraitCompte(d: DonneesPaie, id: string, s: { montant: string; date: string; destination: string; note: string }, jour: DateCivile): Proposition {
+export function proposerRetraitCompte(
+  d: DonneesPaie,
+  id: string,
+  s: { montant: string; date: string; destination: string; note: string; prisSur?: string; complement?: string },
+  jour: DateCivile,
+): Proposition {
   const { compte, nom } = exigerOuvert(d, id);
   const montant = lireMontant(s.montant, 'Montant');
   if (montant === null || montant === 0) throw new ErreurSaisie('Indique le montant du retrait.');
@@ -524,21 +599,27 @@ export function proposerRetraitCompte(d: DonneesPaie, id: string, s: { montant: 
   const note = texteOuNull(s.note);
   const destination = texteOuNull(s.destination);
   const mouvement = nouveauMouvement({ date, sorte: 'retrait', montant, vers: null, destination, note });
+  const pris = prelever(d, compte, montant, date, mouvement.id, s.prisSur ?? '', s.complement ?? '');
   const texte = `${formaterMontant(montant)} le ${avecAnnee(date)}${destination ? ` vers ${destination}` : ''}`;
   return finaliser(
     d,
     {
       titre: `Retrait — ${nom} : ${texte}`,
-      lignes: [{ libelle: 'Retrait', avant: '—', apres: texte }],
-      changements: [{ type: 'definirCompte', compte: { ...compte, mouvements: [...compte.mouvements, mouvement] } }],
-      journal: [entree(nom, 'retrait', null, texte, note)],
+      lignes: [{ libelle: 'Retrait', avant: '—', apres: texte }, ...pris.lignes],
+      changements: [{ type: 'definirCompte', compte: { ...compte, mouvements: [...compte.mouvements, mouvement], reserves: pris.reserves } }],
+      journal: [entreeCompte(nom, 'retrait', null, texte, note)],
       apres: [PHRASE_RETRAIT],
     },
     jour,
   );
 }
 
-export function proposerTransfert(d: DonneesPaie, id: string, s: { vers: string; montant: string; date: string; note: string }, jour: DateCivile): Proposition {
+export function proposerTransfert(
+  d: DonneesPaie,
+  id: string,
+  s: { vers: string; montant: string; date: string; note: string; prisSur?: string; complement?: string },
+  jour: DateCivile,
+): Proposition {
   const { compte, nom } = exigerOuvert(d, id);
   if (s.vers === '') throw new ErreurSaisie('Choisis le compte de destination.');
   if (s.vers === id) throw new ErreurSaisie('Un transfert doit aller vers un autre compte.');
@@ -550,6 +631,7 @@ export function proposerTransfert(d: DonneesPaie, id: string, s: { vers: string;
   verifierApresReference(d, dest, date);
   const note = texteOuNull(s.note);
   const mouvement = nouveauMouvement({ date, sorte: 'transfert', montant, vers: dest.id, destination: null, note });
+  const pris = prelever(d, compte, montant, date, mouvement.id, s.prisSur ?? '', s.complement ?? '');
   const texte = `${formaterMontant(montant)} le ${avecAnnee(date)}, de « ${nom} » vers « ${nomDest} »`;
   return finaliser(
     d,
@@ -558,9 +640,10 @@ export function proposerTransfert(d: DonneesPaie, id: string, s: { vers: string;
       lignes: [
         { libelle: nom, avant: '—', apres: `−${formaterMontant(montant)}` },
         { libelle: nomDest, avant: '—', apres: `+${formaterMontant(montant)}` },
+        ...pris.lignes,
       ],
-      changements: [{ type: 'definirCompte', compte: { ...compte, mouvements: [...compte.mouvements, mouvement] } }],
-      journal: [entree(nom, 'transfert', null, texte, note), entree(nomDest, 'transfert reçu', null, texte, note)],
+      changements: [{ type: 'definirCompte', compte: { ...compte, mouvements: [...compte.mouvements, mouvement], reserves: pris.reserves } }],
+      journal: [entreeCompte(nom, 'transfert', null, texte, note), entreeCompte(nomDest, 'transfert reçu', null, texte, note)],
       apres: ['Ce n’est pas une contribution : Mes paies ne change pas.'],
     },
     jour,
@@ -574,12 +657,19 @@ export function proposerRetraitMouvement(d: DonneesPaie, compteId: string, mouve
   if (!m) throw new ErreurSaisie('Ce mouvement n’existe plus.');
   const f = faits(d, compte).find((x) => x.mouvement?.id === mouvementId)!;
   const texte = `${avecAnnee(m.date)} — ${f.texte}`;
-  const journal = [entree(nom, 'mouvement retiré', texte, null)];
+  const journal = [entreeCompte(nom, 'mouvement retiré', texte, null)];
   if (m.vers) {
     const dest = comptesDe(d).find((x) => x.id === m.vers);
-    if (dest) journal.push(entree(nomCompte(d, dest), 'transfert reçu retiré', texte, null));
+    if (dest) journal.push(entreeCompte(nomCompte(d, dest), 'transfert reçu retiré', texte, null));
   }
-  const changements: Proposition['changements'] = [{ type: 'definirCompte', compte: { ...compte, mouvements: compte.mouvements.filter((x) => x.id !== mouvementId) } }];
+  // Étape A : les mouvements de réserve qui l'accompagnent partent avec lui.
+  const sansLien = (k: CompteStocke): CompteStocke => ({
+    ...k,
+    reserves: reservesDe(k).map((r) => ({ ...r, mouvements: r.mouvements.filter((x) => x.lien !== mouvementId) })),
+  });
+  const touches = (k: CompteStocke) => reservesDe(k).some((r) => r.mouvements.some((x) => x.lien === mouvementId));
+  const changements: Proposition['changements'] = [{ type: 'definirCompte', compte: sansLien({ ...compte, mouvements: compte.mouvements.filter((x) => x.id !== mouvementId) }) }];
+  for (const k of comptesDe(d)) if (k.id !== compte.id && touches(k)) changements.push({ type: 'definirCompte', compte: sansLien(k) });
   const effets = effetsDuRetrait(d, changements, m.vers ? [compte.id, m.vers] : [compte.id]);
   return finaliser(
     d,
@@ -600,12 +690,67 @@ export function proposerRetraitMouvement(d: DonneesPaie, compteId: string, mouve
 
 const estArretee = (e: ElementStocke) => e.suspensions.some((s) => s.fin === FIN_OUVERTE);
 
-export function proposerFermeture(d: DonneesPaie, id: string, dateTexte: string, jour: DateCivile): Proposition {
+/** Q94, B2 : comptes qui peuvent recevoir les réserves d'un compte qu'on ferme. */
+export function comptesAdmissibles(d: DonneesPaie, id: string): CompteStocke[] {
+  return comptesDe(d).filter((k) => k.id !== id && k.fermeLe === null && valeurDuCompte(d, k) !== null);
+}
+
+/**
+ * Q94 : fermeture assistée. Chaque réserve ayant un solde reçoit un choix :
+ * « liberer » ou « vers:<compte> » (B2 : transfert ordinaire, puis réserve du
+ * même nom et de la même cible dans le compte qui reçoit). Tout se fait en un
+ * seul enregistrement : jamais de fermeture partielle.
+ */
+export function proposerFermeture(d: DonneesPaie, id: string, dateTexte: string, jour: DateCivile, choix: Record<string, string> = {}): Proposition {
   const { compte, nom } = exigerCompte(d, id);
   if (compte.fermeLe !== null) throw new ErreurSaisie('Ce compte est déjà fermé.');
   const date = dateTexte.trim() === '' ? jour : lireDate(dateTexte, 'Date de fermeture');
-  const v = valeurDuCompte(d, compte);
-  const changements: Proposition['changements'] = [{ type: 'definirCompte', compte: { ...compte, fermeLe: date } }];
+  const etat = etatReserves(d, compte);
+  const lignesReserves: LigneApercu[] = [];
+  const journalReserves: EntreeJournal[] = [];
+  let mouvementsCompte = [...compte.mouvements];
+  const destinations = new Map<string, CompteStocke>();
+  const reserves = reservesDe(compte).map((r) => {
+    if (r.arreteeLe !== null) return r;
+    const solde = etat.soldes.get(r.id) ?? 0;
+    const c = choix[r.id] ?? '';
+    if (solde > 0 && c === '') throw new ErreurSaisie(`Choisis quoi faire de la réserve « ${r.nom} » (${formaterMontant(solde)}).`);
+    const arretee = { ...r, arreteeLe: date };
+    if (solde <= 0) return arretee;
+    if (c === 'liberer') {
+      lignesReserves.push({ libelle: `Réserve « ${r.nom} »`, avant: formaterMontant(solde), apres: 'Libérée' });
+      return { ...arretee, mouvements: [...r.mouvements, nouveauMouvementReserve({ date, sorte: 'liberation', montant: solde, vers: null, lien: null, note: 'fermeture du compte' })] };
+    }
+    const destId = c.startsWith('vers:') ? c.slice(5) : '';
+    const dest0 = comptesAdmissibles(d, id).find((k) => k.id === destId);
+    if (!dest0) throw new ErreurSaisie('Ce compte ne peut pas recevoir la réserve : il doit être ouvert et avoir une valeur connue.');
+    const dest = destinations.get(destId) ?? dest0;
+    verifierApresReference(d, dest, date);
+    const nomDest = nomCompte(d, dest);
+    const transfert = nouveauMouvement({ date, sorte: 'transfert', montant: solde, vers: destId, destination: null, note: `réserve « ${r.nom} »` });
+    mouvementsCompte = [...mouvementsCompte, transfert];
+    const nouvelle: ReserveStockee = {
+      ...r,
+      id: crypto.randomUUID(),
+      arreteeLe: null,
+      transfereeVers: null,
+      suspensions: [],
+      mouvements: [nouveauMouvementReserve({ date, sorte: 'affectation', montant: solde, vers: null, lien: transfert.id, note: `depuis « ${nom} »` })],
+    };
+    destinations.set(destId, { ...dest, reserves: [...reservesDe(dest), nouvelle] });
+    lignesReserves.push({ libelle: `Réserve « ${r.nom} »`, avant: `${formaterMontant(solde)} dans « ${nom} »`, apres: `${formaterMontant(solde)} dans « ${nomDest} »` });
+    journalReserves.push(entreeCompte(nomDest, 'réserve reçue', null, `« ${r.nom} » ${formaterMontant(solde)}`));
+    return {
+      ...arretee,
+      transfereeVers: nomDest,
+      mouvements: [...r.mouvements, nouveauMouvementReserve({ date, sorte: 'transfert', montant: solde, vers: null, lien: transfert.id, note: `vers « ${nomDest} »` })],
+    };
+  });
+  const v = valeurDuCompte(d, { ...compte, mouvements: mouvementsCompte });
+  const changements: Proposition['changements'] = [
+    { type: 'definirCompte', compte: { ...compte, fermeLe: date, mouvements: mouvementsCompte, reserves, repartitions: [] } },
+    ...[...destinations.values()].map((k) => ({ type: 'definirCompte' as const, compte: k })),
+  ];
   for (const eid of compte.contributions) {
     const e = trouver(d, eid);
     if (estArretee(e)) continue;
@@ -615,9 +760,9 @@ export function proposerFermeture(d: DonneesPaie, id: string, dateTexte: string,
     d,
     {
       titre: `Fermer « ${nom} » le ${avecAnnee(date)}`,
-      lignes: [{ libelle: nom, avant: 'Ouvert', apres: `Fermé le ${avecAnnee(date)}` }],
+      lignes: [{ libelle: nom, avant: 'Ouvert', apres: `Fermé le ${avecAnnee(date)}` }, ...lignesReserves],
       changements,
-      journal: [entree(nom, 'fermeture', null, `fermé le ${avecAnnee(date)}`)],
+      journal: [entreeCompte(nom, 'fermeture', null, `fermé le ${avecAnnee(date)}`), ...journalReserves],
       avant:
         v && v.montant !== 0
           ? [`Valeur suivie : ${formaterMontant(v.montant)} ; tu peux d’abord la transférer ou la retirer.`]
@@ -661,7 +806,7 @@ export function proposerReouverture(d: DonneesPaie, id: string, dateTexte: strin
         ...arretees.map((eid) => ({ libelle: `Contribution ${decrire(eid)}`, avant: 'Arrêtée', apres: choisies.includes(eid) ? `Reprend le ${avecAnnee(date)}` : 'Reste arrêtée' })),
       ],
       changements: [{ type: 'definirCompte', compte: { ...compte, fermeLe: null } }, ...reprises(d, choisies, date)],
-      journal: [entree(nom, 'réouverture', `fermé le ${avecAnnee(compte.fermeLe)}`, `rouvert le ${avecAnnee(date)}`)],
+      journal: [entreeCompte(nom, 'réouverture', `fermé le ${avecAnnee(compte.fermeLe)}`, `rouvert le ${avecAnnee(date)}`)],
       apres: ['Aucune contribution ne reprend toute seule ; rien n’est planifié entre la fermeture et la reprise.'],
       apercuForce: true,
     },
@@ -681,7 +826,7 @@ export function proposerRepriseContribution(d: DonneesPaie, elementId: string, d
       titre: `Reprendre une contribution à « ${nom} » le ${avecAnnee(date)}`,
       lignes: [{ libelle: 'Contribution', avant: 'Arrêtée', apres: `Reprend le ${avecAnnee(date)}` }],
       changements: reprises(d, [elementId], date),
-      journal: [entree(nom, 'contribution reprise', null, avecAnnee(date))],
+      journal: [entreeCompte(nom, 'contribution reprise', null, avecAnnee(date))],
     },
     jour,
   );
@@ -692,6 +837,7 @@ export function proposerSuppressionCompte(d: DonneesPaie, id: string, jour: Date
   const historique =
     d.confirmations.some((f) => f.elementId !== null && compte.contributions.includes(f.elementId)) ||
     compte.mouvements.length > 0 ||
+    reservesDe(compte).some((r) => r.mouvements.length > 0) ||
     comptesDe(d).some((x) => x.mouvements.some((m) => m.vers === id));
   if (historique) throw new ErreurSaisie('Ce compte a un historique : ferme-le plutôt.');
   return finaliser(
@@ -700,7 +846,7 @@ export function proposerSuppressionCompte(d: DonneesPaie, id: string, jour: Date
       titre: `Supprimer le compte « ${nom} »`,
       lignes: [{ libelle: nom, avant: 'Compte', apres: 'Supprimé' }],
       changements: [{ type: 'supprimerCompte', id }, ...compte.contributions.map((eid) => ({ type: 'supprimerElement' as const, id: eid }))],
-      journal: [entree(nom, 'suppression', 'compte', null)],
+      journal: [entreeCompte(nom, 'suppression', 'compte', null)],
       apres: compte.contributions.length > 0 ? ['Ses contributions planifiées disparaissent des cycles.'] : [],
       apercuForce: true,
     },

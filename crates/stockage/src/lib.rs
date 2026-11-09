@@ -24,10 +24,12 @@ pub use export::ResumeExport;
 pub use horloge::{formater_utc, Horloge, HorlogeFixe, HorlogeSysteme};
 use migrations::{derniere_version, Migration, MIGRATIONS};
 pub use paie::{
-    AjustementStocke, CarteStocke, ChangementPaie, CompteStocke, ConfirmationStockee, DonneesPaie,
-    ElementStocke, ExceptionStockee, FraisCarteStocke, MontantStocke, MouvementStocke,
+    AjustementStocke, CarteStocke, ChangementPaie, CompteStocke, ConfirmationStockee,
+    DepenseStockee, DonneesPaie, ElementStocke, ExceptionStockee, FraisCarteStocke,
+    ModeDepenseStocke, MontantStocke, MouvementReserveStocke, MouvementStocke, PartStockee,
     PeriodeStockee, PretStocke, ProfilPaieStocke, ReferenceCompteStockee, ReleveStocke,
-    SalaireStocke, SoldeCarteStocke, SoldePretStocke, SuspensionStocke,
+    RepartitionStockee, ReserveStockee, SalaireStocke, SoldeCarteStocke, SoldePretStocke,
+    SuspensionReserveStockee, SuspensionStocke,
 };
 pub use sauvegardes::{
     ApercuRestauration, ChangementJournal, CopieFaite, CopieListee, ListeDesCopies,
@@ -520,5 +522,7 @@ mod tests_export;
 mod tests_paie;
 #[cfg(test)]
 mod tests_prets;
+#[cfg(test)]
+mod tests_reserves;
 #[cfg(test)]
 mod tests_sauvegardes;

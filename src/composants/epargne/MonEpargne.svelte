@@ -4,6 +4,9 @@
   // paies. La valeur suivie ne bouge qu'avec ce qui est réel (A4, Q72).
   import { onMount, tick } from 'svelte';
   import Apercu from '../Apercu.svelte';
+  import ReservesCompte from './ReservesCompte.svelte';
+  import { comptesAdmissibles } from '../../actions/comptes';
+  import { vueReserves } from '../../actions/reserves';
   import { ErreurSaisie, type Proposition } from '../../actions/paie';
   import {
     EXPLICATION_CORRECTION,
@@ -74,6 +77,9 @@
   let fDestination = $state('');
   let fVers = $state('');
   let fReprendre: string[] = $state([]);
+  let fPrisSur = $state('');
+  let fComplement = $state('');
+  let fChoix: Record<string, string> = $state({});
 
   onMount(async () => {
     try {
@@ -172,6 +178,8 @@
     // Date du jour proposée, modifiable (précision 2 de la validation).
     fDate = jour;
     fReprendre = [];
+    fPrisSur = fComplement = '';
+    fChoix = {};
     if (f === 'ajout') fiche = null;
     if (f === 'renseignements' && v) {
       fNom = donnees ? (comptesDe(donnees).find((k) => k.id === v.id)?.nom ?? '') : '';
@@ -189,6 +197,8 @@
     erreurSaisie = null;
   }
 
+  /** Réserves actives avec un solde, pour « Pris sur » et la fermeture. */
+  const reservesAvecSolde = (id: string) => (donnees ? vueReserves(donnees, id, jour).actives.filter((r) => r.solde > 0) : []);
   const autresOuverts = (id: string) => (donnees ? comptesDe(donnees).filter((k) => k.id !== id && k.fermeLe === null) : []);
 </script>
 
@@ -239,13 +249,14 @@
       data-testid="formulaire-retrait"
       onsubmit={(e) => {
         e.preventDefault();
-        proposer(() => proposerRetraitCompte(donnees!, v.id, { montant: fMontant, date: fDate, destination: fDestination, note: fNote }, jour));
+        proposer(() => proposerRetraitCompte(donnees!, v.id, { montant: fMontant, date: fDate, destination: fDestination, note: fNote, prisSur: fPrisSur, complement: fComplement }, jour));
       }}
     >
       <p class="discret">{PHRASE_RETRAIT}</p>
       <label>Montant ($) <input inputmode="decimal" bind:value={fMontant} /></label>
       <label>Date <input type="date" bind:value={fDate} /></label>
       <label>Destination (facultative) <input bind:value={fDestination} placeholder="compte courant" /></label>
+      {@render prisSur(v)}
       <label>Note (facultative) <input bind:value={fNote} /></label>
       <button type="submit" class="principal">Enregistrer</button>
       <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
@@ -256,7 +267,7 @@
       data-testid="formulaire-transfert"
       onsubmit={(e) => {
         e.preventDefault();
-        proposer(() => proposerTransfert(donnees!, v.id, { vers: fVers, montant: fMontant, date: fDate, note: fNote }, jour));
+        proposer(() => proposerTransfert(donnees!, v.id, { vers: fVers, montant: fMontant, date: fDate, note: fNote, prisSur: fPrisSur, complement: fComplement }, jour));
       }}
     >
       <p class="discret">Vers un autre de tes comptes d’épargne. Ce n’est pas une contribution : Mes paies ne change pas.</p>
@@ -272,6 +283,7 @@
       <label>Montant ($) <input inputmode="decimal" bind:value={fMontant} /></label>
       <label>Date <input type="date" bind:value={fDate} /></label>
       <label>Note (facultative) <input bind:value={fNote} /></label>
+      {@render prisSur(v)}
       <button type="submit" class="principal">Enregistrer</button>
       <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
     </form>
@@ -358,11 +370,24 @@
       data-testid="formulaire-fermeture"
       onsubmit={(e) => {
         e.preventDefault();
-        proposer(() => proposerFermeture(donnees!, v.id, fDate, jour));
+        proposer(() => proposerFermeture(donnees!, v.id, fDate, jour, fChoix));
       }}
     >
       <p class="discret">Ses contributions s’arrêtent à partir de cette date ; son historique reste consultable.</p>
       <label>Fermé le <input type="date" bind:value={fDate} /></label>
+      {#each reservesAvecSolde(v.id) as r (r.id)}
+        <label
+          >Réserve « {r.nom} » ({r.soldeTexte})
+          <select bind:value={fChoix[r.id]} data-testid="choix-fermeture">
+            <option value={undefined} disabled selected>Choisir…</option>
+            <option value="liberer">La libérer</option>
+            {#each comptesAdmissibles(donnees!, v.id) as k (k.id)}<option value="vers:{k.id}">La transférer vers {nomCompte(donnees!, k)}</option>{/each}
+          </select>
+        </label>
+      {/each}
+      {#if reservesAvecSolde(v.id).length > 0 && comptesAdmissibles(donnees!, v.id).length === 0}
+        <p class="discret">Aucun autre compte ouvert avec une valeur connue : les réserves ne peuvent qu’être libérées.</p>
+      {/if}
       <button type="submit" class="principal">Voir l’aperçu</button>
       <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
     </form>
@@ -387,6 +412,27 @@
       <button type="submit" class="principal">Voir l’aperçu</button>
       <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
     </form>
+  {/if}
+{/snippet}
+
+{#snippet prisSur(v: VueCompte)}
+  {#if reservesAvecSolde(v.id).length > 0}
+    <label
+      >Pris sur
+      <select bind:value={fPrisSur}>
+        <option value="">Le non réservé ({vueReserves(donnees!, v.id, jour).nonReserve})</option>
+        {#each reservesAvecSolde(v.id) as r (r.id)}<option value={r.id}>Réserve « {r.nom} » ({r.soldeTexte})</option>{/each}
+      </select>
+    </label>
+    {#if fPrisSur === ''}
+      <label
+        >Si le non réservé ne suffit pas, le reste vient de
+        <select bind:value={fComplement}>
+          <option value="">Choisir au besoin…</option>
+          {#each reservesAvecSolde(v.id) as r (r.id)}<option value={r.id}>« {r.nom} » ({r.soldeTexte})</option>{/each}
+        </select>
+      </label>
+    {/if}
   {/if}
 {/snippet}
 
@@ -434,6 +480,8 @@
   {#if v.aVenir.length > 0}
     <p class="discret" data-testid="a-venir">À venir, pas encore confirmé (jamais ajouté à la valeur) : {v.aVenir.join(' · ')}</p>
   {/if}
+
+  <ReservesCompte donnees={donnees!} compteId={v.id} ferme={v.fermeLe !== null} contributions={v.contributions} {jour} {proposer} />
 
   <h4>Historique</h4>
   {#if v.historique.length === 0}

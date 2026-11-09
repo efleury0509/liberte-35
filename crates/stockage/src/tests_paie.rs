@@ -278,6 +278,7 @@ fn contrat_d_echange_avec_l_interface_pour_les_six_changements() {
         prets: Vec::new(),
         cartes: Vec::new(),
         comptes: Vec::new(),
+        depenses: Vec::new(),
     })
     .unwrap();
     assert_eq!(donnees["salaires"][0]["aPartirDu"], "2027-01-15");

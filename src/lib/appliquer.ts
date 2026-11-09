@@ -68,6 +68,7 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
       if (d.prets.some((p) => p.id === c.id)) refus('Ce versement appartient à un prêt : supprime le prêt depuis Mes dettes.');
       if (d.cartes.some((k) => k.id === c.id || k.supplements.includes(c.id))) refus('Ce paiement appartient à la carte : gère-le depuis Mes dettes.');
       if ((d.comptes ?? []).some((k) => k.contributions.includes(c.id))) refus('Cette contribution appartient à un compte : gère-la depuis Mon épargne.');
+      if ((d.depenses ?? []).some((x) => x.id === c.id)) refus('Cette dépense se gère depuis Dépenses à prévoir.');
       d.elements = d.elements.filter((e) => e.id !== c.id);
       d.ajustements = d.ajustements.filter((a) => a.elementId !== c.id);
       break;
@@ -151,14 +152,51 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
         if (m.vers === k.id) refus('Un transfert doit aller vers un autre compte.');
         if (m.vers !== null && !d.comptes.some((x) => x.id === m.vers)) refus('Le compte de destination n’existe pas.');
       }
+      // Étape A : réserves et répartitions.
+      const reserves = k.reserves ?? [];
+      const idsR = new Set(reserves.map((r) => r.id));
+      if (idsR.size !== reserves.length) refus('Deux réserves ont le même identifiant.');
+      for (const r of reserves) {
+        if (!r.nom.trim()) refus('Donne un nom à la réserve.');
+        if (r.cible !== null && r.cible < 0) refus('Une cible ne peut pas être négative.');
+        if (r.sorte === 'ponctuelle' && r.depenseId === null && r.date === null) refus('Une réserve ponctuelle a besoin d’une date.');
+        for (const m of r.mouvements) {
+          if (m.montant <= 0) refus('Le montant doit être plus grand que 0.');
+          if (m.sorte === 'reaffectation' && (m.vers === null || m.vers === r.id || !idsR.has(m.vers))) refus('Réaffectation vers une réserve inconnue.');
+        }
+      }
+      for (const rp of k.repartitions ?? []) {
+        if (!k.contributions.includes(rp.elementId)) refus('Une répartition doit viser une contribution du compte.');
+        if (rp.parts.some((p) => p.montant <= 0 || !idsR.has(p.reserveId))) refus('Part de répartition invalide.');
+      }
       const compte: CompteStocke = {
         ...k,
         references: [...k.references].sort(parDate((r) => r.date)),
-        mouvements: [...k.mouvements].sort(parDate((m) => m.date)),
+        mouvements: [...k.mouvements].sort(parDate((m) => m.date)).map((m) => ({ ...m, lien: m.lien ?? null })),
+        reserves: reserves.map((r) => ({
+          ...r,
+          suspensions: [...r.suspensions].sort(parDate((x) => x.debut)),
+          mouvements: [...r.mouvements].sort(parDate((m) => m.date)),
+        })),
+        repartitions: (k.repartitions ?? []).filter((rp) => rp.parts.length > 0),
       };
       const i = d.comptes.findIndex((x) => x.id === k.id);
       if (i >= 0) d.comptes[i] = compte;
       else d.comptes = [...d.comptes, compte];
+      break;
+    }
+    case 'definirDepense': {
+      const e = d.elements.find((x) => x.id === c.depense.id);
+      if (!e || e.nature !== 'depense' || e.genre !== 'fixe') refus('Une dépense à prévoir doit être une dépense fixe existante.');
+      d.depenses ??= [];
+      const dep = { ...c.depense, modes: [...c.depense.modes].sort(parDate((m) => m.origine)) };
+      const i = d.depenses.findIndex((x) => x.id === dep.id);
+      if (i >= 0) d.depenses[i] = dep;
+      else d.depenses = [...d.depenses, dep];
+      break;
+    }
+    case 'supprimerDepense': {
+      d.depenses = (d.depenses ?? []).filter((x) => x.id !== c.id);
       break;
     }
     case 'supprimerCompte': {
@@ -293,6 +331,14 @@ function inverseUn(d: DonneesPaie, c: ChangementPaie): ChangementPaie[] {
     case 'supprimerCompte': {
       const avant = (d.comptes ?? []).find((k) => k.id === c.id);
       return avant ? [{ type: 'definirCompte', compte: avant }] : [];
+    }
+    case 'definirDepense': {
+      const avant = (d.depenses ?? []).find((x) => x.id === c.depense.id);
+      return [avant ? { type: 'definirDepense', depense: avant } : { type: 'supprimerDepense', id: c.depense.id }];
+    }
+    case 'supprimerDepense': {
+      const avant = (d.depenses ?? []).find((x) => x.id === c.id);
+      return avant ? [{ type: 'definirDepense', depense: avant }] : [];
     }
   }
 }

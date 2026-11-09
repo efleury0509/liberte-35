@@ -255,6 +255,66 @@ CREATE TABLE contributions_compte (
 ) STRICT;
 "#;
 
+/// Version 9 : réserves et dépenses à prévoir (étape A). Les réserves sont
+/// virtuelles, dans un compte d'épargne ; une contribution les alimente par
+/// sa répartition (A5). Une dépense à prévoir est un élément de dépense.
+const V9: &str = r#"
+ALTER TABLE mouvements_compte ADD COLUMN lien TEXT;
+
+CREATE TABLE reserves_compte (
+    id             TEXT PRIMARY KEY,
+    compte_id      TEXT NOT NULL REFERENCES comptes_epargne(id) ON DELETE CASCADE,
+    nom            TEXT NOT NULL CHECK (length(trim(nom)) > 0),
+    sorte          TEXT NOT NULL CHECK (sorte IN ('permanente', 'ponctuelle')),
+    cible          INTEGER CHECK (cible >= 0),
+    date           TEXT CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    frequence_mois INTEGER CHECK (frequence_mois > 0),
+    depense_id     TEXT,
+    arretee_le     TEXT CHECK (arretee_le GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    transferee_vers TEXT,
+    note           TEXT
+) STRICT;
+
+CREATE TABLE suspensions_reserve (
+    reserve_id TEXT NOT NULL REFERENCES reserves_compte(id) ON DELETE CASCADE,
+    debut      TEXT NOT NULL CHECK (debut GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    fin        TEXT CHECK (fin GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    PRIMARY KEY (reserve_id, debut)
+) STRICT;
+
+CREATE TABLE mouvements_reserve (
+    id         TEXT PRIMARY KEY,
+    reserve_id TEXT NOT NULL REFERENCES reserves_compte(id) ON DELETE CASCADE,
+    date       TEXT NOT NULL CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    sorte      TEXT NOT NULL CHECK (sorte IN ('affectation', 'liberation', 'reaffectation', 'utilisation', 'prelevement', 'transfert')),
+    montant    INTEGER NOT NULL CHECK (montant > 0),
+    vers       TEXT,
+    lien       TEXT,
+    note       TEXT
+) STRICT;
+
+CREATE TABLE repartitions (
+    compte_id  TEXT NOT NULL REFERENCES comptes_epargne(id) ON DELETE CASCADE,
+    element_id TEXT NOT NULL,
+    origine    TEXT NOT NULL DEFAULT '',
+    reserve_id TEXT NOT NULL,
+    montant    INTEGER NOT NULL CHECK (montant > 0),
+    PRIMARY KEY (element_id, origine, reserve_id)
+) STRICT;
+
+CREATE TABLE depenses_prevoir (
+    element_id TEXT PRIMARY KEY REFERENCES elements(id) ON DELETE RESTRICT,
+    note       TEXT
+) STRICT;
+
+CREATE TABLE modes_depense (
+    element_id TEXT NOT NULL REFERENCES depenses_prevoir(element_id) ON DELETE CASCADE,
+    origine    TEXT NOT NULL CHECK (origine GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    mode       TEXT NOT NULL CHECK (mode IN ('disponible', 'reserve')),
+    PRIMARY KEY (element_id, origine)
+) STRICT;
+"#;
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -296,6 +356,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 8,
         description: "Épargne : comptes, références, mouvements, contributions",
         sql: V8,
+    },
+    Migration {
+        version: 9,
+        description: "Réserves et dépenses à prévoir",
+        sql: V9,
     },
 ];
 

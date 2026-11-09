@@ -55,6 +55,7 @@ export function objetJournal(d: DonneesPaie, e: ElementStocke): string {
   if (estPret(d, e.id)) return objetPret(e.libelle);
   const compte = compteDeContribution(d, e.id);
   if (compte) return objetCompte(nomCompte(d, compte));
+  if ((d.depenses ?? []).some((x) => x.id === e.id)) return `Dépense à prévoir « ${e.libelle} »`;
   return nomObjet(e);
 }
 
@@ -75,6 +76,7 @@ export function raisonsACompleter(d: DonneesPaie, c: Cycle): string | null {
   if (c.paie.montant === null) manque.push(`la paie du ${formaterDateCourte(c.paie.date)}`);
   for (const l of c.lignes) {
     if (l.montant === null && l.compte) manque.push(`${libelleLigne(d, l)} (${formaterDateCourte(l.echeance ?? c.paie.date)})`);
+    else if (l.couvert === null && l.compte) manque.push(`${libelleLigne(d, l)} : couverture par la réserve (${formaterDateCourte(l.echeance ?? c.paie.date)})`);
   }
   return manque.length === 0 ? null : `Il manque : ${manque.join(', ')}.`;
 }

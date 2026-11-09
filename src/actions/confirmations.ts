@@ -16,6 +16,8 @@ import { formaterMontant, type Cents } from '../noyau/montants';
 import type { ChangementPaie, ConfirmationStockee, DonneesPaie, EntreeJournal } from '../lib/plateforme';
 import { appliquerChangements } from '../lib/appliquer';
 import { objetJournal } from './cartes';
+import { effetsReserve } from './depenses';
+import type { CompteStocke } from '../lib/plateforme';
 import { ErreurSaisie, SECTION, lireDate, lireMontant, montantOuACompleter, versNoyau, type LigneApercu, type Proposition } from './paie';
 
 /** Une occurrence à confirmer ; elementId null : la paie elle-même. */
@@ -28,6 +30,8 @@ export interface SaisieConfirmation {
   /** En dollars. */
   montant: string;
   date: string;
+  /** Étape A (U4) : dépense à prévoir payée sans utiliser sa réserve. */
+  sansReserve?: boolean;
 }
 
 interface Situation {
@@ -47,7 +51,7 @@ function planAutour(d: DonneesPaie, origine: DateCivile, jour: DateCivile) {
   const n = versNoyau(d);
   if (!n.profil) throw new ErreurSaisie('Crée d’abord le profil de paie.');
   return planifier(
-    { profil: n.profil, exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, confirmations: n.confirmations, aujourdhui: jour },
+    { profil: n.profil, exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, confirmations: n.confirmations, couvertures: n.couvertures, aujourdhui: jour },
     ajouterJours(origine, -100),
     ajouterJours(origine, 100),
   );
@@ -132,15 +136,17 @@ export function proposerConfirmation(d: DonneesPaie, cible: CibleConfirmation, s
     valeur = { montant: s.prevu, date: jour };
   }
   const confirmation: ConfirmationStockee = { elementId: cible.elementId, origine: cible.origine, date: valeur.date, montant: valeur.montant };
-  const changements: ChangementPaie[] = [{ type: 'definirConfirmation', confirmation }];
+  // Étape A (U1, U2) : une dépense payée avec sa réserve, préparée dans le même aperçu.
+  const r = cible.elementId === null ? null : effetsReserve(d, new Map<string, CompteStocke>(), cible.elementId, cible.origine, valeur.montant, valeur.date, saisie?.sansReserve === true);
+  const changements: ChangementPaie[] = [{ type: 'definirConfirmation', confirmation }, ...(r?.changements ?? [])];
   const statut = cible.elementId === null ? s.cycle.paieStatut : (s.ligne?.statut ?? 'aVenir');
   return {
     titre: `Confirmer ${s.titre}`,
-    lignes: [{ libelle: 'Confirmation', avant: STATUTS[statut] ?? statut, apres: decrire(confirmation) }],
-    consequences: [...ecart(s.prevu, valeur.montant), ...effetSurLeCycle(d, changements, s.cycle, jour)],
+    lignes: [{ libelle: 'Confirmation', avant: STATUTS[statut] ?? statut, apres: decrire(confirmation) }, ...(r?.lignes ?? [])],
+    consequences: [...ecart(s.prevu, valeur.montant), ...(r?.consequences ?? []), ...effetSurLeCycle(d, changements, s.cycle, jour)],
     changements,
-    journal: [entree(s.objet, s.champ, null, decrire(confirmation))],
-    apercu: false,
+    journal: [entree(s.objet, s.champ, null, decrire(confirmation)), ...(r?.journal ?? [])],
+    apercu: r?.apercu ?? false,
   };
 }
 
@@ -150,28 +156,31 @@ export function proposerCorrection(d: DonneesPaie, cible: CibleConfirmation, sai
   const valeur = lireSaisie(saisie);
   if (valeur.montant === s.confirmation.montant && valeur.date === s.confirmation.date) throw new ErreurSaisie('Rien ne change.');
   const confirmation: ConfirmationStockee = { ...s.confirmation, montant: valeur.montant, date: valeur.date };
-  const changements: ChangementPaie[] = [{ type: 'definirConfirmation', confirmation }];
+  const r = cible.elementId === null ? null : effetsReserve(d, new Map<string, CompteStocke>(), cible.elementId, cible.origine, valeur.montant, valeur.date, saisie.sansReserve === true);
+  const changements: ChangementPaie[] = [{ type: 'definirConfirmation', confirmation }, ...(r?.changements ?? [])];
   return {
     titre: `Corriger la confirmation de ${s.titre}`,
-    lignes: [{ libelle: 'Confirmation', avant: decrire(s.confirmation), apres: decrire(confirmation) }],
-    consequences: [...ecart(s.prevu, valeur.montant), ...effetSurLeCycle(d, changements, s.cycle, jour)],
+    lignes: [{ libelle: 'Confirmation', avant: decrire(s.confirmation), apres: decrire(confirmation) }, ...(r?.lignes ?? [])],
+    consequences: [...ecart(s.prevu, valeur.montant), ...(r?.consequences ?? []), ...effetSurLeCycle(d, changements, s.cycle, jour)],
     changements,
-    journal: [entree(s.objet, `correction de la ${s.champ}`, decrire(s.confirmation), decrire(confirmation))],
-    apercu: false,
+    journal: [entree(s.objet, `correction de la ${s.champ}`, decrire(s.confirmation), decrire(confirmation)), ...(r?.journal ?? [])],
+    apercu: r?.apercu ?? false,
   };
 }
 
 export function proposerAnnulationConfirmation(d: DonneesPaie, cible: CibleConfirmation, jour: DateCivile): Proposition {
   const s = situer(d, cible, jour);
   if (!s.confirmation) throw new ErreurSaisie('Cette opération n’est pas confirmée.');
-  const changements: ChangementPaie[] = [{ type: 'retirerConfirmation', elementId: cible.elementId, origine: cible.origine }];
+  // Étape A (U5) : l'utilisation de la réserve et le retrait sont défaits avec elle.
+  const r = cible.elementId === null ? null : effetsReserve(d, new Map<string, CompteStocke>(), cible.elementId, cible.origine, null, jour);
+  const changements: ChangementPaie[] = [{ type: 'retirerConfirmation', elementId: cible.elementId, origine: cible.origine }, ...(r?.changements ?? [])];
   return {
     titre: `Annuler la confirmation de ${s.titre}`,
-    lignes: [{ libelle: 'Confirmation', avant: decrire(s.confirmation), apres: 'Aucune' }],
+    lignes: [{ libelle: 'Confirmation', avant: decrire(s.confirmation), apres: 'Aucune' }, ...(r?.lignes ?? [])],
     consequences: effetSurLeCycle(d, changements, s.cycle, jour),
     changements,
     journal: [entree(s.objet, `annulation de la ${s.champ}`, decrire(s.confirmation), null)],
-    apercu: false,
+    apercu: r?.apercu ?? false,
   };
 }
 
@@ -216,11 +225,23 @@ export function proposerToutConfirmer(d: DonneesPaie, paieOrigine: string, jour:
     }
   }
   if (inclus.length === 0) throw new ErreurSaisie('Rien à confirmer dans ce cycle.');
+  const comptes = new Map<string, CompteStocke>();
+  const autres: string[] = [];
+  const touches = new Set<string>();
   for (const i of inclus) {
     changements.push({ type: 'definirConfirmation', confirmation: i.confirmation });
     lignes.push({ libelle: i.libelle, avant: STATUTS[i.statut] ?? i.statut, apres: decrire(i.confirmation) });
     journal.push(entree(i.objet, i.champ, null, decrire(i.confirmation)));
+    if (i.confirmation.elementId !== null) {
+      const r = effetsReserve(d, comptes, i.confirmation.elementId, i.confirmation.origine, i.confirmation.montant, i.confirmation.date);
+      lignes.push(...r.lignes);
+      journal.push(...r.journal);
+      autres.push(...r.consequences);
+      for (const c of r.changements) if (c.type === 'definirCompte') touches.add(c.compte.id);
+    }
   }
+  for (const id of touches) changements.push({ type: 'definirCompte', compte: comptes.get(id)! });
+  exclus.push(...autres);
   return {
     titre: `Tout confirmer — cycle du ${quand}`,
     lignes,

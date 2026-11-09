@@ -119,6 +119,12 @@ export interface Ligne {
   ajuste: boolean;
   /** Retirée cette fois-ci. */
   retiree: boolean;
+  /**
+   * Étape A : part de la dépense couverte par une réserve d'épargne (0 sans
+   * réserve ; null si elle ne peut pas être connue). Seul le reste est déduit
+   * du disponible, une seule fois.
+   */
+  couvert: Cents | null;
 }
 
 export type Signal = 'negatif' | 'seuil' | null;
@@ -168,6 +174,8 @@ export interface EntreePlan {
   confirmations?: readonly ConfirmationOccurrence[];
   /** Date du jour : sert aux statuts (A2) ; absente, tout est « À venir ». */
   aujourdhui?: DateCivile;
+  /** Étape A : part couverte par une réserve, par occurrence (« élément|origine »). */
+  couvertures?: ReadonlyMap<string, Cents | null>;
 }
 
 const estLieeALaPaie = (r: Regle) => r.frequence.type === 'chaquePaie' || r.frequence.type === 'rangPaie';
@@ -231,6 +239,8 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
       const echeance = occ.echeance !== null && a?.date !== undefined ? a.date : occ.echeance;
       const montant = a?.montant !== undefined ? a.montant : occ.montant;
       const l = ligne(el, echeance, montant, a?.paieOrigine !== undefined, occ.origine, a, confirmations.get(cle(el.id, occ.origine)));
+      const couvert = entree.couvertures?.get(cle(el.id, occ.origine));
+      if (couvert !== undefined && l.nature === 'depense') l.couvert = couvert;
       let cible: Cycle | undefined;
       if (a?.paieOrigine !== undefined) {
         cible = parOrigine.get(a.paieOrigine);
@@ -268,7 +278,12 @@ export function planifier(entree: EntreePlan, debut: DateCivile, fin: DateCivile
     // Q18 : le montant confirmé remplace le prévu.
     const paieComptee = fp ? fp.montant : c.paie.montant;
     const comptees = c.lignes.filter((l) => l.compte);
-    c.sorties = total(comptees.filter((l) => l.nature === 'depense').map((l) => l.montant));
+    // Étape A : seule la partie non couverte par une réserve sort du cycle.
+    c.sorties = total(
+      comptees
+        .filter((l) => l.nature === 'depense')
+        .map((l) => (l.montant === null || l.couvert === null ? null : l.montant - Math.min(l.couvert, l.montant))),
+    );
     c.autresRevenus = total(comptees.filter((l) => l.nature === 'revenu').map((l) => l.montant));
     c.revenus = paieComptee !== null && c.autresRevenus !== null ? paieComptee + c.autresRevenus : null;
     c.disponible = c.revenus !== null && c.sorties !== null ? c.revenus - c.sorties : null;
@@ -317,6 +332,7 @@ function ligne(
     origine,
     ajuste: a !== undefined,
     retiree,
+    couvert: 0,
   };
 }
 
