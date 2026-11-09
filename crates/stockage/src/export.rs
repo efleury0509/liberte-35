@@ -197,6 +197,33 @@ const FICHIERS: &[FichierCsv] = &[
         ],
     },
     FichierCsv {
+        nom: "prets.csv",
+        table: "prets",
+        description: "Prêts : la fiche de chaque prêt. Son versement est dans elements.csv et montants.csv (même identifiant).",
+        depuis: "FROM prets x LEFT JOIN elements e ON e.id = x.id ORDER BY e.libelle",
+        colonnes: &[
+            col("Identifiant", "x.id", Genre::Texte, "identifiant du prêt et de son versement"),
+            LIBELLE,
+            col("Minimum ($)", "x.minimum", Genre::Montant, "minimum obligatoire ; vide : le versement sert de minimum"),
+            col("Échéance finale", "x.echeance_finale", Genre::Date, "dernier versement prévu, s'il est connu"),
+            col("Taux (%)", "replace(x.taux, '.', ',')", Genre::Texte, "taux annuel indiqué"),
+            col("Remboursé le", "x.rembourse_le", Genre::Date, "date où le prêt a été marqué remboursé"),
+        ],
+    },
+    FichierCsv {
+        nom: "soldes-prets.csv",
+        table: "soldes_pret",
+        description: "Soldes de référence des prêts : solde de départ, puis mises à jour d'après un relevé.",
+        depuis: "FROM soldes_pret x LEFT JOIN elements e ON e.id = x.pret_id ORDER BY e.libelle, x.date",
+        colonnes: &[
+            col("Identifiant", "x.pret_id", Genre::Texte, "identifiant du prêt"),
+            LIBELLE,
+            col("Date", "x.date", Genre::Date, "date du solde"),
+            col("Solde ($)", "x.montant", Genre::Montant, "solde du prêt à cette date"),
+            col("Note", "x.note", Genre::Texte, "précision, par exemple « relevé de mars »"),
+        ],
+    },
+    FichierCsv {
         nom: "journal.csv",
         table: "journal_changements",
         description: "Journal des changements, du plus ancien au plus récent.",

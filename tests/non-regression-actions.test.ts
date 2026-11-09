@@ -15,6 +15,7 @@ import { paiesEntre } from '../src/noyau/paie';
 import { appliquerChangements, inverser, donneesVides } from '../src/lib/appliquer';
 import { dateCivile as d, ajouterJours } from '../src/noyau/dates';
 import type { DonneesPaie } from '../src/lib/plateforme';
+import { estPret, proposerAjoutPret, proposerMiseAJourSolde, proposerRemboursement, proposerRenseignements, proposerSuppressionPret, proposerVersement, type QuandPret } from '../src/actions/prets';
 
 const JOUR = d('2026-11-08');
 let graine = 7;
@@ -32,8 +33,10 @@ it('200 suites de 30 actions réelles : les 13 paies restent affichées et aucun
     for (let pas = 0; pas < 30; pas++) {
       const n = versNoyau(donnees);
       const vue = cyclesAffiches(n.profil!, { exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, seuil: n.seuil }, JOUR);
-      const els = donnees.elements;
-      const action = choisir(['ajout', 'ajout', 'ajust', 'ajust', 'retrait', 'retour', 'freq', 'susp', 'fin', 'montant', 'exc', 'annuler', 'suppr', 'conf', 'conf', 'confAutre', 'corr', 'annConf', 'tout']);
+      // Comme dans l'interface : un versement de prêt se gère depuis Mes dettes.
+      const els = donnees.elements.filter((e) => !estPret(donnees, e.id));
+      const prets = donnees.prets;
+      const action = choisir(['ajout', 'ajout', 'ajust', 'ajust', 'retrait', 'retour', 'freq', 'susp', 'fin', 'montant', 'exc', 'annuler', 'suppr', 'conf', 'conf', 'confAutre', 'corr', 'annConf', 'tout', 'pret', 'pret', 'pretInfo', 'pretSolde', 'pretVersement', 'pretRembourse', 'pretSuppr']);
       let p: any = null;
       let desc = action;
       try {
@@ -67,6 +70,27 @@ it('200 suites de 30 actions réelles : les 13 paies restent affichées et aucun
           if (action === 'confAutre') p = proposerConfirmation(donnees, cible, saisie, JOUR);
           if (action === 'corr') p = proposerCorrection(donnees, cible, saisie, JOUR);
           if (action === 'annConf') p = proposerAnnulationConfirmation(donnees, cible, JOUR);
+        } else if (action === 'pret') {
+          const quand = choisir(['semaine', 'deuxSemaines', 'mois', 'chaquePaie'] as QuandPret[]);
+          const prochaine = dateAlea('2027-01-01', 120);
+          const avecSolde = hasard() < 0.5;
+          desc += ` ${quand} ${prochaine}`;
+          p = proposerAjoutPret(donnees, {
+            nom: 'pret' + pas, versement: String(50 + Math.floor(hasard() * 400)), quand, prochaine,
+            minimum: hasard() < 0.3 ? String(Math.floor(hasard() * 60)) : '',
+            echeanceFinale: hasard() < 0.3 ? dateAlea('2027-03-01', 300) : '',
+            solde: avecSolde ? String(Math.floor(hasard() * 20000)) : '', soldeLe: avecSolde ? dateAlea('2026-12-01', 60) : '',
+            taux: hasard() < 0.5 ? '6,49' : '',
+          }, JOUR);
+        } else if (action.startsWith('pret')) {
+          if (!prets.length) continue;
+          const pr = choisir(prets);
+          desc += ` ${pr.id.slice(0, 4)}`;
+          if (action === 'pretInfo') p = proposerRenseignements(donnees, pr.id, { minimum: '', echeanceFinale: hasard() < 0.5 ? dateAlea('2027-02-01', 300) : '', taux: '9,90', solde: '5000', soldeLe: dateAlea('2027-01-01', 100) }, JOUR);
+          if (action === 'pretSolde') p = proposerMiseAJourSolde(donnees, pr.id, dateAlea('2027-01-01', 200), String(Math.floor(hasard() * 9000)), 'relevé', JOUR);
+          if (action === 'pretVersement') p = proposerVersement(donnees, pr.id, dateAlea('2027-01-01', 150), String(100 + Math.floor(hasard() * 400)), JOUR);
+          if (action === 'pretRembourse') p = proposerRemboursement(donnees, pr.id, hasard() < 0.5 ? '' : dateAlea('2027-01-15', 200), JOUR);
+          if (action === 'pretSuppr') p = proposerSuppressionPret(donnees, pr.id, JOUR);
         } else if (action === 'tout') {
           const c = choisir(vue.cycles);
           desc += ` cycle ${c.paie.dateOrigine}`;
@@ -111,6 +135,16 @@ it('200 suites de 30 actions réelles : les 13 paies restent affichées et aucun
         if (f.elementId === null) return !paiesEntre(n2.profil!, n2.exceptions, ajouterJours(d(f.origine), -40), ajouterJours(d(f.origine), 40)).some((x) => x.dateOrigine === f.origine);
         return ajustementsOrphelins({ profil: n2.profil!, exceptions: n2.exceptions, elements: n2.elements, ajustements: [{ elementId: f.elementId, origine: d(f.origine) }] }).length > 0;
       });
+      // Étape 7a : chaque prêt garde son versement (dépense fixe), et sa fin
+      // vient seulement d'un remboursement marqué ou d'une échéance indiquée.
+      const pretsIncoherents = donnees.prets.filter((pr) => {
+        const e = donnees.elements.find((x) => x.id === pr.id);
+        return !e || e.nature !== 'depense' || e.genre !== 'fixe' || e.fin !== (pr.rembourseLe ?? pr.echeanceFinale);
+      });
+      if (pretsIncoherents.length > 0) {
+        console.log('=== PRÊT INCOHÉRENT, ESSAI', essai, '\n' + histo.join('\n') + '\n' + JSON.stringify(pretsIncoherents));
+        trouve++; break;
+      }
       if (perdues.length > 0) {
         console.log('=== CONFIRMATION PERDUE, ESSAI', essai, '\n' + histo.join('\n') + '\n' + JSON.stringify(perdues));
         trouve++; break;

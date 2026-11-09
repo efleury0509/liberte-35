@@ -146,6 +146,29 @@ CREATE TABLE confirmations (
 CREATE UNIQUE INDEX confirmations_occurrence ON confirmations (ifnull(element_id, ''), origine);
 "#;
 
+// Étape 7a : ajout seulement. Un prêt est la fiche d'un élément de dépense
+// fixe (son versement), qui garde ses cycles, confirmations et ajustements.
+// Tout est facultatif sauf le versement : on commence avec ce qu'on sait.
+// Les soldes sont des références datées (solde de départ, puis mises à jour
+// d'après un relevé) ; aucune n'en réécrit une autre.
+const V6: &str = r#"
+CREATE TABLE prets (
+    id              TEXT PRIMARY KEY REFERENCES elements(id) ON DELETE RESTRICT,
+    minimum         INTEGER CHECK (minimum >= 0),
+    echeance_finale TEXT CHECK (echeance_finale GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    taux            TEXT CHECK (taux GLOB '[0-9]*' AND taux NOT GLOB '*[^0-9.]*'),
+    rembourse_le    TEXT CHECK (rembourse_le GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]')
+) STRICT;
+
+CREATE TABLE soldes_pret (
+    pret_id TEXT NOT NULL REFERENCES prets(id) ON DELETE CASCADE,
+    date    TEXT NOT NULL CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    montant INTEGER NOT NULL CHECK (montant >= 0),
+    note    TEXT,
+    PRIMARY KEY (pret_id, date)
+) STRICT;
+"#;
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -171,6 +194,11 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 5,
         description: "Confirmations : faits confirmés, distincts du plan",
         sql: V5,
+    },
+    Migration {
+        version: 6,
+        description: "Prêts : fiche du versement et soldes de référence datés",
+        sql: V6,
     },
 ];
 

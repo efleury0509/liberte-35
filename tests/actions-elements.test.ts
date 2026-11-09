@@ -35,7 +35,7 @@ function donnees(elements = ELEMENTS_ETAPE4.map(versStocke)): DonneesPaie {
     seuil: null,
     elements,
     ajustements: [],
-  confirmations: [],
+  confirmations: [], prets: [],
 };
 }
 

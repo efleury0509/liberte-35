@@ -101,8 +101,10 @@ const CSV_ATTENDUS: &[&str] = &[
     "journal.csv",
     "montants.csv",
     "paies-modifiees.csv",
+    "prets.csv",
     "profil-paie.csv",
     "salaires.csv",
+    "soldes-prets.csv",
     "suspensions.csv",
 ];
 

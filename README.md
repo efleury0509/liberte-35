@@ -51,6 +51,14 @@ et dans le cahier fonctionnel de référence.
   ailleurs) avec aperçu ; export .zip (JSON, CSV pour LibreOffice Calc,
   LISEZMOI) à l'emplacement choisi. « Salaire net en vigueur » affiche
   « à partir du… » quand le premier salaire est à venir. Structure inchangée (5).
+- Étape 7a (version 0.7.0) : Mes dettes, les prêts au quotidien. Un prêt se crée
+  avec son nom, son versement, sa fréquence et sa prochaine échéance ; minimum,
+  taux, solde et échéance finale se complètent plus tard. Le versement est une
+  dépense fixe placée dans les cycles (groupe « Dettes »), confirmée comme le
+  reste ; l'historique en découle (obligatoire, supplémentaire). Aucune méthode
+  d'intérêts supposée : intérêts, capital et solde estimé restent « À compléter ».
+  Mise à jour du solde datée (nouvelle référence, rien de réécrit), « Marquer
+  comme remboursé » avec aperçu, dettes libérées. Base de données en version 6.
 
 ## Organisation du code
 

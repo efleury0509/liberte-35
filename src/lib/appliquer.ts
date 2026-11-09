@@ -13,6 +13,7 @@ export const donneesVides = (): DonneesPaie => ({
   elements: [],
   ajustements: [],
   confirmations: [],
+  prets: [],
 });
 
 // Copie par sérialisation, comme le pont Tauri : les objets réactifs de
@@ -62,6 +63,7 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
       if (d.confirmations.some((f) => f.elementId === c.id)) {
         refus('Ce revenu ou cette dépense a des opérations confirmées : termine-le plutôt que de le supprimer.');
       }
+      if (d.prets.some((p) => p.id === c.id)) refus('Ce versement appartient à un prêt : supprime le prêt depuis Mes dettes.');
       d.elements = d.elements.filter((e) => e.id !== c.id);
       d.ajustements = d.ajustements.filter((a) => a.elementId !== c.id);
       break;
@@ -87,6 +89,27 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
     }
     case 'retirerConfirmation':
       d.confirmations = d.confirmations.filter((x) => !memeOccurrence(x, c));
+      break;
+    case 'definirPret': {
+      const p = c.pret;
+      const e = d.elements.find((x) => x.id === p.id);
+      if (!e) refus('Le versement de ce prêt n’existe pas.');
+      if (e && (e.nature !== 'depense' || e.genre !== 'fixe')) refus('Le versement d’un prêt doit être une dépense fixe.');
+      if (p.minimum !== null && p.minimum < 0) refus('Le minimum d’un prêt ne peut pas être négatif.');
+      if (p.taux !== null && !/^\d+(\.\d{1,3})?$/.test(p.taux)) refus(`Taux invalide : « ${p.taux} » (par exemple 9.90).`);
+      if (p.soldes.some((x) => x.montant < 0)) refus('Un solde ne peut pas être négatif.');
+      if (new Set(p.soldes.map((x) => x.date)).size !== p.soldes.length) refus('Deux soldes à la même date.');
+      const pret = { ...p, soldes: [...p.soldes].sort(parDate((x) => x.date)) };
+      const i = d.prets.findIndex((x) => x.id === p.id);
+      if (i >= 0) d.prets[i] = pret;
+      else d.prets = [...d.prets, pret].sort(parDate((x) => x.id));
+      break;
+    }
+    case 'supprimerPret':
+      if (d.confirmations.some((f) => f.elementId === c.id)) {
+        refus('Ce prêt a des versements confirmés : marque-le comme remboursé plutôt que de le supprimer.');
+      }
+      d.prets = d.prets.filter((p) => p.id !== c.id);
       break;
   }
 }
@@ -168,6 +191,14 @@ function inverseUn(d: DonneesPaie, c: ChangementPaie): ChangementPaie[] {
     case 'retirerAjustement': {
       const avant = d.ajustements.find((x) => x.elementId === c.elementId && x.origine === c.origine);
       return avant ? [{ type: 'definirAjustement', ajustement: avant }] : [];
+    }
+    case 'definirPret': {
+      const avant = d.prets.find((p) => p.id === c.pret.id);
+      return [avant ? { type: 'definirPret', pret: avant } : { type: 'supprimerPret', id: c.pret.id }];
+    }
+    case 'supprimerPret': {
+      const avant = d.prets.find((p) => p.id === c.id);
+      return avant ? [{ type: 'definirPret', pret: avant }] : [];
     }
   }
 }

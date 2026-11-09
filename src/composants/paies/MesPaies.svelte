@@ -38,6 +38,7 @@
     proposerToutConfirmer,
     type CibleConfirmation,
   } from '../../actions/confirmations';
+  import { estPret } from '../../actions/prets';
   import RevenusDepenses from './RevenusDepenses.svelte';
   import TableauCycles from './TableauCycles.svelte';
 
@@ -45,8 +46,10 @@
     plateforme: Plateforme;
     profilInstallation: Profil | undefined;
     onchangement: () => void;
+    /** Étape 7a : ouvrir un prêt dans Mes dettes. */
+    onvoirpret?: (id: string) => void;
   }
-  let { plateforme, profilInstallation, onchangement }: Props = $props();
+  let { plateforme, profilInstallation, onchangement, onvoirpret }: Props = $props();
 
   const jour = aujourdhui();
   const ELEMENTS_EXEMPLE = ELEMENTS_ETAPE4.map(versElementStocke);
@@ -285,6 +288,8 @@
   }
 
   const libelleSalaire = (d: string) => formaterDateLongue(dateCivile(d));
+  /** Étape 7a : versements de prêts du cycle, groupés sous « Dettes ». */
+  const dettesDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => l.nature === 'depense' && estPret(donnees!, l.elementId)) : []);
 </script>
 
 {#if erreurChargement}
@@ -407,7 +412,7 @@
 
 {#if exemple || donnees?.profil}
   <RevenusDepenses
-    elements={exemple ? ELEMENTS_EXEMPLE : (donnees?.elements ?? [])}
+    elements={exemple ? ELEMENTS_EXEMPLE : (donnees?.elements ?? []).filter((e) => !estPret(donnees!, e.id))}
     {donnees}
     modifiable={!exemple}
     cycles={vue?.cycles ?? []}
@@ -522,13 +527,17 @@
     {#if ligne.ajuste}
       <button type="button" onclick={() => proposer(() => proposerRetourRegle(donnees!, cible, jour))}>Revenir à la règle</button>
     {/if}
-    <button
-      type="button"
-      onclick={() => {
-        aGerer = null;
-        queueMicrotask(() => (aGerer = cible.elementId));
-      }}>Modifier la règle…</button
-    >
+    {#if donnees && estPret(donnees, cible.elementId)}
+      <button type="button" onclick={() => onvoirpret?.(cible.elementId)}>Voir le prêt</button>
+    {:else}
+      <button
+        type="button"
+        onclick={() => {
+          aGerer = null;
+          queueMicrotask(() => (aGerer = cible.elementId));
+        }}>Modifier la règle…</button
+      >
+    {/if}
     <button type="button" onclick={() => (occurrence = null)}>Fermer</button>
   </form>
 {/snippet}
@@ -642,7 +651,7 @@
           </tr>
         {/each}
         <tr class="groupe"><th scope="rowgroup" colspan="4">Sorties</th></tr>
-        {#each c.lignes.filter((l) => l.nature === 'depense') as l (`${l.elementId}|${l.origine}`)}
+        {#each c.lignes.filter((l) => l.nature === 'depense' && !(donnees && !exemple && estPret(donnees, l.elementId))) as l (`${l.elementId}|${l.origine}`)}
           <tr class:retiree={l.retiree} data-ligne={l.elementId}>
             <th scope="row">
               {l.libelle}{l.echeance ? ` (dû le ${formaterDateCourte(l.echeance)})` : ''}{l.genre === 'enveloppe' ? ' — enveloppe' : ''}{l.estimation
@@ -657,6 +666,21 @@
         {:else}
           <tr><td colspan="4" class="discret">Aucune sortie prévue dans ce cycle.</td></tr>
         {/each}
+        {#if dettesDe(c).length > 0}
+          <tr class="groupe"><th scope="rowgroup" colspan="4">Dettes</th></tr>
+          {#each dettesDe(c) as l (`${l.elementId}|${l.origine}`)}
+            <tr class:retiree={l.retiree} data-ligne={l.elementId} data-dette="oui">
+              <th scope="row">
+                Paiement — {l.libelle}{l.echeance ? ` (dû le ${formaterDateCourte(l.echeance)})` : ''}
+                {@render marques(l)}
+                <button type="button" class="lien" onclick={() => onvoirpret?.(l.elementId)}>Voir le prêt</button>
+              </th>
+              <td class="montant">−{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
+              <td>{@render statutLigne(l)}</td>
+              <td>{@render actionsLigne(c, l)}</td>
+            </tr>
+          {/each}
+        {/if}
         <tr class="total">
           <th scope="row">Disponible planifié</th>
           <td class="montant">{c.disponible === null ? 'À compléter' : formaterMontant(c.disponible)}</td>
@@ -841,6 +865,17 @@
     border-radius: var(--arrondi);
     padding: var(--espace-3) var(--espace-4);
     margin-top: var(--espace-3);
+  }
+  .lien {
+    margin-left: var(--espace-2);
+    min-height: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--couleur-accent);
+    text-decoration: underline;
+    font-size: var(--taille-petit);
+    cursor: pointer;
   }
   .fermer {
     min-width: 32px;

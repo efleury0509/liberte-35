@@ -97,6 +97,29 @@ export interface ElementStocke {
   changementsFrequence: PeriodeStockee[];
 }
 
+/** Solde de référence d'un prêt à une date (étape 7a, Q40). */
+export interface SoldePretStocke {
+  date: string;
+  montant: number;
+  note: string | null;
+}
+
+/**
+ * Fiche d'un prêt (étape 7a). Son id est celui de l'élément de dépense fixe
+ * qui porte le versement. Tout est facultatif : on complète plus tard.
+ */
+export interface PretStocke {
+  id: string;
+  /** Absent : le versement sert de minimum (Q46). */
+  minimum: number | null;
+  echeanceFinale: string | null;
+  /** Pour cent, point décimal (« 9.90 »). */
+  taux: string | null;
+  /** Marqué remboursé par l'utilisatrice, jamais déduit d'une estimation. */
+  rembourseLe: string | null;
+  soldes: SoldePretStocke[];
+}
+
 export interface DonneesPaie {
   profil: ProfilPaieStocke | null;
   salaires: SalaireStocke[];
@@ -105,6 +128,7 @@ export interface DonneesPaie {
   elements: ElementStocke[];
   ajustements: AjustementStocke[];
   confirmations: ConfirmationStockee[];
+  prets: PretStocke[];
 }
 
 export type ChangementPaie =
@@ -119,7 +143,9 @@ export type ChangementPaie =
   | { type: 'definirAjustement'; ajustement: AjustementStocke }
   | { type: 'definirConfirmation'; confirmation: ConfirmationStockee }
   | { type: 'retirerConfirmation'; elementId: string | null; origine: string }
-  | { type: 'retirerAjustement'; elementId: string; origine: string };
+  | { type: 'retirerAjustement'; elementId: string; origine: string }
+  | { type: 'definirPret'; pret: PretStocke }
+  | { type: 'supprimerPret'; id: string };
 
 export interface EntreeJournal {
   section: string;
@@ -324,7 +350,7 @@ export function creerApercu(): Plateforme {
         motif: null,
         lisible: c.lisible,
         raison: c.lisible ? null : 'Cette copie est illisible (le contrôle d’intégrité a échoué) : elle ne peut pas être restaurée.',
-        versionSchema: c.lisible ? 5 : null,
+        versionSchema: c.lisible ? 6 : null,
         resume: c.lisible ? resume(c) : null,
       }));
   const listePrecautions = (): CopieListee[] =>
@@ -336,7 +362,7 @@ export function creerApercu(): Plateforme {
       motif: p.motif,
       lisible: true,
       raison: null,
-      versionSchema: 5,
+      versionSchema: 6,
       resume: resume(p),
     }));
   const trouver = (source: SourceCopie): Instantane & { nom: string } => {
@@ -365,7 +391,7 @@ export function creerApercu(): Plateforme {
       source,
       nom: c.nom,
       horodatage: c.horodatage,
-      versionSchema: 5,
+      versionSchema: 6,
       miseANiveau: false,
       resume: resume(c),
       nombreRetires: retires.length,
@@ -382,7 +408,7 @@ export function creerApercu(): Plateforme {
       return {
         profil: 'apercu',
         versionApplication: VERSION_APPLICATION,
-        versionSchema: 5,
+        versionSchema: 6,
         dossierDonnees: '(aucun : aperçu en mémoire)',
         integriteOk: true,
         nombreEntreesJournal: journal.length,

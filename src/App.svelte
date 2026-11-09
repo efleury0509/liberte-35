@@ -4,6 +4,7 @@
   import SectionAVenir from './composants/SectionAVenir.svelte';
   import Parametres from './composants/Parametres.svelte';
   import MesPaies from './composants/paies/MesPaies.svelte';
+  import MesDettes from './composants/dettes/MesDettes.svelte';
   import { SECTION_PAR_DEFAUT, trouverSection, type IdSection } from './lib/navigation';
   import { obtenirPlateforme, type EtatApplication } from './lib/plateforme';
   import { TEXTES } from './lib/textes.fr';
@@ -15,6 +16,12 @@
   let erreur: string | null = $state(null);
 
   const section = $derived(trouverSection(sectionActive));
+  /** Étape 7a : prêt à ouvrir en arrivant dans Mes dettes (« Voir le prêt »). */
+  let pretOuvert: string | null = $state(null);
+  function voirPret(id: string) {
+    pretOuvert = id;
+    sectionActive = 'mes-dettes';
+  }
 
   async function chargerEtat() {
     try {
@@ -39,7 +46,15 @@
 </script>
 
 <div class="application">
-  <BarreLaterale active={sectionActive} profil={etat?.profil} version={etat?.versionApplication} onchoisir={(id) => (sectionActive = id)} />
+  <BarreLaterale
+    active={sectionActive}
+    profil={etat?.profil}
+    version={etat?.versionApplication}
+    onchoisir={(id) => {
+      pretOuvert = null;
+      sectionActive = id;
+    }}
+  />
 
   <main id="contenu" tabindex="-1" aria-labelledby="titre-section">
     {#if erreur}
@@ -60,7 +75,11 @@
       {#if section.id === 'parametres'}
         <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} />
       {:else if section.id === 'mes-paies' && !erreur}
-        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} />
+        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} />
+      {:else if section.id === 'mes-dettes' && !erreur}
+        {#key pretOuvert}
+          <MesDettes {plateforme} onchangement={chargerEtat} ouvert={pretOuvert} />
+        {/key}
       {:else}
         <SectionAVenir etape={section.etape} />
       {/if}

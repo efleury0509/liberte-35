@@ -228,7 +228,7 @@ fn p5_un_fichier_de_l_etape_4b_passe_en_version_5_sans_rien_changer() {
         );
     }
     let s = Stockage::ouvrir(&chemin, Profil::Essai, horloge()).unwrap();
-    assert_eq!(s.version_schema().unwrap(), 5);
+    assert_eq!(s.version_schema().unwrap(), version_schema_attendue());
     let donnees = s.lire_paie().unwrap();
     assert_eq!(
         (

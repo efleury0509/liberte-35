@@ -105,6 +105,34 @@ pub struct ElementStocke {
     pub changements_frequence: Vec<PeriodeStockee>,
 }
 
+/// Solde de référence d'un prêt à une date (étape 7a, Q40) : le solde de
+/// départ, puis chaque mise à jour d'après un relevé.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoldePretStocke {
+    pub date: String,
+    pub montant: i64,
+    pub note: Option<String>,
+}
+
+/// Fiche d'un prêt (étape 7a). Son `id` est celui de l'élément de dépense
+/// fixe qui porte le versement. Tout est facultatif : on commence avec ce
+/// qu'on sait et on complète plus tard.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PretStocke {
+    pub id: String,
+    /// Minimum obligatoire ; absent : le versement sert de minimum (Q46).
+    pub minimum: Option<i64>,
+    pub echeance_finale: Option<String>,
+    /// Taux annuel en pour cent, point décimal (« 9.90 »).
+    pub taux: Option<String>,
+    /// Marqué remboursé par l'utilisatrice (jamais déduit d'une estimation).
+    pub rembourse_le: Option<String>,
+    #[serde(default)]
+    pub soldes: Vec<SoldePretStocke>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DonneesPaie {
@@ -117,6 +145,8 @@ pub struct DonneesPaie {
     pub ajustements: Vec<AjustementStocke>,
     #[serde(default)]
     pub confirmations: Vec<ConfirmationStockee>,
+    #[serde(default)]
+    pub prets: Vec<PretStocke>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,6 +193,12 @@ pub enum ChangementPaie {
     RetirerConfirmation {
         element_id: Option<String>,
         origine: String,
+    },
+    DefinirPret {
+        pret: PretStocke,
+    },
+    SupprimerPret {
+        id: String,
     },
 }
 
@@ -266,7 +302,82 @@ fn verifier(changement: &ChangementPaie) -> Resultat<()> {
             Ok(())
         }
         ChangementPaie::RetirerConfirmation { origine, .. } => verifier_date(origine),
+        ChangementPaie::DefinirPret { pret } => verifier_pret(pret),
+        ChangementPaie::SupprimerPret { id } => {
+            if id.is_empty() {
+                return Err(erreur("Prêt à supprimer non précisé."));
+            }
+            Ok(())
+        }
     }
+}
+
+fn verifier_pret(p: &PretStocke) -> Resultat<()> {
+    if p.id.is_empty() {
+        return Err(erreur("Prêt sans identifiant."));
+    }
+    if p.minimum.is_some_and(|m| m < 0) {
+        return Err(erreur("Le minimum d'un prêt ne peut pas être négatif."));
+    }
+    for d in [&p.echeance_finale, &p.rembourse_le].into_iter().flatten() {
+        verifier_date(d)?;
+    }
+    if let Some(t) = &p.taux {
+        let (entier, decimales) = t.split_once('.').unwrap_or((t.as_str(), ""));
+        let forme = !entier.is_empty()
+            && entier.chars().all(|c| c.is_ascii_digit())
+            && decimales.len() <= 3
+            && decimales.chars().all(|c| c.is_ascii_digit());
+        let valeur: f64 = t.parse().unwrap_or(f64::MAX);
+        if !forme || valeur > 100.0 {
+            return Err(erreur(format!(
+                "Taux invalide : « {t} » (par exemple 9.90)."
+            )));
+        }
+    }
+    let mut dates = std::collections::HashSet::new();
+    for s in &p.soldes {
+        verifier_date(&s.date)?;
+        if s.montant < 0 {
+            return Err(erreur("Un solde ne peut pas être négatif."));
+        }
+        if !dates.insert(&s.date) {
+            return Err(erreur(format!("Deux soldes à la même date ({}).", s.date)));
+        }
+    }
+    Ok(())
+}
+
+fn lire_prets(conn: &rusqlite::Connection) -> Resultat<Vec<PretStocke>> {
+    let mut req = conn.prepare(
+        "SELECT id, minimum, echeance_finale, taux, rembourse_le FROM prets ORDER BY id",
+    )?;
+    let mut prets = req
+        .query_map([], |r| {
+            Ok(PretStocke {
+                id: r.get(0)?,
+                minimum: r.get(1)?,
+                echeance_finale: r.get(2)?,
+                taux: r.get(3)?,
+                rembourse_le: r.get(4)?,
+                soldes: Vec::new(),
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut req = conn
+        .prepare("SELECT date, montant, note FROM soldes_pret WHERE pret_id = ?1 ORDER BY date")?;
+    for p in &mut prets {
+        p.soldes = req
+            .query_map([&p.id], |r| {
+                Ok(SoldePretStocke {
+                    date: r.get(0)?,
+                    montant: r.get(1)?,
+                    note: r.get(2)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+    Ok(prets)
 }
 
 fn lire_confirmations(conn: &rusqlite::Connection) -> Resultat<Vec<ConfirmationStockee>> {
@@ -523,6 +634,7 @@ impl Stockage {
         let elements = lire_elements(&self.conn)?;
         let ajustements = lire_ajustements(&self.conn)?;
         let confirmations = lire_confirmations(&self.conn)?;
+        let prets = lire_prets(&self.conn)?;
         Ok(DonneesPaie {
             profil,
             salaires,
@@ -531,6 +643,7 @@ impl Stockage {
             elements,
             ajustements,
             confirmations,
+            prets,
         })
     }
 
@@ -623,6 +736,16 @@ impl Stockage {
                             "Ce revenu ou cette dépense a des opérations confirmées : termine-le plutôt que de le supprimer.",
                         ));
                     }
+                    let pret: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM prets WHERE id = ?1)",
+                        [id],
+                        |r| r.get(0),
+                    )?;
+                    if pret {
+                        return Err(erreur(
+                            "Ce versement appartient à un prêt : supprime le prêt depuis Mes dettes.",
+                        ));
+                    }
                     // Ses montants, suspensions, périodes et ajustements partent avec lui.
                     tx.execute("DELETE FROM elements WHERE id = ?1", [id])?;
                 }
@@ -681,6 +804,53 @@ impl Stockage {
                         "DELETE FROM confirmations WHERE ifnull(element_id, '') = ifnull(?1, '') AND origine = ?2",
                         params![element_id, origine],
                     )?;
+                }
+                ChangementPaie::DefinirPret { pret: p } => {
+                    let genre: Option<(String, String)> = tx
+                        .query_row(
+                            "SELECT nature, genre FROM elements WHERE id = ?1",
+                            [&p.id],
+                            |r| Ok((r.get(0)?, r.get(1)?)),
+                        )
+                        .optional()?;
+                    match genre.as_ref().map(|(n, g)| (n.as_str(), g.as_str())) {
+                        Some(("depense", "fixe")) => {}
+                        Some(_) => {
+                            return Err(erreur(
+                                "Le versement d'un prêt doit être une dépense fixe.",
+                            ))
+                        }
+                        None => return Err(erreur("Le versement de ce prêt n'existe pas.")),
+                    }
+                    tx.execute(
+                        "INSERT INTO prets (id, minimum, echeance_finale, taux, rembourse_le)
+                         VALUES (?1, ?2, ?3, ?4, ?5)
+                         ON CONFLICT(id) DO UPDATE SET minimum = excluded.minimum,
+                           echeance_finale = excluded.echeance_finale, taux = excluded.taux,
+                           rembourse_le = excluded.rembourse_le",
+                        params![p.id, p.minimum, p.echeance_finale, p.taux, p.rembourse_le],
+                    )?;
+                    tx.execute("DELETE FROM soldes_pret WHERE pret_id = ?1", [&p.id])?;
+                    for so in &p.soldes {
+                        tx.execute(
+                            "INSERT INTO soldes_pret (pret_id, date, montant, note) VALUES (?1, ?2, ?3, ?4)",
+                            params![p.id, so.date, so.montant, so.note],
+                        )?;
+                    }
+                }
+                ChangementPaie::SupprimerPret { id } => {
+                    let confirme: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM confirmations WHERE element_id = ?1)",
+                        [id],
+                        |r| r.get(0),
+                    )?;
+                    if confirme {
+                        return Err(erreur(
+                            "Ce prêt a des versements confirmés : marque-le comme remboursé plutôt que de le supprimer.",
+                        ));
+                    }
+                    // Ses soldes de référence partent avec lui.
+                    tx.execute("DELETE FROM prets WHERE id = ?1", [id])?;
                 }
             }
         }

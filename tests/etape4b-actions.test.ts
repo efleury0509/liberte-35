@@ -31,7 +31,7 @@ function donnees(ajustements: AjustementStocke[] = []): DonneesPaie {
     seuil: null,
     elements: ELEMENTS_ETAPE4.map(versElementStocke),
     ajustements,
-    confirmations: [],
+    confirmations: [], prets: [],
   };
 }
 const aj = (a: Partial<AjustementStocke> & { elementId: string; origine: string }): AjustementStocke => ({

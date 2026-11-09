@@ -247,6 +247,7 @@ fn un_fichier_de_l_etape_3_passe_en_version_3_sans_perte() {
         elements: Vec::new(),
         ajustements: Vec::new(),
         confirmations: Vec::new(),
+        prets: Vec::new(),
     };
     let s = Stockage::ouvrir(&chemin, Profil::Essai, horloge()).unwrap();
     assert_eq!(

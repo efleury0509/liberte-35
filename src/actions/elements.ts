@@ -145,7 +145,7 @@ function entree(objet: string, champ: string, avant: string | null, apres: strin
 // ---------------------------------------------------------------------------
 // Outils communs
 
-function trouver(d: DonneesPaie, id: string): ElementStocke {
+export function trouver(d: DonneesPaie, id: string): ElementStocke {
   const e = (d.elements ?? []).find((x) => x.id === id);
   if (!e) throw new ErreurSaisie('Ce revenu ou cette dépense n’existe plus.');
   return e;
@@ -158,7 +158,7 @@ function debutCycleActuel(d: DonneesPaie, profil: ProfilPaie, jour: DateCivile):
   return cycles[0]?.paie.dateOrigine ?? profil.frequence.depart;
 }
 
-function exigerProfil(d: DonneesPaie): ProfilPaie {
+export function exigerProfil(d: DonneesPaie): ProfilPaie {
   const p = versNoyau(d).profil;
   if (!p) throw new ErreurSaisie('Crée d’abord le profil de paie.');
   return p;
@@ -173,7 +173,7 @@ export function decrireAjustement(a: AjustementStocke): string {
   return parties.join(', ');
 }
 
-interface Brouillon {
+export interface Brouillon {
   titre: string;
   lignes: LigneApercu[];
   changements: ChangementPaie[];
@@ -192,7 +192,7 @@ interface Brouillon {
  * ajustement orphelin n'est jamais effacé en silence : il est nommé et
  * retiré avec une trace au journal.
  */
-function finaliser(d: DonneesPaie, b: Brouillon, jour: DateCivile): Proposition {
+export function finaliser(d: DonneesPaie, b: Brouillon, jour: DateCivile): Proposition {
   // Q23 : une modification qui ferait disparaître une opération confirmée est refusée.
   const perdues = confirmationsPerdues(d, b.changements);
   if (perdues.length > 0) throw new ErreurSaisie(messageConfirmationsPerdues(d, perdues));
@@ -246,7 +246,7 @@ export interface SaisieElement {
   cyclePaie: string;
 }
 
-function construireFrequence(q: Quand, date: DateCivile | null, cyclePaie: DateCivile | null): ElementStocke['frequence'] {
+export function construireFrequence(q: Quand, date: DateCivile | null, cyclePaie: DateCivile | null): ElementStocke['frequence'] {
   const depuis = (type: string, n: number) => ({ type, n, depart: date as string });
   switch (q) {
     case 'unique':

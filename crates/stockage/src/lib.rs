@@ -25,8 +25,8 @@ pub use horloge::{formater_utc, Horloge, HorlogeFixe, HorlogeSysteme};
 use migrations::{derniere_version, Migration, MIGRATIONS};
 pub use paie::{
     AjustementStocke, ChangementPaie, ConfirmationStockee, DonneesPaie, ElementStocke,
-    ExceptionStockee, MontantStocke, PeriodeStockee, ProfilPaieStocke, SalaireStocke,
-    SuspensionStocke,
+    ExceptionStockee, MontantStocke, PeriodeStockee, PretStocke, ProfilPaieStocke, SalaireStocke,
+    SoldePretStocke, SuspensionStocke,
 };
 pub use sauvegardes::{
     ApercuRestauration, ChangementJournal, CopieFaite, CopieListee, ListeDesCopies,
@@ -513,5 +513,7 @@ mod tests_elements;
 mod tests_export;
 #[cfg(test)]
 mod tests_paie;
+#[cfg(test)]
+mod tests_prets;
 #[cfg(test)]
 mod tests_sauvegardes;
