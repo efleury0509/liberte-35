@@ -301,8 +301,7 @@ fn b4_un_fichier_de_l_etape_4_passe_en_version_4_sans_rien_changer() {
     let horloge = || Box::new(HorlogeFixe("2026-11-08T15:00:00Z".into())) as Box<dyn Horloge>;
     {
         // Fichier tel que l'installation 0.4.0 l'a créé (version 3), avec un élément complet.
-        let mut s =
-            Stockage::ouvrir_avec(&chemin, Profil::Essai, horloge(), &MIGRATIONS[..3]).unwrap();
+        let s = Stockage::ouvrir_avec(&chemin, Profil::Essai, horloge(), &MIGRATIONS[..3]).unwrap();
         assert_eq!(s.version_schema().unwrap(), 3);
         s.conn
             .execute_batch(

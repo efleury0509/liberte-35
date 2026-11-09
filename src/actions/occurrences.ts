@@ -10,7 +10,8 @@ import { ajouterJours, formaterDateCourte, type DateCivile } from '../noyau/date
 import type { Cents } from '../noyau/montants';
 import { montantEnVigueur } from '../noyau/regles';
 import { analyser } from './analyse';
-import { decrireAjustement, nomObjet } from './elements';
+import { decrireAjustement } from './elements';
+import { objetJournal } from './cartes';
 import { versElementNoyau } from './elementsStockes';
 import { estConfirmee } from './protection';
 import { ErreurSaisie, SECTION, lireDate, lireMontant, versNoyau, type Proposition } from './paie';
@@ -96,7 +97,7 @@ function proposition(
   const journal: EntreeJournal[] = [
     {
       section: SECTION,
-      objet: nomObjet(e),
+      objet: objetJournal(d, e),
       champ: `occurrence du ${cible.origine}`,
       ancienneValeur: parler(avant),
       nouvelleValeur: apres ? decrireAjustement(apres) : 'selon la règle',

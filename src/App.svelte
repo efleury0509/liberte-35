@@ -22,6 +22,10 @@
     pretOuvert = id;
     sectionActive = 'mes-dettes';
   }
+  /** Étape 8 : « Voir la carte » depuis Mes paies. */
+  function voirCarte() {
+    voirPret('carte');
+  }
 
   async function chargerEtat() {
     try {
@@ -75,7 +79,7 @@
       {#if section.id === 'parametres'}
         <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} />
       {:else if section.id === 'mes-paies' && !erreur}
-        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} />
+        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} onvoircarte={voirCarte} />
       {:else if section.id === 'mes-dettes' && !erreur}
         {#key pretOuvert}
           <MesDettes {plateforme} onchangement={chargerEtat} ouvert={pretOuvert} />

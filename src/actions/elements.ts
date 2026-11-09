@@ -517,6 +517,9 @@ export function proposerCertitude(d: DonneesPaie, id: string, incertain: boolean
 
 export function proposerSuppression(d: DonneesPaie, id: string, jour: DateCivile): Proposition {
   const e = trouver(d, id);
+  if ((d.cartes ?? []).some((k) => k.id === id || k.supplements.includes(id))) {
+    throw new ErreurSaisie('Ce paiement appartient à la carte : gère-le depuis Mes dettes.');
+  }
   // Q16 : après une confirmation, on termine ; on ne supprime plus.
   if ((d.confirmations ?? []).some((f) => f.elementId === id)) {
     throw new ErreurSaisie(`« ${e.libelle} » a des opérations confirmées : il ne peut plus être supprimé ; termine-le plutôt (Gérer → Terminer).`);

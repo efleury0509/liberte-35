@@ -64,6 +64,16 @@ et dans le cahier fonctionnel de référence.
   finale (si elle est indiquée ; ni un solde ni un coût total) et ce qui manque
   pour projeter. Aucun calcul d'intérêts. Les confirmations de versements
   s'inscrivent au journal sous « Prêt « … » ». Structure inchangée (6).
+- Étape 8 (version 0.8.0) : la carte Visa. Une seule carte, avec une échéance
+  mensuelle à date fixe sans montant (« À compléter », jamais 0 $ ; la raison
+  s'affiche sous le disponible). Le montant d'une échéance se choisit avec
+  « Ajuster » (choix rapides : minimum ou solde du dernier relevé) ; des
+  paiements supplémentaires ponctuels s'ajoutent depuis le groupe « Visa » d'un
+  cycle. Dans Mes dettes : limite, taux, frais (fiche seulement), relevés
+  recopiés tels quels et jamais modifiés, solde actuel manuel (jamais diminué
+  automatiquement), utilisation datée, « Mon objectif » informatif, et le suivi
+  de chaque relevé (confirmés, planifiés, ce qui resterait), sans intérêts et
+  sans conclure qu'un paiement a été reçu à temps. Base de données en version 7.
 
 ## Organisation du code
 

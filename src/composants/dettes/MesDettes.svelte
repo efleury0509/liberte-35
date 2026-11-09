@@ -5,6 +5,7 @@
   // le confirme comme le reste : l'historique en découle.
   import { onMount, tick } from 'svelte';
   import Apercu from '../Apercu.svelte';
+  import CarteVisa from './CarteVisa.svelte';
   import { ErreurSaisie, type Proposition } from '../../actions/paie';
   import {
     LIBELLES_QUAND_PRET,
@@ -25,7 +26,7 @@
   interface Props {
     plateforme: Plateforme;
     onchangement: () => void;
-    /** Prêt à ouvrir (lien « Voir le prêt » depuis Mes paies). */
+    /** Prêt à ouvrir (lien « Voir le prêt » depuis Mes paies), ou 'carte' (« Voir la carte »). */
     ouvert?: string | null;
   }
   let { plateforme, onchangement, ouvert = null }: Props = $props();
@@ -40,6 +41,7 @@
   let enCours = $state(false);
   let dernier: { titre: string; inverse: ChangementPaie[]; journal: EntreeJournal[] } | null = $state(null);
   let messageAnnulation: string | null = $state(null);
+  let remise = $state(0);
 
   // Champs
   let fNom = $state('');
@@ -62,6 +64,9 @@
         fiche = ouvert;
         await tick();
         document.querySelector(`[data-pret="${ouvert}"]`)?.scrollIntoView?.({ block: 'start' });
+      } else if (ouvert === 'carte') {
+        await tick();
+        document.querySelector('[data-carte]')?.scrollIntoView?.({ block: 'start' });
       }
     } catch (e) {
       erreurChargement = typeof e === 'string' ? e : 'Impossible de lire les données.';
@@ -108,6 +113,7 @@
       proposition = null;
       formulaire = null;
       erreurSaisie = null;
+      remise += 1;
       // Un prêt qui vient d'être ajouté s'ouvre ; un prêt supprimé se ferme.
       const nouveau = donnees.prets.find((x) => !avant.prets.some((y) => y.id === x.id));
       if (nouveau) fiche = nouveau.id;
@@ -358,7 +364,6 @@
       <h2 id="titre-prets">Mes prêts</h2>
       <button type="button" class="principal" onclick={ouvrirAjout}>Ajouter un prêt</button>
     </div>
-    <p class="discret">La carte de crédit viendra à l’étape suivante.</p>
 
     {#if formulaire === 'ajout'}
       <form
@@ -438,6 +443,8 @@
       {/each}
     </details>
   {/if}
+
+  <CarteVisa donnees={donnees} {jour} {proposer} {remise} />
 {/if}
 
 {#if erreurSaisie && !proposition}

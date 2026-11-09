@@ -108,6 +108,47 @@ export interface SoldePretStocke {
  * Fiche d'un prêt (étape 7a). Son id est celui de l'élément de dépense fixe
  * qui porte le versement. Tout est facultatif : on complète plus tard.
  */
+/** Étape 8 : relevé recopié tel quel, jamais modifié ensuite. */
+export interface ReleveStocke {
+  date: string;
+  solde: number;
+  minimum: number | null;
+  echeance: string | null;
+}
+
+/** Solde actuel selon une mise à jour manuelle datée (Q59). */
+export interface SoldeCarteStocke {
+  date: string;
+  montant: number;
+  note: string | null;
+}
+
+/** Frais récurrent autorisé, informatif seulement (Q62). */
+export interface FraisCarteStocke {
+  libelle: string;
+  montant: number;
+  frequence: 'annee' | 'mois';
+}
+
+export type ObjectifCarte = 'reduireSolde' | 'payerReleves';
+
+/**
+ * Fiche de la carte. Son `id` est celui de la dépense fixe qui porte
+ * l'échéance mensuelle ; `supplements` : les paiements supplémentaires
+ * (dépenses « une seule fois »).
+ */
+export interface CarteStocke {
+  id: string;
+  limite: number | null;
+  /** Taux annuel en pour cent, point décimal (« 20.99 »). */
+  taux: string | null;
+  objectif: ObjectifCarte | null;
+  releves: ReleveStocke[];
+  soldes: SoldeCarteStocke[];
+  frais: FraisCarteStocke[];
+  supplements: string[];
+}
+
 export interface PretStocke {
   id: string;
   /** Absent : le versement sert de minimum (Q46). */
@@ -129,6 +170,8 @@ export interface DonneesPaie {
   ajustements: AjustementStocke[];
   confirmations: ConfirmationStockee[];
   prets: PretStocke[];
+  /** Étape 8 : la carte Visa (une seule pour l'instant, Q55). */
+  cartes: CarteStocke[];
 }
 
 export type ChangementPaie =
@@ -145,7 +188,9 @@ export type ChangementPaie =
   | { type: 'retirerConfirmation'; elementId: string | null; origine: string }
   | { type: 'retirerAjustement'; elementId: string; origine: string }
   | { type: 'definirPret'; pret: PretStocke }
-  | { type: 'supprimerPret'; id: string };
+  | { type: 'supprimerPret'; id: string }
+  | { type: 'definirCarte'; carte: CarteStocke }
+  | { type: 'supprimerCarte'; id: string };
 
 export interface EntreeJournal {
   section: string;
@@ -369,7 +414,7 @@ export function creerApercu(): Plateforme {
       motif: p.motif,
       lisible: true,
       raison: null,
-      versionSchema: 6,
+      versionSchema: 7,
       resume: resume(p),
     }));
   const trouver = (source: SourceCopie): Instantane & { nom: string } => {
@@ -398,7 +443,7 @@ export function creerApercu(): Plateforme {
       source,
       nom: c.nom,
       horodatage: c.horodatage,
-      versionSchema: 6,
+      versionSchema: 7,
       miseANiveau: false,
       resume: resume(c),
       nombreRetires: retires.length,
@@ -415,7 +460,7 @@ export function creerApercu(): Plateforme {
       return {
         profil: 'apercu',
         versionApplication: VERSION_APPLICATION,
-        versionSchema: 6,
+        versionSchema: 7,
         dossierDonnees: '(aucun : aperçu en mémoire)',
         integriteOk: true,
         nombreEntreesJournal: journal.length,

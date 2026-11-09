@@ -10,7 +10,7 @@ describe('Plateforme', () => {
   it('l’aperçu se présente clairement comme un aperçu, jamais comme l’installation officielle', async () => {
     const etat = await plateformeApercu.etat();
     expect(etat.profil).toBe('apercu');
-    expect(etat.versionSchema).toBe(6);
+    expect(etat.versionSchema).toBe(7);
   });
 
   it('a un libellé pour chaque type d’installation', () => {

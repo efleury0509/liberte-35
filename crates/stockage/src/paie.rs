@@ -133,6 +133,56 @@ pub struct PretStocke {
     pub soldes: Vec<SoldePretStocke>,
 }
 
+/// Relevé de carte recopié tel quel (étape 8) : jamais modifié ensuite.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleveStocke {
+    pub date: String,
+    pub solde: i64,
+    pub minimum: Option<i64>,
+    pub echeance: Option<String>,
+}
+
+/// Solde actuel de la carte selon une mise à jour manuelle datée (Q59).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoldeCarteStocke {
+    pub date: String,
+    pub montant: i64,
+    pub note: Option<String>,
+}
+
+/// Frais récurrent autorisé, informatif seulement (Q62).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FraisCarteStocke {
+    pub libelle: String,
+    pub montant: i64,
+    /// « annee » ou « mois ».
+    pub frequence: String,
+}
+
+/// Fiche de la carte (étape 8). Son `id` est celui de l'élément de dépense
+/// fixe qui porte l'échéance mensuelle ; `supplements` liste les éléments
+/// « une seule fois » des paiements supplémentaires.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CarteStocke {
+    pub id: String,
+    pub limite: Option<i64>,
+    pub taux: Option<String>,
+    /// « reduireSolde », « payerReleves » ; absent : aucun objectif choisi.
+    pub objectif: Option<String>,
+    #[serde(default)]
+    pub releves: Vec<ReleveStocke>,
+    #[serde(default)]
+    pub soldes: Vec<SoldeCarteStocke>,
+    #[serde(default)]
+    pub frais: Vec<FraisCarteStocke>,
+    #[serde(default)]
+    pub supplements: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DonneesPaie {
@@ -147,6 +197,8 @@ pub struct DonneesPaie {
     pub confirmations: Vec<ConfirmationStockee>,
     #[serde(default)]
     pub prets: Vec<PretStocke>,
+    #[serde(default)]
+    pub cartes: Vec<CarteStocke>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -198,6 +250,12 @@ pub enum ChangementPaie {
         pret: PretStocke,
     },
     SupprimerPret {
+        id: String,
+    },
+    DefinirCarte {
+        carte: CarteStocke,
+    },
+    SupprimerCarte {
         id: String,
     },
 }
@@ -309,7 +367,94 @@ fn verifier(changement: &ChangementPaie) -> Resultat<()> {
             }
             Ok(())
         }
+        ChangementPaie::DefinirCarte { carte } => verifier_carte(carte),
+        ChangementPaie::SupprimerCarte { id } => {
+            if id.is_empty() {
+                return Err(erreur("Carte à supprimer non précisée."));
+            }
+            Ok(())
+        }
     }
+}
+
+fn verifier_taux(t: &str) -> Resultat<()> {
+    let (entier, decimales) = t.split_once('.').unwrap_or((t, ""));
+    let forme = !entier.is_empty()
+        && entier.chars().all(|c| c.is_ascii_digit())
+        && decimales.len() <= 3
+        && decimales.chars().all(|c| c.is_ascii_digit());
+    let valeur: f64 = t.parse().unwrap_or(f64::MAX);
+    if !forme || valeur > 100.0 {
+        return Err(erreur(format!(
+            "Taux invalide : « {t} » (par exemple 9.90)."
+        )));
+    }
+    Ok(())
+}
+
+fn verifier_carte(c: &CarteStocke) -> Resultat<()> {
+    if c.id.is_empty() {
+        return Err(erreur("Carte sans identifiant."));
+    }
+    if c.limite.is_some_and(|m| m < 0) {
+        return Err(erreur("La limite d'une carte ne peut pas être négative."));
+    }
+    if let Some(t) = &c.taux {
+        verifier_taux(t)?;
+    }
+    if let Some(o) = &c.objectif {
+        if o != "reduireSolde" && o != "payerReleves" {
+            return Err(erreur(format!("Objectif inconnu : « {o} ».")));
+        }
+    }
+    let mut dates = std::collections::HashSet::new();
+    for r in &c.releves {
+        verifier_date(&r.date)?;
+        if let Some(e) = &r.echeance {
+            verifier_date(e)?;
+        }
+        if r.solde < 0 || r.minimum.is_some_and(|m| m < 0) {
+            return Err(erreur("Un montant de relevé ne peut pas être négatif."));
+        }
+        if !dates.insert(&r.date) {
+            return Err(erreur(format!("Deux relevés à la même date ({}).", r.date)));
+        }
+    }
+    let mut dates = std::collections::HashSet::new();
+    for s in &c.soldes {
+        verifier_date(&s.date)?;
+        if s.montant < 0 {
+            return Err(erreur("Un solde ne peut pas être négatif."));
+        }
+        if !dates.insert(&s.date) {
+            return Err(erreur(format!("Deux soldes à la même date ({}).", s.date)));
+        }
+    }
+    let mut libelles = std::collections::HashSet::new();
+    for f in &c.frais {
+        if f.libelle.trim().is_empty() {
+            return Err(erreur("Un frais doit avoir un libellé."));
+        }
+        if f.montant < 0 {
+            return Err(erreur("Un frais ne peut pas être négatif."));
+        }
+        if f.frequence != "annee" && f.frequence != "mois" {
+            return Err(erreur(format!(
+                "Fréquence de frais inconnue : « {} ».",
+                f.frequence
+            )));
+        }
+        if !libelles.insert(&f.libelle) {
+            return Err(erreur(format!("Deux frais nommés « {} ».", f.libelle)));
+        }
+    }
+    let mut ids = std::collections::HashSet::new();
+    for s in &c.supplements {
+        if s.is_empty() || s == &c.id || !ids.insert(s) {
+            return Err(erreur("Paiement supplémentaire invalide."));
+        }
+    }
+    Ok(())
 }
 
 fn verifier_pret(p: &PretStocke) -> Resultat<()> {
@@ -323,17 +468,7 @@ fn verifier_pret(p: &PretStocke) -> Resultat<()> {
         verifier_date(d)?;
     }
     if let Some(t) = &p.taux {
-        let (entier, decimales) = t.split_once('.').unwrap_or((t.as_str(), ""));
-        let forme = !entier.is_empty()
-            && entier.chars().all(|c| c.is_ascii_digit())
-            && decimales.len() <= 3
-            && decimales.chars().all(|c| c.is_ascii_digit());
-        let valeur: f64 = t.parse().unwrap_or(f64::MAX);
-        if !forme || valeur > 100.0 {
-            return Err(erreur(format!(
-                "Taux invalide : « {t} » (par exemple 9.90)."
-            )));
-        }
+        verifier_taux(t)?;
     }
     let mut dates = std::collections::HashSet::new();
     for s in &p.soldes {
@@ -346,6 +481,66 @@ fn verifier_pret(p: &PretStocke) -> Resultat<()> {
         }
     }
     Ok(())
+}
+
+fn lire_cartes(conn: &rusqlite::Connection) -> Resultat<Vec<CarteStocke>> {
+    let mut req = conn.prepare("SELECT id, limite, taux, objectif FROM cartes ORDER BY id")?;
+    let mut cartes = req
+        .query_map([], |r| {
+            Ok(CarteStocke {
+                id: r.get(0)?,
+                limite: r.get(1)?,
+                taux: r.get(2)?,
+                objectif: r.get(3)?,
+                releves: Vec::new(),
+                soldes: Vec::new(),
+                frais: Vec::new(),
+                supplements: Vec::new(),
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    for c in &mut cartes {
+        c.releves = conn
+            .prepare("SELECT date, solde, minimum, echeance FROM releves_carte WHERE carte_id = ?1 ORDER BY date")?
+            .query_map([&c.id], |r| {
+                Ok(ReleveStocke {
+                    date: r.get(0)?,
+                    solde: r.get(1)?,
+                    minimum: r.get(2)?,
+                    echeance: r.get(3)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        c.soldes = conn
+            .prepare(
+                "SELECT date, montant, note FROM soldes_carte WHERE carte_id = ?1 ORDER BY date",
+            )?
+            .query_map([&c.id], |r| {
+                Ok(SoldeCarteStocke {
+                    date: r.get(0)?,
+                    montant: r.get(1)?,
+                    note: r.get(2)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        c.frais = conn
+            .prepare("SELECT libelle, montant, frequence FROM frais_carte WHERE carte_id = ?1 ORDER BY libelle")?
+            .query_map([&c.id], |r| {
+                Ok(FraisCarteStocke {
+                    libelle: r.get(0)?,
+                    montant: r.get(1)?,
+                    frequence: r.get(2)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        c.supplements = conn
+            .prepare(
+                "SELECT element_id FROM paiements_carte WHERE carte_id = ?1 ORDER BY element_id",
+            )?
+            .query_map([&c.id], |r| r.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+    Ok(cartes)
 }
 
 fn lire_prets(conn: &rusqlite::Connection) -> Resultat<Vec<PretStocke>> {
@@ -635,6 +830,7 @@ impl Stockage {
         let ajustements = lire_ajustements(&self.conn)?;
         let confirmations = lire_confirmations(&self.conn)?;
         let prets = lire_prets(&self.conn)?;
+        let cartes = lire_cartes(&self.conn)?;
         Ok(DonneesPaie {
             profil,
             salaires,
@@ -644,6 +840,7 @@ impl Stockage {
             ajustements,
             confirmations,
             prets,
+            cartes,
         })
     }
 
@@ -744,6 +941,17 @@ impl Stockage {
                     if pret {
                         return Err(erreur(
                             "Ce versement appartient à un prêt : supprime le prêt depuis Mes dettes.",
+                        ));
+                    }
+                    let carte: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM cartes WHERE id = ?1)
+                            OR EXISTS (SELECT 1 FROM paiements_carte WHERE element_id = ?1)",
+                        [id],
+                        |r| r.get(0),
+                    )?;
+                    if carte {
+                        return Err(erreur(
+                            "Ce paiement appartient à la carte : gère-le depuis Mes dettes.",
                         ));
                     }
                     // Ses montants, suspensions, périodes et ajustements partent avec lui.
@@ -851,6 +1059,92 @@ impl Stockage {
                     }
                     // Ses soldes de référence partent avec lui.
                     tx.execute("DELETE FROM prets WHERE id = ?1", [id])?;
+                }
+                ChangementPaie::DefinirCarte { carte: c } => {
+                    let depense_fixe = |id: &str| -> Resultat<bool> {
+                        let g: Option<(String, String)> = tx
+                            .query_row(
+                                "SELECT nature, genre FROM elements WHERE id = ?1",
+                                [id],
+                                |r| Ok((r.get(0)?, r.get(1)?)),
+                            )
+                            .optional()?;
+                        Ok(matches!(
+                            g.as_ref().map(|(n, g)| (n.as_str(), g.as_str())),
+                            Some(("depense", "fixe"))
+                        ))
+                    };
+                    if !depense_fixe(&c.id)? {
+                        return Err(erreur(
+                            "L'échéance de la carte doit être une dépense fixe existante.",
+                        ));
+                    }
+                    for s in &c.supplements {
+                        if !depense_fixe(s)? {
+                            return Err(erreur(
+                                "Un paiement supplémentaire doit être une dépense fixe existante.",
+                            ));
+                        }
+                    }
+                    // Q55 : une seule carte pour l'instant.
+                    let autre: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM cartes WHERE id <> ?1)",
+                        [&c.id],
+                        |r| r.get(0),
+                    )?;
+                    if autre {
+                        return Err(erreur("Une seule carte pour l'instant."));
+                    }
+                    tx.execute(
+                        "INSERT INTO cartes (id, limite, taux, objectif) VALUES (?1, ?2, ?3, ?4)
+                         ON CONFLICT(id) DO UPDATE SET limite = excluded.limite,
+                           taux = excluded.taux, objectif = excluded.objectif",
+                        params![c.id, c.limite, c.taux, c.objectif],
+                    )?;
+                    tx.execute("DELETE FROM releves_carte WHERE carte_id = ?1", [&c.id])?;
+                    for r in &c.releves {
+                        tx.execute(
+                            "INSERT INTO releves_carte (carte_id, date, solde, minimum, echeance) VALUES (?1, ?2, ?3, ?4, ?5)",
+                            params![c.id, r.date, r.solde, r.minimum, r.echeance],
+                        )?;
+                    }
+                    tx.execute("DELETE FROM soldes_carte WHERE carte_id = ?1", [&c.id])?;
+                    for s in &c.soldes {
+                        tx.execute(
+                            "INSERT INTO soldes_carte (carte_id, date, montant, note) VALUES (?1, ?2, ?3, ?4)",
+                            params![c.id, s.date, s.montant, s.note],
+                        )?;
+                    }
+                    tx.execute("DELETE FROM frais_carte WHERE carte_id = ?1", [&c.id])?;
+                    for f in &c.frais {
+                        tx.execute(
+                            "INSERT INTO frais_carte (carte_id, libelle, montant, frequence) VALUES (?1, ?2, ?3, ?4)",
+                            params![c.id, f.libelle, f.montant, f.frequence],
+                        )?;
+                    }
+                    tx.execute("DELETE FROM paiements_carte WHERE carte_id = ?1", [&c.id])?;
+                    for s in &c.supplements {
+                        tx.execute(
+                            "INSERT INTO paiements_carte (element_id, carte_id) VALUES (?1, ?2)",
+                            params![s, c.id],
+                        )?;
+                    }
+                }
+                ChangementPaie::SupprimerCarte { id } => {
+                    let confirme: bool = tx.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM confirmations WHERE element_id = ?1
+                            OR element_id IN (SELECT element_id FROM paiements_carte WHERE carte_id = ?1))",
+                        [id],
+                        |r| r.get(0),
+                    )?;
+                    if confirme {
+                        return Err(erreur(
+                            "La carte a des paiements confirmés : elle ne peut pas être supprimée.",
+                        ));
+                    }
+                    // Relevés, soldes, frais et liens partent avec elle ; les
+                    // éléments de paiement se suppriment ensuite.
+                    tx.execute("DELETE FROM cartes WHERE id = ?1", [id])?;
                 }
             }
         }

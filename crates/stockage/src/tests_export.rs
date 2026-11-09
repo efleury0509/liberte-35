@@ -95,15 +95,20 @@ fn lire_zip(chemin: &Path) -> std::collections::BTreeMap<String, String> {
 
 const CSV_ATTENDUS: &[&str] = &[
     "ajustements.csv",
+    "carte.csv",
     "changements-frequence.csv",
     "confirmations.csv",
     "elements.csv",
+    "frais-carte.csv",
     "journal.csv",
     "montants.csv",
+    "paiements-supplementaires-carte.csv",
     "paies-modifiees.csv",
     "prets.csv",
     "profil-paie.csv",
+    "releves-carte.csv",
     "salaires.csv",
+    "soldes-carte.csv",
     "soldes-prets.csv",
     "suspensions.csv",
 ];

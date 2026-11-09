@@ -169,6 +169,50 @@ CREATE TABLE soldes_pret (
 ) STRICT;
 "#;
 
+// Étape 8 : ajout seulement. La carte est la fiche d'un élément de dépense
+// fixe (son échéance mensuelle, montant souvent « À compléter ») ; les
+// paiements supplémentaires sont des dépenses « une seule fois » rattachées à
+// la carte. Les relevés sont recopiés tels quels et jamais modifiés ; le solde
+// actuel vient seulement de mises à jour datées. Aucun achat n'est suivi.
+const V7: &str = r#"
+CREATE TABLE cartes (
+    id       TEXT PRIMARY KEY REFERENCES elements(id) ON DELETE RESTRICT,
+    limite   INTEGER CHECK (limite >= 0),
+    taux     TEXT CHECK (taux GLOB '[0-9]*' AND taux NOT GLOB '*[^0-9.]*'),
+    objectif TEXT CHECK (objectif IN ('reduireSolde', 'payerReleves'))
+) STRICT;
+
+CREATE TABLE releves_carte (
+    carte_id TEXT NOT NULL REFERENCES cartes(id) ON DELETE CASCADE,
+    date     TEXT NOT NULL CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    solde    INTEGER NOT NULL CHECK (solde >= 0),
+    minimum  INTEGER CHECK (minimum >= 0),
+    echeance TEXT CHECK (echeance GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    PRIMARY KEY (carte_id, date)
+) STRICT;
+
+CREATE TABLE soldes_carte (
+    carte_id TEXT NOT NULL REFERENCES cartes(id) ON DELETE CASCADE,
+    date     TEXT NOT NULL CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    montant  INTEGER NOT NULL CHECK (montant >= 0),
+    note     TEXT,
+    PRIMARY KEY (carte_id, date)
+) STRICT;
+
+CREATE TABLE frais_carte (
+    carte_id  TEXT NOT NULL REFERENCES cartes(id) ON DELETE CASCADE,
+    libelle   TEXT NOT NULL CHECK (length(trim(libelle)) > 0),
+    montant   INTEGER NOT NULL CHECK (montant >= 0),
+    frequence TEXT NOT NULL CHECK (frequence IN ('annee', 'mois')),
+    PRIMARY KEY (carte_id, libelle)
+) STRICT;
+
+CREATE TABLE paiements_carte (
+    element_id TEXT PRIMARY KEY REFERENCES elements(id) ON DELETE RESTRICT,
+    carte_id   TEXT NOT NULL REFERENCES cartes(id) ON DELETE CASCADE
+) STRICT;
+"#;
+
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         version: 1,
@@ -199,6 +243,12 @@ pub const MIGRATIONS: &[Migration] = &[
         version: 6,
         description: "Prêts : fiche du versement et soldes de référence datés",
         sql: V6,
+    },
+    Migration {
+        version: 7,
+        description:
+            "Carte Visa : fiche, relevés, soldes actuels, frais, paiements supplémentaires",
+        sql: V7,
     },
 ];
 

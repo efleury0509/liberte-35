@@ -39,6 +39,7 @@
     type CibleConfirmation,
   } from '../../actions/confirmations';
   import { estPret } from '../../actions/prets';
+  import { choixRapides, estPaiementCarte, laCarte, libelleLigne, proposerSupplement, raisonsACompleter } from '../../actions/cartes';
   import RevenusDepenses from './RevenusDepenses.svelte';
   import TableauCycles from './TableauCycles.svelte';
 
@@ -48,8 +49,10 @@
     onchangement: () => void;
     /** Étape 7a : ouvrir un prêt dans Mes dettes. */
     onvoirpret?: (id: string) => void;
+    /** Étape 8 : ouvrir la carte dans Mes dettes. */
+    onvoircarte?: () => void;
   }
-  let { plateforme, profilInstallation, onchangement, onvoirpret }: Props = $props();
+  let { plateforme, profilInstallation, onchangement, onvoirpret, onvoircarte }: Props = $props();
 
   const jour = aujourdhui();
   const ELEMENTS_EXEMPLE = ELEMENTS_ETAPE4.map(versElementStocke);
@@ -83,6 +86,10 @@
   let fOccPaie = $state('');
   /** Élément à ouvrir dans les listes (« Modifier la règle… »). */
   let aGerer: string | null = $state(null);
+  /** Étape 8 : « + Paiement supplémentaire », ouvert dans le cycle de cette paie. */
+  let formSupplement: string | null = $state(null);
+  let fSupMontant = $state('');
+  let fSupDate = $state('');
 
   // Champs des formulaires
   let fFrequence: FrequenceStockee = $state('deuxSemaines');
@@ -187,6 +194,7 @@
       occurrence = null;
       modifPaie = false;
       formConfirmation = null;
+      formSupplement = null;
       remise += 1;
       onchangement();
     } catch (e) {
@@ -290,6 +298,17 @@
   const libelleSalaire = (d: string) => formaterDateLongue(dateCivile(d));
   /** Étape 7a : versements de prêts du cycle, groupés sous « Dettes ». */
   const dettesDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => l.nature === 'depense' && estPret(donnees!, l.elementId)) : []);
+  /** Étape 8 (Q65) : paiements de la carte du cycle, dans un seul groupe « Visa ». */
+  const carteDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => estPaiementCarte(donnees!, l.elementId)) : []);
+  const estDette = (id: string) => !!donnees && !exemple && (estPret(donnees, id) || estPaiementCarte(donnees, id));
+  const carte = $derived(donnees && !exemple ? laCarte(donnees) : null);
+
+  function ouvrirSupplement(c: Cycle) {
+    formSupplement = c.paie.dateOrigine;
+    fSupMontant = '';
+    // Aujourd'hui par défaut ; depuis un autre cycle, le premier jour de ce cycle.
+    fSupDate = jour >= c.debut && jour <= c.fin ? jour : c.debut;
+  }
 </script>
 
 {#if erreurChargement}
@@ -412,7 +431,7 @@
 
 {#if exemple || donnees?.profil}
   <RevenusDepenses
-    elements={exemple ? ELEMENTS_EXEMPLE : (donnees?.elements ?? []).filter((e) => !estPret(donnees!, e.id))}
+    elements={exemple ? ELEMENTS_EXEMPLE : (donnees?.elements ?? []).filter((e) => !estDette(e.id))}
     {donnees}
     modifiable={!exemple}
     cycles={vue?.cycles ?? []}
@@ -499,6 +518,7 @@
 {#snippet formulaireOccurrence(c: Cycle)}
   {@const cible = occurrence!}
   {@const ligne = c.lignes.find((l) => l.elementId === cible.elementId && l.origine === cible.origine)!}
+  {@const rapides = donnees ? choixRapides(donnees, cible.elementId, ligne.echeance ?? c.paie.date) : []}
   <form
     class="formulaire occurrence"
     data-testid="formulaire-occurrence"
@@ -508,6 +528,14 @@
     }}
   >
     <p class="discret">« {ligne.libelle} », cette fois seulement : la règle ne change pas.</p>
+    {#if rapides.length > 0}
+      <p class="choix-rapides" data-testid="choix-rapides">
+        Selon le dernier relevé :
+        {#each rapides as r (r.libelle)}
+          <button type="button" class="petit" onclick={() => (fOccMontant = (r.montant / 100).toFixed(2).replace('.', ','))}>{r.libelle} : {formaterMontant(r.montant)}</button>
+        {/each}
+      </p>
+    {/if}
     <label>Montant cette fois ($) <input inputmode="decimal" bind:value={fOccMontant} /></label>
     {#if ligne.echeance !== null}
       <label>Date prévue <input type="date" bind:value={fOccDate} /></label>
@@ -529,6 +557,8 @@
     {/if}
     {#if donnees && estPret(donnees, cible.elementId)}
       <button type="button" onclick={() => onvoirpret?.(cible.elementId)}>Voir le prêt</button>
+    {:else if donnees && estPaiementCarte(donnees, cible.elementId)}
+      <button type="button" onclick={() => onvoircarte?.()}>Voir la carte</button>
     {:else}
       <button
         type="button"
@@ -651,7 +681,7 @@
           </tr>
         {/each}
         <tr class="groupe"><th scope="rowgroup" colspan="4">Sorties</th></tr>
-        {#each c.lignes.filter((l) => l.nature === 'depense' && !(donnees && !exemple && estPret(donnees, l.elementId))) as l (`${l.elementId}|${l.origine}`)}
+        {#each c.lignes.filter((l) => l.nature === 'depense' && !estDette(l.elementId)) as l (`${l.elementId}|${l.origine}`)}
           <tr class:retiree={l.retiree} data-ligne={l.elementId}>
             <th scope="row">
               {l.libelle}{l.echeance ? ` (dû le ${formaterDateCourte(l.echeance)})` : ''}{l.genre === 'enveloppe' ? ' — enveloppe' : ''}{l.estimation
@@ -681,14 +711,57 @@
             </tr>
           {/each}
         {/if}
+        {#if carte}
+          <tr class="groupe"><th scope="rowgroup" colspan="4">Visa</th></tr>
+          {#each carteDe(c) as l (`${l.elementId}|${l.origine}`)}
+            <tr class:retiree={l.retiree} data-ligne={l.elementId} data-dette="carte">
+              <th scope="row">
+                {libelleLigne(donnees!, l)}{l.echeance ? ` (dû le ${formaterDateCourte(l.echeance)})` : ''}
+                {@render marques(l)}
+              </th>
+              <td class="montant">−{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</td>
+              <td>{@render statutLigne(l)}</td>
+              <td>{@render actionsLigne(c, l)}</td>
+            </tr>
+          {:else}
+            <tr><td colspan="4" class="discret">Aucun paiement de la carte dans ce cycle.</td></tr>
+          {/each}
+          <tr>
+            <td colspan="4">
+              <span class="actions-ligne">
+                <button type="button" class="petit" onclick={() => ouvrirSupplement(c)}>+ Paiement supplémentaire</button>
+                <button type="button" class="lien" onclick={() => onvoircarte?.()}>Voir la carte</button>
+              </span>
+            </td>
+          </tr>
+        {/if}
         <tr class="total">
           <th scope="row">Disponible planifié</th>
           <td class="montant">{c.disponible === null ? 'À compléter' : formaterMontant(c.disponible)}</td>
           <td>{c.estimation ? 'Estimation' : ''}</td>
           <td></td>
         </tr>
+        {#if donnees && !exemple && raisonsACompleter(donnees, c)}
+          <tr><td colspan="4" class="discret" data-testid="raison-a-completer">{raisonsACompleter(donnees, c)}</td></tr>
+        {/if}
       </tbody>
     </table>
+    {#if formSupplement === c.paie.dateOrigine}
+      <form
+        class="formulaire occurrence"
+        data-testid="formulaire-supplement"
+        onsubmit={(e) => {
+          e.preventDefault();
+          proposer(() => proposerSupplement(donnees!, { montant: fSupMontant, date: fSupDate }, jour));
+        }}
+      >
+        <p class="discret">Un paiement de plus sur la carte, une seule fois : les échéances ne changent pas.</p>
+        <label>Montant ($) <input inputmode="decimal" bind:value={fSupMontant} /></label>
+        <label>Date <input type="date" bind:value={fSupDate} /></label>
+        <button type="submit" class="principal">Enregistrer</button>
+        <button type="button" onclick={() => (formSupplement = null)}>Fermer</button>
+      </form>
+    {/if}
     {#if occurrence && c.lignes.some((l) => l.elementId === occurrence?.elementId && l.origine === occurrence?.origine)}
       {@render formulaireOccurrence(c)}
     {/if}
