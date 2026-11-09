@@ -92,7 +92,7 @@ test('R1, A1, O2 : relevé, choix rapides dans « Ajuster », suivi du relevé',
   const s = page.getByTestId('releve');
   await expect(s.getByTestId('planifies')).toContainText($('940,00 $'));
   await expect(s.getByTestId('constat-minimum')).toHaveText('Minimum : serait atteint si les paiements planifiés sont faits.');
-  await expect(s.getByTestId('constat-solde')).toHaveText($('Nouveau solde : après les paiements confirmés et planifiés, il resterait 300,00 $.'));
+  await expect(s.getByTestId('constat-solde')).toHaveText($('Nouveau solde : à la date d’échéance du relevé (11 févr. 2027), après les paiements confirmés et planifiés d’ici là, il resterait 300,00 $.'));
 });
 
 test('X1, O1, G2 : paiement supplémentaire depuis Mes paies, rattaché au relevé ; objectif informatif', async ({ page }) => {
@@ -129,4 +129,25 @@ test('X1, O1, G2 : paiement supplémentaire depuis Mes paies, rattaché au relev
   await expect(page.getByTestId('fiche-carte')).toContainText($('Paiements confirmés depuis cette mise à jour : 300,00 $'));
   await expect(page.getByTestId('fiche-carte')).not.toContainText('1 110');
   await expect(page.getByTestId('fiche-carte')).not.toContainText(`1${ESP}110`);
+});
+
+test('V6, V7 (0.8.1) : la date dans le bandeau ; supprimer un supplément non confirmé, puis « Annuler » le rétablit', async ({ page }) => {
+  await preparer(page);
+  await ajouterCarte(page);
+  await nav(page, 'Mes paies');
+  const d = await detail(page, '2027-01-21');
+  await d.getByRole('button', { name: '+ Paiement supplémentaire' }).click();
+  const f = page.getByTestId('formulaire-supplement');
+  await f.getByLabel('Montant ($)').fill('300');
+  await f.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByTestId('enregistre')).toContainText($(`Enregistré : Paiement supplémentaire — ${NOM} : 300,00 $ le 21 janv. 2027.`));
+  const ligne = d.locator('tr[data-dette="carte"]');
+  await expect(ligne).toHaveCount(1);
+  await ligne.getByRole('button', { name: /^Ajuster/ }).click();
+  await page.getByTestId('formulaire-occurrence').getByRole('button', { name: 'Supprimer ce paiement…' }).click();
+  await expect(ligne).toHaveCount(0);
+  await page.getByTestId('enregistre').getByRole('button', { name: 'Annuler' }).click();
+  await expect(ligne).toHaveCount(1);
+  await expect(ligne).toContainText(`Paiement supplémentaire — ${NOM} (dû le 21 janv.)`);
+  await expect(ligne.locator('td.montant')).toHaveText($('−300,00 $'));
 });

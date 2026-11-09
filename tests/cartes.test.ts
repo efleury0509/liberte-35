@@ -27,7 +27,7 @@ import { proposerAjustement, proposerRetourRegle } from '../src/actions/occurren
 import { proposerSuppression } from '../src/actions/elements';
 import { ErreurSaisie, versNoyau, type Proposition } from '../src/actions/paie';
 import { proposerAjoutPret, type SaisiePret } from '../src/actions/prets';
-import { appliquerChangements, donneesVides } from '../src/lib/appliquer';
+import { appliquerChangements, donneesVides, inverser } from '../src/lib/appliquer';
 import type { DonneesPaie } from '../src/lib/plateforme';
 import { planifier, type Cycle } from '../src/noyau/cycles';
 import { dateCivile } from '../src/noyau/dates';
@@ -219,6 +219,34 @@ describe('X — Paiements supplémentaires', () => {
     refus(() => proposerSuppression(d, sid, JOUR), 'Ce paiement appartient à la carte');
   });
 
+  it('V6 (0.8.1) : le bandeau montre le montant et la date prévue', () => {
+    const { d } = avecCarte({ nom: 'Visa test' });
+    expect(proposerSupplement(d, { montant: '300', date: '2027-01-21' }, JOUR).titre).toBe($('Paiement supplémentaire — Visa test : 300,00 $ le 21 janv. 2027'));
+  });
+
+  it('V7, V8 (0.8.1) : supprimer un supplément non confirmé, rétablir avec « Annuler » ; refusé une fois confirmé', () => {
+    let { d } = avecCarte();
+    d = releve(d);
+    d = supplement(d);
+    const sid = supplementId(d);
+    d = ajuster(d, sid, '2027-01-27', '350');
+    const avant = structuredClone(d);
+    const p = proposerSuppressionSupplement(d, sid, JOUR);
+    expect(p.apercu).toBe(false); // direct, avec « Annuler »
+    expect(p.journal.map((e) => e.objet)).toEqual([`Carte « ${NOM} »`]);
+    const apres = appliquer(d, p);
+    expect(cycles(apres).flatMap((c) => lignesCarte(apres, c)).some((l) => l.elementId === sid)).toBe(false);
+    expect(suivi(apres, '20 janv. 2027').planifies.join()).not.toContain('27 janv.');
+    for (const c of ['2027-02-04', '2027-03-04']) expect(lignesCarte(apres, cycle(apres, c))).toEqual(lignesCarte(d, cycle(d, c)));
+    // « Annuler » : l'inverse rétablit l'élément, son ajustement et son lien à la carte.
+    const retabli = appliquerChangements(apres, inverser(d, p.changements));
+    expect(retabli.elements).toEqual(avant.elements);
+    expect(retabli.ajustements).toEqual(avant.ajustements);
+    expect(retabli.cartes).toEqual(avant.cartes);
+    const confirme = confirmer(d, sid, '2027-01-27', '350');
+    refus(() => proposerSuppressionSupplement(confirme, sid, JOUR), 'Ce paiement est confirmé : il ne peut plus être supprimé. Corrige ou annule d’abord la confirmation.');
+  });
+
   it('X4 : refus d’un montant vide ou nul', () => {
     const { d } = avecCarte();
     refus(() => proposerSupplement(d, { montant: '', date: '2027-01-27' }, JOUR), 'Indique le montant');
@@ -251,11 +279,14 @@ describe('R — Relevés', () => {
     expect(appliquer(d, p).cartes[0]!.releves).toEqual([r1]);
   });
 
-  it('R3 : échéance du relevé au 9 févr. (règle : le 11) : signalée, rien n’est déplacé', () => {
+  it('R3, V3 (0.8.1) : échéance du relevé au 12 févr., paiement prévu le 11 : une phrase, paiement compté, rien déplacé', () => {
     let { d, id } = avecCarte();
-    d = releve(d, { echeance: '2027-02-09' });
-    expect(suivi(d, '20 janv. 2027').notesEcheance).toEqual(['Échéance du relevé : 9 févr. 2027 — paiement prévu le 11 févr. 2027.']);
-    expect(lignesCarte(d, cycle(d, '2027-02-04'))[0]).toMatchObject({ elementId: id, echeance: '2027-02-11', ajuste: false });
+    d = releve(d, { echeance: '2027-02-12' });
+    d = ajuster(d, id, '2027-02-11', '940');
+    const s = suivi(d, '20 janv. 2027');
+    expect(s.notesEcheance).toEqual(['Échéance du relevé : 12 févr. 2027 — paiement prévu le 11 févr. 2027.']);
+    expect(s.totalPlanifies).toBe($('940,00 $'));
+    expect(lignesCarte(d, cycle(d, '2027-02-04'))[0]).toMatchObject({ elementId: id, echeance: '2027-02-11' });
   });
 });
 
@@ -280,7 +311,7 @@ describe('O — Suivi des relevés (Q60, Q67)', () => {
     expect([s.nouveauSolde, s.totalConfirmes, s.totalPlanifies]).toEqual([$('1 240,00 $'), $('300,00 $'), $('940,00 $')]);
     expect(s.planifies).toEqual([$('11 févr. 2027 — 940,00 $')]);
     expect(s.constatMinimum).toBe('Minimum : atteint par les paiements confirmés.');
-    expect(s.constatSolde).toBe($('Nouveau solde : après les paiements confirmés et planifiés, il resterait 0,00 $.'));
+    expect(s.constatSolde).toBe($('Nouveau solde : à la date d’échéance du relevé (11 févr. 2027), après les paiements confirmés et planifiés d’ici là, il resterait 0,00 $.'));
   });
 
   it('O3 : confirmée le 14 févr., l’échéance passe aux confirmés, une seule fois, deux dates côte à côte', () => {
@@ -348,15 +379,34 @@ describe('O — Suivi des relevés (Q60, Q67)', () => {
     expect(d.ajustements).toEqual([]);
   });
 
-  it('O9 : paiement prévu après l’échéance du relevé : signalé, exclu des planifiés, rien déplacé', () => {
+  it('O9, V1, V4 (0.8.1) : paiement prévu après l’échéance du relevé : une seule phrase avec son montant, exclu des planifiés, rien déplacé', () => {
     let { d, id } = avecCarte();
     d = releve(d, { echeance: '2027-02-09' });
     d = ajuster(d, id, '2027-02-11', '940');
     const s = suivi(d, '20 janv. 2027');
     expect(s.planifies).toEqual([]);
     expect(s.totalPlanifies).toBe($('0,00 $'));
-    expect(s.apresEcheance).toEqual([$('11 févr. 2027 — 940,00 $ — prévu après l’échéance du relevé (9 févr. 2027)')]);
+    expect(s.notesEcheance).toEqual([$('Échéance du relevé : 9 févr. 2027 — paiement prévu le 11 févr. 2027 (940,00 $).')]);
+    expect(JSON.stringify(s)).not.toContain('prévu après');
+    expect(s.constatSolde).toBe($('Nouveau solde : à la date d’échéance du relevé (9 févr. 2027), après les paiements confirmés et planifiés d’ici là, il resterait 1 240,00 $.'));
     expect(lignesCarte(d, cycle(d, '2027-02-04'))[0]!.echeance).toBe('2027-02-11');
+  });
+
+  it('V2 (0.8.1) : un supplément prévu après l’échéance du relevé : même phrase, mention « supplémentaire »', () => {
+    let { d, id } = avecCarte();
+    d = releve(d, { echeance: '2027-02-09' });
+    d = ajuster(d, id, '2027-02-11', '940');
+    d = supplement(d, '50', '2027-02-10');
+    expect(suivi(d, '20 janv. 2027').notesEcheance).toEqual([
+      $('Échéance du relevé : 9 févr. 2027 — paiement prévu le 10 févr. 2027 (50,00 $, supplémentaire).'),
+      $('Échéance du relevé : 9 févr. 2027 — paiement prévu le 11 févr. 2027 (940,00 $).'),
+    ]);
+  });
+
+  it('V5 (0.8.1) : les autres phrases ne changent pas', () => {
+    let { d } = avecCarte();
+    d = releve(d, { echeance: '' });
+    expect(suivi(d, '20 janv. 2027').constatSolde).toBe('Nouveau solde : ce qui resterait est à compléter (échéance du relevé non indiquée).');
   });
 });
 
@@ -429,7 +479,7 @@ describe('G — Mon objectif (informatif)', () => {
     d = releve(d);
     d = ajuster(d, id, '2027-02-11', '1240');
     d = appliquer(d, proposerObjectif(d, 'payerReleves', JOUR));
-    expect(vue(d).enTete).toBe($('Nouveau solde : après les paiements confirmés et planifiés, il resterait 0,00 $.'));
+    expect(vue(d).enTete).toBe($('Nouveau solde : à la date d’échéance du relevé (11 févr. 2027), après les paiements confirmés et planifiés d’ici là, il resterait 0,00 $.'));
     d = appliquer(d, proposerSoldeActuel(d, { date: '2027-02-15', montant: '0', note: '' }, JOUR));
     expect(vue(d).objectif).toBe('payerReleves');
   });

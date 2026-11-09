@@ -74,6 +74,12 @@ et dans le cahier fonctionnel de référence.
   automatiquement), utilisation datée, « Mon objectif » informatif, et le suivi
   de chaque relevé (confirmés, planifiés, ce qui resterait), sans intérêts et
   sans conclure qu'un paiement a été reçu à temps. Base de données en version 7.
+- Correction 0.8.1 : une seule phrase quand l'échéance du relevé diffère de la
+  date prévue (avec le montant si le paiement est prévu après) ; « ce qui
+  resterait » est précisé « à la date d'échéance du relevé » ; le bandeau d'un
+  paiement supplémentaire montre son montant et sa date ; un paiement
+  supplémentaire non confirmé se supprime (« Annuler » le rétablit).
+  Aucun calcul ni structure changés (7).
 
 ## Organisation du code
 

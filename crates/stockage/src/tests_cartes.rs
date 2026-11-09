@@ -264,6 +264,34 @@ fn x3_d1_un_supplement_puis_la_carte_se_suppriment_sans_confirmation() {
         ],
     )
     .unwrap();
+    // 0.8.1, V7 : « Annuler » rétablit l'élément, puis son lien à la carte.
+    let retabli = appliquer(
+        &mut s,
+        vec![
+            ChangementPaie::DefinirElement {
+                element: supplement("sup1"),
+            },
+            ChangementPaie::DefinirCarte {
+                carte: CarteStocke {
+                    supplements: vec!["sup1".into()],
+                    ..carte("visa")
+                },
+            },
+        ],
+    )
+    .unwrap();
+    assert_eq!(retabli.cartes[0].supplements, vec!["sup1".to_string()]);
+    assert!(retabli.elements.iter().any(|e| e.id == "sup1"));
+    appliquer(
+        &mut s,
+        vec![
+            ChangementPaie::DefinirCarte {
+                carte: carte("visa"),
+            },
+            ChangementPaie::SupprimerElement { id: "sup1".into() },
+        ],
+    )
+    .unwrap();
     // D1 : la carte, puis son échéance.
     let lu = appliquer(
         &mut s,

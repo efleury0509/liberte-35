@@ -257,7 +257,7 @@
                 {#each r.planifies as p (p)}<span class="paiement">{p}</span>{/each}
               </dd>
             </dl>
-            {#each [...r.apresEcheance, ...r.notesEcheance] as note (note)}
+            {#each r.notesEcheance as note (note)}
               <p class="note-date">{note}</p>
             {/each}
             {#if r.constatMinimum}<p class="constat" data-testid="constat-minimum">{r.constatMinimum}</p>{/if}

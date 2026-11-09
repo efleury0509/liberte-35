@@ -39,7 +39,7 @@
     type CibleConfirmation,
   } from '../../actions/confirmations';
   import { estPret } from '../../actions/prets';
-  import { choixRapides, estPaiementCarte, laCarte, libelleLigne, proposerSupplement, raisonsACompleter } from '../../actions/cartes';
+  import { choixRapides, estPaiementCarte, estSupplement, laCarte, libelleLigne, proposerSupplement, proposerSuppressionSupplement, raisonsACompleter } from '../../actions/cartes';
   import RevenusDepenses from './RevenusDepenses.svelte';
   import TableauCycles from './TableauCycles.svelte';
 
@@ -558,6 +558,9 @@
     {#if donnees && estPret(donnees, cible.elementId)}
       <button type="button" onclick={() => onvoirpret?.(cible.elementId)}>Voir le prêt</button>
     {:else if donnees && estPaiementCarte(donnees, cible.elementId)}
+      {#if estSupplement(donnees, cible.elementId) && ligne.statut !== 'confirme'}
+        <button type="button" onclick={() => proposer(() => proposerSuppressionSupplement(donnees!, cible.elementId, jour))}>Supprimer ce paiement…</button>
+      {/if}
       <button type="button" onclick={() => onvoircarte?.()}>Voir la carte</button>
     {:else}
       <button

@@ -291,7 +291,7 @@ export function proposerSupplement(d: DonneesPaie, s: { montant: string; date: s
   const texte = `${formaterMontant(montant)} le ${avecAnnee(date)}`;
   return directe(
     d,
-    `Paiement supplémentaire — ${nom}`,
+    `Paiement supplémentaire — ${nom} : ${texte}`,
     [{ libelle: 'Paiement supplémentaire', avant: '—', apres: texte }],
     [
       { type: 'definirElement', element },
@@ -419,9 +419,11 @@ export interface SuiviReleve {
   totalConfirmes: string;
   planifies: string[];
   totalPlanifies: string;
-  /** O9 : planifiés après l'échéance du relevé, non comptés. */
-  apresEcheance: string[];
-  /** Q66 : échéance du relevé différente de la date prévue. */
+  /**
+   * Q66, O9 (0.8.1, V1 à V3) : une seule phrase par paiement dont la date
+   * prévue diffère de l'échéance du relevé ; avec le montant s'il est prévu
+   * après (non compté dans les planifiés).
+   */
   notesEcheance: string[];
   constatMinimum: string | null;
   constatSolde: string;
@@ -432,18 +434,27 @@ function suivre(r: ReleveStocke, suivant: string | null, paiements: Paiement[]):
   const confirmes = periode.filter((p) => p.confirme);
   const nonConfirmes = periode.filter((p) => !p.confirme);
   const planifies = r.echeance === null ? nonConfirmes : nonConfirmes.filter((p) => p.date <= (r.echeance as string));
-  // O9 : seulement ce qui suit de près l'échéance (pas les mois suivants).
-  const apres = r.echeance === null ? [] : nonConfirmes.filter((p) => p.date > (r.echeance as string) && p.date < ajouterJours(r.echeance as DateCivile, 28));
+  // O9 : seulement ce qui suit l'échéance du relevé jusqu'à l'échéance
+  // mensuelle du mois suivant, exclue (Q66 : le relevé répond à celle du même mois).
+  const ech = r.echeance;
+  const moisSuivant =
+    ech === null ? undefined : paiements.find((p) => !p.supplement && p.date > ech && p.date.slice(0, 7) > ech.slice(0, 7))?.date;
+  const apres =
+    ech === null ? [] : nonConfirmes.filter((p) => p.date > ech && p.date < (moisSuivant ?? ajouterJours(ech as DateCivile, 28)));
   const conf = somme(confirmes) as Cents;
   // Sans échéance indiquée, « d'ici l'échéance » n'a pas de sens : à compléter.
   const plan = r.echeance === null ? null : somme(planifies);
-  const notesEcheance =
-    r.echeance === null
-      ? []
-      : periode
-          .filter((p) => !p.supplement && p.date.slice(0, 7) === (r.echeance as string).slice(0, 7) && p.date !== r.echeance)
-          .map((p) => `Échéance du relevé : ${avecAnnee(r.echeance as string)} — paiement prévu le ${avecAnnee(p.date)}.`)
-          .slice(0, 1);
+  const notesEcheance: string[] = [];
+  if (r.echeance !== null) {
+    const ech = r.echeance;
+    const debut = `Échéance du relevé : ${avecAnnee(ech)} — paiement prévu le`;
+    const avantMemeMois = periode.find((p) => !p.supplement && p.date < ech && p.date.slice(0, 7) === ech.slice(0, 7));
+    if (avantMemeMois) notesEcheance.push(`${debut} ${avecAnnee(avantMemeMois.date)}.`);
+    for (const p of apres) {
+      const montant = p.montant === null ? A_COMPLETER : formaterMontant(p.montant);
+      notesEcheance.push(`${debut} ${avecAnnee(p.date)} (${montant}${p.supplement ? ', supplémentaire' : ''}).`);
+    }
+  }
   let constatMinimum: string | null = null;
   if (r.minimum !== null) {
     if (conf >= r.minimum) constatMinimum = 'Minimum : atteint par les paiements confirmés.';
@@ -456,7 +467,7 @@ function suivre(r: ReleveStocke, suivant: string | null, paiements: Paiement[]):
       ? 'Nouveau solde : atteint par les paiements confirmés.'
       : plan === null
       ? `Nouveau solde : ce qui resterait est à compléter${r.echeance === null ? ' (échéance du relevé non indiquée)' : ' (un paiement planifié est à compléter)'}.`
-      : `Nouveau solde : après les paiements confirmés et planifiés, il resterait ${formaterMontant(Math.max(0, r.solde - conf - plan))}.`;
+      : `Nouveau solde : à la date d’échéance du relevé (${avecAnnee(r.echeance as string)}), après les paiements confirmés et planifiés d’ici là, il resterait ${formaterMontant(Math.max(0, r.solde - conf - plan))}.`;
   return {
     date: avecAnnee(r.date),
     nouveauSolde: formaterMontant(r.solde),
@@ -466,7 +477,6 @@ function suivre(r: ReleveStocke, suivant: string | null, paiements: Paiement[]):
     totalConfirmes: formaterMontant(conf),
     planifies: planifies.map(lignePaiement),
     totalPlanifies: plan === null ? A_COMPLETER : formaterMontant(plan),
-    apresEcheance: apres.map((p) => `${lignePaiement(p)} — prévu après l’échéance du relevé (${avecAnnee(r.echeance as string)})`),
     notesEcheance,
     constatMinimum,
     constatSolde,
