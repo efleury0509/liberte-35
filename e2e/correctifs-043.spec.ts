@@ -19,8 +19,10 @@ async function deplacer(page: Page, ligne: string, date: string) {
   // Correction 1 : le formulaire de paie est replié tant qu'on ne le demande pas.
   await expect(detail.getByLabel('Date réelle de versement')).toHaveCount(0);
   await detail.getByRole('button', { name: 'Modifier la date ou le montant de cette paie…' }).click();
-  await detail.getByLabel('Date réelle de versement').fill(date);
-  await detail.getByRole('button', { name: 'Enregistrer' }).click();
+  // V1 : le formulaire s'ouvre dans une fenêtre centrée.
+  const fenetre = page.getByTestId('fenetre-formulaire');
+  await fenetre.getByLabel('Date réelle de versement').fill(date);
+  await fenetre.getByRole('button', { name: 'Enregistrer', exact: true }).click();
 }
 
 test('déplacer la 3e paie d’avril : aperçu obligatoire, puis ligne bien visible avec sa date d’origine', async ({ page }) => {
@@ -51,7 +53,7 @@ test('remettre la paie à sa date d’origine : aperçu, puis retour exact au ca
   await expect(ligne).not.toContainText('prévue le');
 });
 
-test('le formulaire d’ajustement d’une ligne et celui de la paie ne s’affichent jamais ensemble', async ({ page }) => {
+test('le formulaire d’ajustement d’une ligne et celui de la paie ne s’affichent jamais ensemble (une fenêtre à la fois)', async ({ page }) => {
   await preparer(page);
   await page.getByRole('button', { name: 'Ajouter un revenu ou une dépense' }).click();
   const f = page.getByTestId('formulaire-element');
@@ -64,11 +66,15 @@ test('le formulaire d’ajustement d’une ligne et celui de la paie ne s’affi
   await page.locator('tr[data-cycle="2027-04-29"]').getByRole('button', { name: 'Détails' }).click();
   const detail = page.getByTestId('detail-cycle');
   await detail.locator('tr', { hasText: 'Remboursement' }).getByRole('button', { name: 'Ajuster' }).click();
-  await expect(detail.getByLabel('Date prévue')).toBeVisible();
-  await expect(detail.getByLabel('Date réelle de versement')).toHaveCount(0);
+  const fenetre = page.getByTestId('fenetre-formulaire');
+  await expect(fenetre).toHaveCount(1);
+  await expect(fenetre.getByLabel('Date prévue')).toBeVisible();
+  await expect(page.getByLabel('Date réelle de versement')).toHaveCount(0);
+  await fenetre.getByRole('button', { name: 'Abandonner', exact: true }).click();
   await detail.getByRole('button', { name: 'Modifier la date ou le montant de cette paie…' }).click();
-  await expect(detail.getByLabel('Date réelle de versement')).toBeVisible();
-  await expect(detail.getByLabel('Date prévue')).toHaveCount(0);
+  await expect(fenetre).toHaveCount(1);
+  await expect(fenetre.getByLabel('Date réelle de versement')).toBeVisible();
+  await expect(page.getByLabel('Date prévue')).toHaveCount(0);
 });
 
 test('bandeaux : « Enregistré » se ferme à la demande, « Annulé » disparaît seul', async ({ page }) => {

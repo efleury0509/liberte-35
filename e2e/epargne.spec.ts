@@ -63,7 +63,7 @@ test('C, V : contribution à chaque paie dans Mes paies ; confirmée, elle s’a
   const ligne = detail.locator('tr[data-epargne="contribution"]');
   await expect(ligne).toHaveCount(1);
   await expect(ligne).toContainText(`Contribution — ${CELI}`);
-  await expect(page.getByText(`Contribution — ${CELI}`)).toHaveCount(1); // pas parmi les Revenus et dépenses
+  for (const bloc of ['bloc-revenus', 'panneau-fixes', 'panneau-enveloppes']) await expect(page.getByTestId(bloc).getByText(`Contribution — ${CELI}`)).toHaveCount(0); // pas parmi les Revenus et dépenses
   await ligne.getByRole('button', { name: `Confirmer Contribution — ${CELI}` }).click();
   await expect(ligne.getByTestId('statut')).toContainText('Confirmé');
 

@@ -44,6 +44,8 @@
   import { modeOccurrence, reserveDeDepense } from '../../actions/couvertures';
   import { choixRapides, estPaiementCarte, estSupplement, laCarte, libelleLigne, proposerSupplement, proposerSuppressionSupplement, raisonsACompleter } from '../../actions/cartes';
   import RevenusDepenses from './RevenusDepenses.svelte';
+  import QuatrePaies from './QuatrePaies.svelte';
+  import FenetreFormulaire from '../base/FenetreFormulaire.svelte';
   import TableauCycles from './TableauCycles.svelte';
 
   interface Props {
@@ -304,6 +306,15 @@
     fConfSansReserve = false;
   }
 
+  const contexteCycle = (c: Cycle) => `Paie du ${formaterDateCourte(c.paie.date)} · cycle du ${formaterDateCourte(c.debut)} au ${formaterDateCourte(c.fin)}`;
+
+  /** « Voir le détail complet » depuis les cartes : ouvre le cycle dans le tableau. */
+  async function voirCycle(dateOrigine: DateCivile) {
+    if (choisi !== dateOrigine) choisirCycle(dateOrigine);
+    await tick();
+    document.querySelector('[data-testid="detail-cycle"]')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+  }
+
   function choisirCycle(dateOrigine: DateCivile) {
     choisi = choisi === dateOrigine ? null : dateOrigine;
     occurrence = null;
@@ -356,6 +367,7 @@
   const comptesOuverts = $derived(donnees && !exemple ? comptesDe(donnees).filter((k) => k.fermeLe === null) : []);
   const compteDeLigne = (id: string) => (donnees ? comptesDe(donnees).find((k) => k.contributions.includes(id)) : undefined);
   let formContribution: string | null = $state(null);
+  const formulaireOuvert = $derived(edition !== 'aucune' || occurrence !== null || formConfirmation !== null || formContribution !== null || formSupplement !== null || modifPaie);
   let fConCompte = $state('');
   let fConMontant = $state('');
   let fConDate = $state('');
@@ -401,61 +413,11 @@
     <p class="discret">Indique comment et quand tu es payée. Le montant peut attendre : il restera « À compléter ».</p>
     {@render formulaireProfil(true)}
   </section>
-{:else if donnees?.profil}
-  <section class="carte" aria-labelledby="titre-paie">
-    <h2 id="titre-paie">Ma paie</h2>
-    <p data-testid="description-profil">{decrireFrequence(donnees.profil)}</p>
-    <p>
-      Salaire net en vigueur : <strong data-testid="salaire-actuel">{salaireActuel}</strong>
-    </p>
-    {#if donnees.salaires.length > 1}
-      <ul class="discret">
-        {#each donnees.salaires as s (s.aPartirDu)}
-          <li>À partir du {libelleSalaire(s.aPartirDu)} : {formaterMontant(s.montant)}</li>
-        {/each}
-      </ul>
-    {/if}
-    <p>
-      Seuil d’attention : <span data-testid="seuil">{donnees.seuil === null ? 'aucun' : formaterMontant(donnees.seuil)}</span>
-    </p>
-    <div class="boutons">
-      <button type="button" onclick={() => ouvrirEdition('salaire')}>Changer le salaire à partir d’une date</button>
-      <button type="button" onclick={() => ouvrirEdition('profil')}>Modifier le calendrier de paie</button>
-      <button type="button" onclick={() => ouvrirEdition('seuil')}>Seuil d’attention</button>
-    </div>
-
-    {#if edition === 'profil'}
-      {@render formulaireProfil(false)}
-    {:else if edition === 'salaire'}
-      <form
-        class="formulaire"
-        onsubmit={(e) => {
-          e.preventDefault();
-          proposer(() => proposerSalaire(donnees!, fSalaireDate, fSalaireMontant, jour));
-        }}
-      >
-        <label>À partir du <input type="date" bind:value={fSalaireDate} required /></label>
-        <label>Nouveau salaire net ($) <input inputmode="decimal" bind:value={fSalaireMontant} required /></label>
-        <button type="submit" class="principal">Enregistrer</button>
-        <button type="button" onclick={annuler}>Annuler</button>
-      </form>
-    {:else if edition === 'seuil'}
-      <form
-        class="formulaire"
-        onsubmit={(e) => {
-          e.preventDefault();
-          proposer(() => proposerSeuil(donnees!, fSeuil));
-        }}
-      >
-        <label>Seuil d’attention ($, vide pour aucun) <input inputmode="decimal" bind:value={fSeuil} /></label>
-        <button type="submit" class="principal">Enregistrer</button>
-        <button type="button" onclick={annuler}>Annuler</button>
-      </form>
-    {/if}
-  </section>
 {/if}
 
 {#if vue}
+  <QuatrePaies cycles={vue.cycles} courant={vue.courant} libelle={(l) => (donnees && !exemple ? libelleLigne(donnees, l) : l.libelle)} onvoir={voirCycle} />
+  <h2 class="titre-tableau">Toutes mes paies</h2>
   {#if vue.plan.avantPremierCycle.length > 0}
     <p class="discret" data-testid="avant-premier-cycle">
       Avant le premier cycle (non compté) :
@@ -493,6 +455,69 @@
   </p>
 {/if}
 
+{#if !exemple && donnees?.profil}
+  <section class="carte" aria-labelledby="titre-paie">
+    <h2 id="titre-paie">Ma paie</h2>
+    <p data-testid="description-profil">{decrireFrequence(donnees.profil)}</p>
+    <p>
+      Salaire net en vigueur : <strong data-testid="salaire-actuel">{salaireActuel}</strong>
+    </p>
+    {#if donnees.salaires.length > 1}
+      <ul class="discret">
+        {#each donnees.salaires as s (s.aPartirDu)}
+          <li>À partir du {libelleSalaire(s.aPartirDu)} : {formaterMontant(s.montant)}</li>
+        {/each}
+      </ul>
+    {/if}
+    <p>
+      Seuil d’attention : <span data-testid="seuil">{donnees.seuil === null ? 'aucun' : formaterMontant(donnees.seuil)}</span>
+    </p>
+    <div class="boutons">
+      <button type="button" onclick={() => ouvrirEdition('salaire')}>Changer le salaire à partir d’une date</button>
+      <button type="button" onclick={() => ouvrirEdition('profil')}>Modifier le calendrier de paie</button>
+      <button type="button" onclick={() => ouvrirEdition('seuil')}>Seuil d’attention</button>
+    </div>
+
+    {#if edition !== 'aucune'}
+    <FenetreFormulaire
+      titre={edition === 'profil' ? 'Modifier le calendrier de paie' : edition === 'salaire' ? 'Changer le salaire à partir d’une date' : 'Seuil d’attention'}
+      contexte={`Ma paie · ${decrireFrequence(donnees.profil)}`}
+      erreur={proposition ? null : erreurSaisie}
+      onabandonner={annuler}
+    >
+    {#if edition === 'profil'}
+      {@render formulaireProfil(false)}
+    {:else if edition === 'salaire'}
+      <form
+        class="formulaire"
+        onsubmit={(e) => {
+          e.preventDefault();
+          proposer(() => proposerSalaire(donnees!, fSalaireDate, fSalaireMontant, jour));
+        }}
+      >
+        <label>À partir du <input type="date" bind:value={fSalaireDate} required /></label>
+        <label>Nouveau salaire net ($) <input inputmode="decimal" bind:value={fSalaireMontant} required /></label>
+        <button type="submit" class="principal">Enregistrer</button>
+        <button type="button" onclick={annuler}>Abandonner</button>
+      </form>
+    {:else if edition === 'seuil'}
+      <form
+        class="formulaire"
+        onsubmit={(e) => {
+          e.preventDefault();
+          proposer(() => proposerSeuil(donnees!, fSeuil));
+        }}
+      >
+        <label>Seuil d’attention ($, vide pour aucun) <input inputmode="decimal" bind:value={fSeuil} /></label>
+        <button type="submit" class="principal">Enregistrer</button>
+        <button type="button" onclick={annuler}>Abandonner</button>
+      </form>
+    {/if}
+    </FenetreFormulaire>
+    {/if}
+  </section>
+{/if}
+
 {#if exemple || donnees?.profil}
   <RevenusDepenses
     elements={exemple ? ELEMENTS_EXEMPLE : (donnees?.elements ?? []).filter((e) => !estDette(e.id))}
@@ -506,7 +531,7 @@
   />
 {/if}
 
-{#if erreurSaisie && !proposition}
+{#if erreurSaisie && !proposition && !formulaireOuvert}
   <p role="alert" class="erreur" data-testid="erreur-saisie">{erreurSaisie}</p>
 {/if}
 {#if dernier}
@@ -580,7 +605,7 @@
       <label>Montant net habituel ($, facultatif) <input inputmode="decimal" bind:value={fMontant} /></label>
     {/if}
     <button type="submit" class="principal">Enregistrer</button>
-    {#if !creation}<button type="button" onclick={annuler}>Annuler</button>{/if}
+    {#if !creation}<button type="button" onclick={annuler}>Abandonner</button>{/if}
   </form>
 {/snippet}
 
@@ -591,7 +616,7 @@
 
 {#snippet boutonAjuster(c: Cycle, l: Ligne)}
   {#if !exemple}
-    <button type="button" class="petit" onclick={() => ouvrirOccurrence(c, l.elementId, l.origine)} aria-label={`Ajuster ${l.libelle} pour cette fois`}>
+    <button type="button" class="action-secondaire" onclick={() => ouvrirOccurrence(c, l.elementId, l.origine)} aria-label={`Ajuster ${l.libelle} pour cette fois`}>
       Ajuster
     </button>
   {/if}
@@ -652,12 +677,13 @@
       <button
         type="button"
         onclick={() => {
+          occurrence = null;
           aGerer = null;
           queueMicrotask(() => (aGerer = cible.elementId));
         }}>Modifier la règle…</button
       >
     {/if}
-    <button type="button" onclick={() => (occurrence = null)}>Fermer</button>
+    <button type="button" onclick={() => (occurrence = null)}>Abandonner</button>
   </form>
 {/snippet}
 
@@ -680,13 +706,13 @@
     {@const cible = { elementId: l.elementId, origine: l.origine }}
     <span class="actions-ligne">
       {#if l.statut === 'confirme'}
-        <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'corriger', l.montantPrevu, l.confirmation)}>Corriger</button>
-        <button type="button" class="petit" onclick={() => proposerAnnulation(cible)}>Annuler la confirmation</button>
+        <button type="button" class="action-secondaire" onclick={() => ouvrirConfirmation(cible, 'corriger', l.montantPrevu, l.confirmation)}>Corriger</button>
+        <button type="button" class="action-secondaire" onclick={() => proposerAnnulation(cible)}>Annuler la confirmation</button>
       {:else if l.statut === 'aVenir' || l.statut === 'aVerifier'}
         <button type="button" class="petit principal" onclick={() => confirmerAvecSource(cible, null, false, l.montantPrevu)} aria-label={`Confirmer ${l.libelle}`}>Confirmer</button>
-        <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'confirmer', l.montantPrevu, null)}>Confirmer autrement…</button>
+        <button type="button" class="action-secondaire" onclick={() => ouvrirConfirmation(cible, 'confirmer', l.montantPrevu, null)}>Confirmer autrement…</button>
         {#if l.statut === 'aVerifier'}
-          <button type="button" class="petit" onclick={() => proposer(() => proposerRetrait(donnees!, cible, true, jour))}>N’a pas eu lieu</button>
+          <button type="button" class="action-secondaire" onclick={() => proposer(() => proposerRetrait(donnees!, cible, true, jour))}>N’a pas eu lieu</button>
         {/if}
         {@render boutonAjuster(c, l)}
       {:else}
@@ -723,7 +749,7 @@
       </fieldset>
     {/if}
     <button type="submit" class="principal">Enregistrer</button>
-    <button type="button" onclick={() => (formConfirmation = null)}>Fermer</button>
+    <button type="button" onclick={() => (formConfirmation = null)}>Abandonner</button>
   </form>
 {/snippet}
 
@@ -757,11 +783,11 @@
               {@const cible = { elementId: null, origine: c.paie.dateOrigine }}
               <span class="actions-ligne">
                 {#if c.paieConfirmation}
-                  <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'corriger', c.paie.montant, c.paieConfirmation)}>Corriger</button>
-                  <button type="button" class="petit" onclick={() => proposerAnnulation(cible)}>Annuler la confirmation</button>
+                  <button type="button" class="action-secondaire" onclick={() => ouvrirConfirmation(cible, 'corriger', c.paie.montant, c.paieConfirmation)}>Corriger</button>
+                  <button type="button" class="action-secondaire" onclick={() => proposerAnnulation(cible)}>Annuler la confirmation</button>
                 {:else}
                   <button type="button" class="petit principal" onclick={() => proposer(() => proposerConfirmation(donnees!, cible, null, jour))} aria-label="Confirmer la paie">Confirmer</button>
-                  <button type="button" class="petit" onclick={() => ouvrirConfirmation(cible, 'confirmer', c.paie.montant, null)}>Confirmer autrement…</button>
+                  <button type="button" class="action-secondaire" onclick={() => ouvrirConfirmation(cible, 'confirmer', c.paie.montant, null)}>Confirmer autrement…</button>
                 {/if}
               </span>
             {/if}
@@ -886,6 +912,7 @@
       </tbody>
     </table>
     {#if formContribution === c.paie.dateOrigine}
+      <FenetreFormulaire titre="Contribution ponctuelle" contexte={contexteCycle(c)} erreur={proposition ? null : erreurSaisie} onabandonner={() => (formContribution = null)}>
       <form
         class="formulaire occurrence"
         data-testid="formulaire-contribution-ponctuelle"
@@ -905,10 +932,12 @@
         <label>Montant ($) <input inputmode="decimal" bind:value={fConMontant} /></label>
         <label>Date <input type="date" bind:value={fConDate} /></label>
         <button type="submit" class="principal">Enregistrer</button>
-        <button type="button" onclick={() => (formContribution = null)}>Fermer</button>
+        <button type="button" onclick={() => (formContribution = null)}>Abandonner</button>
       </form>
+      </FenetreFormulaire>
     {/if}
     {#if formSupplement === c.paie.dateOrigine}
+      <FenetreFormulaire titre="Paiement supplémentaire sur la carte" contexte={contexteCycle(c)} erreur={proposition ? null : erreurSaisie} onabandonner={() => (formSupplement = null)}>
       <form
         class="formulaire occurrence"
         data-testid="formulaire-supplement"
@@ -921,14 +950,27 @@
         <label>Montant ($) <input inputmode="decimal" bind:value={fSupMontant} /></label>
         <label>Date <input type="date" bind:value={fSupDate} /></label>
         <button type="submit" class="principal">Enregistrer</button>
-        <button type="button" onclick={() => (formSupplement = null)}>Fermer</button>
+        <button type="button" onclick={() => (formSupplement = null)}>Abandonner</button>
       </form>
+      </FenetreFormulaire>
     {/if}
     {#if occurrence && c.lignes.some((l) => l.elementId === occurrence?.elementId && l.origine === occurrence?.origine)}
-      {@render formulaireOccurrence(c)}
+      {@const lo = c.lignes.find((l) => l.elementId === occurrence?.elementId && l.origine === occurrence?.origine)!}
+      <FenetreFormulaire titre={`Ajuster « ${libelleLigne(donnees!, lo)} » pour cette fois`} contexte={contexteCycle(c)} erreur={proposition ? null : erreurSaisie} onabandonner={() => (occurrence = null)}>
+        {@render formulaireOccurrence(c)}
+      </FenetreFormulaire>
     {/if}
     {#if formConfirmation && (formConfirmation.cible.elementId === null ? formConfirmation.cible.origine === c.paie.dateOrigine : c.lignes.some((l) => l.elementId === formConfirmation?.cible.elementId && l.origine === formConfirmation?.cible.origine))}
-      {@render formulaireConfirmation()}
+      {@const fc = formConfirmation}
+      {@const lc = fc.cible.elementId === null ? null : c.lignes.find((l) => l.elementId === fc.cible.elementId && l.origine === fc.cible.origine)}
+      <FenetreFormulaire
+        titre={`${fc.mode === 'corriger' ? 'Corriger' : 'Confirmer'} ${lc ? `« ${libelleLigne(donnees!, lc)} »` : `la paie du ${formaterDateCourte(c.paie.date)}`}`}
+        contexte={contexteCycle(c)}
+        erreur={proposition ? null : erreurSaisie}
+        onabandonner={() => (formConfirmation = null)}
+      >
+        {@render formulaireConfirmation()}
+      </FenetreFormulaire>
     {/if}
     {#if c.nonComptes > 0}
       <p class="discret">Non compté : {formaterMontant(c.nonComptes)} de revenus incertains, en attente de confirmation.</p>
@@ -949,8 +991,8 @@
           >
         </p>
       {:else}
+        <FenetreFormulaire titre="Modifier cette paie seulement" contexte={contexteCycle(c)} erreur={proposition ? null : erreurSaisie} onabandonner={() => (modifPaie = false)}>
         <div class="modif-paie">
-          <h3>Modifier cette paie seulement</h3>
           <p class="discret">
             Il s’agit de la paie elle-même (prévue le {formaterDateLongue(c.paie.dateOrigine)}), pas d’un revenu ou d’une dépense
             du cycle. Le calendrier de paie ne change pas.
@@ -965,9 +1007,10 @@
             <label>Date réelle de versement <input type="date" bind:value={fDateReelle} /></label>
             <label>Montant de cette paie ($, vide = habituel) <input inputmode="decimal" bind:value={fMontantPaie} /></label>
             <button type="submit" class="principal">Enregistrer</button>
-            <button type="button" onclick={() => (modifPaie = false)}>Fermer</button>
+            <button type="button" onclick={() => (modifPaie = false)}>Abandonner</button>
           </form>
         </div>
+        </FenetreFormulaire>
       {/if}
     {/if}
   </section>
@@ -976,15 +1019,15 @@
 <style>
   .carte {
     margin: 0 0 var(--espace-6);
-    max-width: 1100px;
+    max-width: var(--largeur-contenu);
+  }
+  .titre-tableau {
+    margin: 0 0 var(--espace-2);
+    font-size: var(--titre-carte);
   }
   h2 {
     font-size: 17px;
     margin: 0 0 var(--espace-3);
-  }
-  h3 {
-    font-size: var(--taille-texte);
-    margin: var(--espace-6) 0 var(--espace-2);
   }
   .boutons {
     display: flex;
@@ -1006,7 +1049,7 @@
   table {
     border-collapse: collapse;
     width: 100%;
-    max-width: 640px;
+    max-width: 960px;
   }
   th,
   td {
@@ -1040,9 +1083,7 @@
     text-decoration: none;
   }
   .occurrence {
-    padding: var(--espace-3);
-    border: 1px solid var(--couleur-bordure);
-    border-radius: var(--arrondi);
+    margin-top: 0;
   }
   .occurrence p {
     flex-basis: 100%;

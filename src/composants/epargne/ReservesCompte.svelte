@@ -21,6 +21,7 @@
   import { partsDe } from '../../actions/couvertures';
   import { proposerReserveAvecAffectation } from '../../actions/epargneV1';
   import FenetreFormulaire from '../base/FenetreFormulaire.svelte';
+  import MenuActions from '../base/MenuActions.svelte';
   import { avecAnnee } from '../../actions/comptes';
   import { formaterMontant } from '../../noyau/montants';
   import type { DateCivile } from '../../noyau/dates';
@@ -190,21 +191,23 @@
       </div>
       {#if !ferme}
         <div class="boutons-ligne">
-          {#if r.etat === 'active'}
-            <button type="button" class="petit" onclick={() => ouvrir('affecter', r.id)} disabled={!vue.valeurConnue || vue.depassement !== null}>Affecter…</button>
-          {/if}
-          {#if r.solde > 0}
-            {#if autres(r.id).length > 0}<button type="button" class="petit" onclick={() => ouvrir('reaffecter', r.id)}>Réaffecter…</button>{/if}
-            <button type="button" class="petit" onclick={() => ouvrir('liberer', r.id)}>Libérer…</button>
-          {/if}
-          <button type="button" class="petit" onclick={() => ouvrir('modifier', r.id)}>Modifier…</button>
-          {#if r.etat === 'suspendue'}
-            <button type="button" class="petit" onclick={() => ouvrir('reprendre', r.id)}>Reprendre…</button>
-          {:else}
-            <button type="button" class="petit" onclick={() => ouvrir('suspendre', r.id)}>Suspendre…</button>
-          {/if}
-          <button type="button" class="petit" onclick={() => ouvrir('arreter', r.id)}>Arrêter…</button>
-          <button type="button" class="petit" onclick={() => proposer(() => proposerSuppressionReserve(donnees, compteId, r.id, jour))}>Supprimer</button>
+          <MenuActions nom={`réserve « ${r.nom} »`}>
+            {#if r.etat === 'active'}
+              <button type="button" onclick={() => ouvrir('affecter', r.id)} disabled={!vue.valeurConnue || vue.depassement !== null}>Affecter…</button>
+            {/if}
+            {#if r.solde > 0}
+              {#if autres(r.id).length > 0}<button type="button" onclick={() => ouvrir('reaffecter', r.id)}>Réaffecter…</button>{/if}
+              <button type="button" onclick={() => ouvrir('liberer', r.id)}>Libérer…</button>
+            {/if}
+            <button type="button" onclick={() => ouvrir('modifier', r.id)}>Modifier…</button>
+            {#if r.etat === 'suspendue'}
+              <button type="button" onclick={() => ouvrir('reprendre', r.id)}>Reprendre…</button>
+            {:else}
+              <button type="button" onclick={() => ouvrir('suspendre', r.id)}>Suspendre…</button>
+            {/if}
+            <button type="button" onclick={() => ouvrir('arreter', r.id)}>Arrêter…</button>
+            <button type="button" onclick={() => proposer(() => proposerSuppressionReserve(donnees, compteId, r.id, jour))}>Supprimer</button>
+          </MenuActions>
           <button type="button" class="petit lien" onclick={() => (ouverteHisto = ouverteHisto === r.id ? null : r.id)}>{ouverteHisto === r.id ? 'Masquer l’historique' : 'Historique'}</button>
         </div>
       {/if}

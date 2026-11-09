@@ -1,6 +1,6 @@
 <script lang="ts">
   // Ligne « Auto ........ 205 $ » avec points de conduite. Inconnu : « À compléter ».
-  import type { Component } from 'svelte';
+  import type { Component, Snippet } from 'svelte';
   import Icone from './Icone.svelte';
   import { formaterMontant, type Cents } from '../../noyau/montants';
   import { A_COMPLETER } from '../../actions/paie';
@@ -10,8 +10,10 @@
     montant: Cents | null;
     icone?: Component<{ size?: number; strokeWidth?: number }>;
     arrondi?: boolean;
+    /** Élément affiché après le montant (ex. une pastille d'état). */
+    fin?: Snippet;
   }
-  let { libelle, montant, icone, arrondi = false }: Props = $props();
+  let { libelle, montant, icone, arrondi = false, fin }: Props = $props();
   const texte = $derived(montant === null ? A_COMPLETER : arrondi && montant % 100 === 0 ? formaterMontant(montant).replace(/,00(?=\s?\$)/, '') : formaterMontant(montant));
 </script>
 
@@ -20,6 +22,7 @@
   <span class="libelle">{libelle}</span>
   <span class="conduite" aria-hidden="true"></span>
   <span class="montant" class:inconnu={montant === null}>{texte}</span>
+  {#if fin}{@render fin()}{/if}
 </li>
 
 <style>

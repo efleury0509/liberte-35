@@ -90,11 +90,11 @@ test('paie déplacée : refusée au-delà de la suivante, acceptée entre les de
   await ligne.getByRole('button', { name: 'Détails' }).click();
   await page.getByRole('button', { name: 'Modifier la date ou le montant de cette paie…' }).click();
   await page.getByLabel('Date réelle de versement').fill('2027-04-30');
-  await page.getByTestId('detail-cycle').getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(page.getByTestId('erreur-saisie')).toContainText('entre la paie précédente et la suivante');
+  await page.getByTestId('fenetre-formulaire').getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(page.getByTestId('fenetre-formulaire').getByTestId('erreur-saisie')).toContainText('entre la paie précédente et la suivante');
 
   await page.getByLabel('Date réelle de versement').fill('2027-04-16');
-  await page.getByTestId('detail-cycle').getByRole('button', { name: 'Enregistrer' }).click();
+  await page.getByTestId('fenetre-formulaire').getByRole('button', { name: 'Enregistrer', exact: true }).click();
   // Changer la date d'une paie : toujours un aperçu, même sans élément touché.
   await expect(page.getByTestId('apercu')).toContainText('Cycle de cette paie : 14 jours → 13 jours');
   await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();

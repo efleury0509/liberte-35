@@ -40,6 +40,8 @@ async function nouvelleReserve(page: Page, nom: string, cible: string) {
 }
 
 async function affecter(page: Page, nom: string, montant: string) {
+  // V1 : les actions secondaires d'une réserve sont dans son menu « Actions ».
+  await reserve(page, nom).getByRole('button', { name: /^Actions/ }).click();
   await reserve(page, nom).getByRole('button', { name: 'Affecter…' }).click();
   const f = page.getByTestId('formulaire-affecter');
   await f.getByLabel('Montant ($)').fill(montant);
@@ -61,7 +63,10 @@ test('R1, R3, O1, O3 : une réserve découpe la valeur ; dépassement, puis « A
   await f.getByRole('button', { name: 'Voir l’aperçu' }).click();
   await enregistrerApercu(page);
   await expect(fiche(page).getByTestId('depassement')).toContainText($('200,00 $'));
+  await reserve(page, 'Fonds d’urgence').getByRole('button', { name: /^Actions/ }).click();
   await expect(reserve(page, 'Fonds d’urgence').getByRole('button', { name: 'Affecter…' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(reserve(page, 'Fonds d’urgence').getByRole('button', { name: 'Affecter…' })).toHaveCount(0);
 
   await fiche(page).getByRole('button', { name: 'Ajuster mes réserves…' }).click();
   const a = page.getByTestId('formulaire-ajuster');

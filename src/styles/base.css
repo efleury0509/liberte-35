@@ -109,6 +109,25 @@ button.petit {
   min-height: 28px;
   padding: 0 var(--espace-3);
 }
+/* Action secondaire d'une ligne (Corriger, Annuler la confirmation…) :
+   libellé explicite, présentation compacte et discrète. */
+button.action-secondaire {
+  min-height: 28px;
+  padding: 0 var(--espace-2);
+  border: none;
+  background: none;
+  color: var(--couleur-lien);
+  font-size: var(--texte-petit);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--couleur-bordure-forte);
+  text-underline-offset: 3px;
+  border-radius: var(--arrondi);
+}
+button.action-secondaire:hover:not(:disabled) {
+  background: var(--couleur-surface-active);
+  text-decoration-color: currentColor;
+}
 /* Bouton-lien : action secondaire discrète dans une phrase ou une ligne. */
 button.lien {
   border: none;

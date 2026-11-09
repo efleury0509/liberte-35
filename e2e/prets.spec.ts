@@ -42,7 +42,7 @@ test('F1, C1, C4 : un prêt créé avec quatre renseignements apparaît dans Mes
 
   // C7 : le prêt n'est pas parmi les dépenses fixes de Mes paies.
   await nav(page, 'Mes paies');
-  await expect(page.getByText('Prêt auto (fictif)')).toHaveCount(0);
+  for (const bloc of ['bloc-revenus', 'panneau-fixes', 'panneau-enveloppes']) await expect(page.getByTestId(bloc).getByText('Prêt auto (fictif)')).toHaveCount(0);
   await page.locator('tr[data-cycle="2027-01-07"]').getByRole('button', { name: 'Détails' }).click();
   const ligne = page.getByTestId('detail-cycle').locator('tr[data-dette="oui"]');
   await expect(ligne).toHaveCount(1);
