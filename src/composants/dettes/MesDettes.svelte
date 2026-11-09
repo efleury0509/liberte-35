@@ -205,6 +205,25 @@
   <p class="discret" data-testid="paye-depuis-ajout">{v.payeDepuisAjout}</p>
   {#if v.note}<p class="attention" data-testid="note-echeance">{v.note}</p>{/if}
 
+  {#if !v.rembourse}
+    <h4>Prochains versements</h4>
+    {#if v.aVenir.length === 0}
+      <p class="discret">Aucun versement planifié à venir.</p>
+    {:else}
+      <ul class="a-venir" data-testid="a-venir">
+        {#each v.aVenir as x, i (i)}
+          <li>
+            <span>{x.date}</span>
+            <span class="montant">{x.montant}</span>
+            {#if x.ajuste}<span class="discret">ajusté cette fois</span>{/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#if v.totalPrevu}<p data-testid="total-prevu">{v.totalPrevu}</p>{/if}
+    {#if v.manque}<p class="discret" data-testid="manque">{v.manque}</p>{/if}
+  {/if}
+
   <h4>Historique</h4>
   {#if v.historique.length === 0}
     <p class="discret">Aucun versement confirmé pour l’instant. Les versements se confirment dans Mes paies, dans le détail de leur cycle.</p>
@@ -594,5 +613,20 @@
     border-radius: var(--arrondi);
     background: var(--couleur-surface);
     border: 1px solid var(--couleur-bordure);
+  }
+  .a-venir {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--espace-2);
+    max-width: 420px;
+  }
+  .a-venir li {
+    display: flex;
+    gap: var(--espace-4);
+    padding: var(--espace-1) 0;
+  }
+  .a-venir .montant {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
   }
 </style>

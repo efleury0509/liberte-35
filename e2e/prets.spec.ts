@@ -157,3 +157,40 @@ test('sans profil de paie, Mes dettes explique quoi faire', async ({ page }) => 
   await nav(page, 'Mes dettes');
   await expect(page.getByText('Crée d’abord ton profil de paie dans « Mes paies »')).toBeVisible();
 });
+
+test('7b-1 : prochains versements, somme prévue jusqu’à l’échéance, ce qui manque, journal', async ({ page }) => {
+  await preparer(page);
+  await ajouterPretMinimal(page);
+  const fiche = page.getByTestId('fiche-pret');
+  // Q49 : les 6 prochains, à partir d'aujourd'hui (15 janv.), comme dans Mes paies.
+  const items = fiche.getByTestId('a-venir').getByRole('listitem');
+  await expect(items).toHaveCount(6);
+  await expect(items.first()).toContainText('28 janv. 2027');
+  await expect(items.first()).toContainText($('205,00 $'));
+  await expect(items.last()).toContainText('8 avr. 2027');
+  // Sans échéance finale : aucun total ; ce qui manque est dit simplement.
+  await expect(fiche.getByTestId('total-prevu')).toHaveCount(0);
+  await expect(fiche.getByTestId('manque')).toHaveText(
+    'Pour estimer la date de remboursement et les intérêts, il manque : le solde, le taux et la méthode d’intérêts du contrat.',
+  );
+
+  // Q50 : avec une échéance finale, la somme des versements prévus, clairement nommée.
+  await page.getByRole('button', { name: 'Compléter les renseignements…' }).click();
+  const f = page.getByTestId('formulaire-renseignements');
+  await f.getByLabel('Échéance finale').fill('2027-03-11');
+  await f.getByLabel('Taux annuel (%)').fill('6,49');
+  await f.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(fiche.getByTestId('total-prevu')).toHaveText(
+    $('Somme des versements prévus d’ici l’échéance du 11 mars 2027 : 4 versements, 820,00 $. Ce n’est ni le solde restant ni le coût total du prêt.'),
+  );
+  await expect(fiche.getByTestId('manque')).toHaveText(
+    'Pour estimer la date de remboursement et les intérêts, il manque : le solde et la méthode d’intérêts du contrat.',
+  );
+  await expect(items).toHaveCount(4);
+
+  // Q51 : la confirmation d'un versement s'inscrit sous « Prêt « … » ».
+  await nav(page, 'Mes paies');
+  await page.locator('tr[data-cycle="2027-01-07"]').getByRole('button', { name: 'Détails' }).click();
+  await page.getByTestId('detail-cycle').locator('tr[data-dette="oui"]').getByRole('button', { name: /^Confirmer/ }).first().click();
+  await expect(page.getByTestId('enregistre')).toContainText('Confirmer « Prêt auto (fictif) »');
+});

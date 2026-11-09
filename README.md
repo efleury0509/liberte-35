@@ -59,6 +59,11 @@ et dans le cahier fonctionnel de référence.
   d'intérêts supposée : intérêts, capital et solde estimé restent « À compléter ».
   Mise à jour du solde datée (nouvelle référence, rien de réécrit), « Marquer
   comme remboursé » avec aperçu, dettes libérées. Base de données en version 6.
+- Étape 7b-1 (version 0.7.1) : dans la fiche d'un prêt, les 6 prochains
+  versements planifiés, la somme des versements prévus jusqu'à l'échéance
+  finale (si elle est indiquée ; ni un solde ni un coût total) et ce qui manque
+  pour projeter. Aucun calcul d'intérêts. Les confirmations de versements
+  s'inscrivent au journal sous « Prêt « … » ». Structure inchangée (6).
 
 ## Organisation du code
 

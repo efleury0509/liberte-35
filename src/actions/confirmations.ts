@@ -16,6 +16,7 @@ import { formaterMontant, type Cents } from '../noyau/montants';
 import type { ChangementPaie, ConfirmationStockee, DonneesPaie, EntreeJournal } from '../lib/plateforme';
 import { appliquerChangements } from '../lib/appliquer';
 import { nomObjet } from './elements';
+import { estPret, objetPret } from './prets';
 import { ErreurSaisie, SECTION, lireDate, lireMontant, montantOuACompleter, versNoyau, type LigneApercu, type Proposition } from './paie';
 
 /** Une occurrence à confirmer ; elementId null : la paie elle-même. */
@@ -74,7 +75,7 @@ function situer(d: DonneesPaie, cible: CibleConfirmation, jour: DateCivile): Sit
         prevu: ligne.montantPrevu,
         confirmation,
         titre: `« ${element.libelle} » (${quand})`,
-        objet: nomObjet(element),
+        objet: estPret(d, element.id) ? objetPret(element.libelle) : nomObjet(element),
         champ: `confirmation du ${cible.origine}`,
       };
     }
@@ -210,7 +211,7 @@ export function proposerToutConfirmer(d: DonneesPaie, paieOrigine: string, jour:
     else if (l.montantPrevu === null) exclus.push(`Exclu : ${l.libelle} (montant à compléter).`);
     else {
       const element = (d.elements ?? []).find((e) => e.id === l.elementId);
-      const i = ajouter(l.elementId, l.libelle, element ? nomObjet(element) : l.libelle, `confirmation du ${l.origine}`, l.statut, l.montantPrevu);
+      const i = ajouter(l.elementId, l.libelle, element ? (estPret(d, element.id) ? objetPret(element.libelle) : nomObjet(element)) : l.libelle, `confirmation du ${l.origine}`, l.statut, l.montantPrevu);
       i.confirmation.origine = l.origine;
       inclus.push(i);
     }

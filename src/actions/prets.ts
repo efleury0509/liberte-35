@@ -36,6 +36,8 @@ export const NOTE_REPARTITION = 'Intérêts et capital : à compléter tant que 
 
 const avecAnnee = (d: string) => `${formaterDateCourte(d as DateCivile)} ${d.slice(0, 4)}`;
 const objet = (nom: string) => `Prêt « ${nom} »`;
+/** Q51 : tout ce qui touche un prêt se lit sous « Prêt « … » » au journal. */
+export const objetPret = objet;
 const entree = (nom: string, champ: string, avant: string | null, apres: string | null, motif: string | null = null): EntreeJournal => ({
   section: SECTION_DETTES,
   objet: objet(nom),
@@ -392,6 +394,12 @@ export interface VuePret {
   noteRepartition: string;
   /** E3 : échéance passée sans remboursement marqué. */
   note: string | null;
+  /** 7b-1 (Q49) : les 6 prochains versements planifiés. */
+  aVenir: VersementAVenir[];
+  /** 7b-1 (Q50) : seulement si une échéance finale est indiquée. */
+  totalPrevu: string | null;
+  /** 7b-1 : ce qui manque pour projeter. */
+  manque: string | null;
   historique: LigneVue[];
   /** Valeurs actuelles, pour préremplir les formulaires. */
   brut: PretStocke;
@@ -417,24 +425,61 @@ function ligneVue(l: LigneHistorique): LigneVue {
   };
 }
 
-function prochainVersement(d: DonneesPaie, id: string, jour: DateCivile): string | null {
+export interface VersementAVenir {
+  date: string;
+  montant: string;
+  /** Ajusté cette fois (date ou montant), comme dans Mes paies. */
+  ajuste: boolean;
+}
+
+/**
+ * Versements planifiés à partir d'aujourd'hui, tels que Mes paies les place
+ * (ajustements, échéance finale et remboursement compris). Un versement
+ * confirmé ou retiré n'est plus « prévu ». Aucun calcul d'intérêts.
+ */
+function versementsPlanifies(d: DonneesPaie, id: string, jour: DateCivile, jusqua: string | null, max: number): { date: string; montant: Cents | null; ajuste: boolean }[] {
   const n = versNoyau(d);
-  if (!n.profil) return null;
+  if (!n.profil) return [];
+  // Assez de cycles pour couvrir la période, même avec une paie chaque semaine.
+  const semaines = jusqua === null ? 60 : Math.ceil((Date.parse(jusqua) - Date.parse(jour)) / (7 * 86_400_000)) + 3;
   const { cycles } = cyclesAffiches(
     n.profil,
     { exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, confirmations: n.confirmations },
     jour,
-    6,
+    Math.max(semaines, 2),
   );
+  const res: { date: string; montant: Cents | null; ajuste: boolean }[] = [];
   for (const c of cycles) {
     for (const l of c.lignes) {
       if (l.elementId !== id || l.retiree || l.statut === 'confirme') continue;
-      const date = l.echeance ?? c.paie.date;
-      if (date < jour) continue;
-      return `${l.montant === null ? A_COMPLETER : formaterMontant(l.montant)} le ${avecAnnee(date)}`;
+      const date = (l.echeance ?? c.paie.date) as string;
+      if (date < jour || (jusqua !== null && date > jusqua)) continue;
+      res.push({ date, montant: l.montant, ajuste: l.ajuste });
     }
   }
-  return null;
+  return res.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).slice(0, max);
+}
+
+const enListe = (morceaux: string[]) => (morceaux.length <= 1 ? morceaux.join('') : `${morceaux.slice(0, -1).join(', ')} et ${morceaux.at(-1)}`);
+
+/** Q50 : somme des versements prévus jusqu'à l'échéance indiquée, jamais un solde. */
+function totalPrevu(d: DonneesPaie, pret: PretStocke, jour: DateCivile): string | null {
+  if (pret.rembourseLe !== null || pret.echeanceFinale === null) return null;
+  const liste = versementsPlanifies(d, pret.id, jour, pret.echeanceFinale, Number.POSITIVE_INFINITY);
+  const nombre = `${liste.length} versement${liste.length > 1 ? 's' : ''}`;
+  const somme = liste.some((v) => v.montant === null) ? 'montant à compléter' : formaterMontant(liste.reduce((t, v) => t + (v.montant as number), 0));
+  return `Somme des versements prévus d’ici l’échéance du ${avecAnnee(pret.echeanceFinale)} : ${nombre}, ${somme}. Ce n’est ni le solde restant ni le coût total du prêt.`;
+}
+
+/** Ce qui manque pour une projection (7b-2). Aucun chiffre d'intérêt ici. */
+function manque(pret: PretStocke): string | null {
+  if (pret.rembourseLe !== null) return null;
+  const morceaux = [
+    ...(pret.soldes.length === 0 ? ['le solde'] : []),
+    ...(pret.taux === null ? ['le taux'] : []),
+    'la méthode d’intérêts du contrat',
+  ];
+  return `Pour estimer la date de remboursement et les intérêts, il manque : ${enListe(morceaux)}.`;
 }
 
 export function vuePret(d: DonneesPaie, id: string, jour: DateCivile): VuePret {
@@ -451,20 +496,27 @@ export function vuePret(d: DonneesPaie, id: string, jour: DateCivile): VuePret {
       .map((f) => ({ origine: f.origine as DateCivile, date: f.date as DateCivile, montant: f.montant })),
   );
   const versement = versementEnVigueur(element, jour);
+  const rembourse = pret.rembourseLe !== null;
+  const aVenir: VersementAVenir[] = rembourse
+    ? []
+    : versementsPlanifies(d, id, jour, null, 6).map((v) => ({
+        date: avecAnnee(v.date),
+        montant: v.montant === null ? A_COMPLETER : formaterMontant(v.montant),
+        ajuste: v.ajuste,
+      }));
   const ref = h.reference;
   let soldeActuel = A_COMPLETER;
   if (ref) {
     soldeActuel = `${formaterMontant(ref.montant)} au ${avecAnnee(ref.date)}`;
     if (h.payeDepuisReference > 0) soldeActuel += ` — ${formaterMontant(h.payeDepuisReference)} payés depuis, répartition à compléter`;
   }
-  const rembourse = pret.rembourseLe !== null;
   return {
     id,
     nom: element.libelle,
     rembourse,
     statut: rembourse ? `Remboursé le ${avecAnnee(pret.rembourseLe!)}` : 'En cours',
     versement: `${versement === null ? A_COMPLETER : formaterMontant(versement)} — ${quandPret(element)}`,
-    prochainVersement: rembourse ? null : prochainVersement(d, id, jour),
+    prochainVersement: aVenir[0] ? `${aVenir[0].montant} le ${aVenir[0].date}` : null,
     minimum: pret.minimum === null ? 'Identique au versement' : formaterMontant(pret.minimum),
     taux: tauxTexte(pret.taux),
     methode: A_COMPLETER,
@@ -479,6 +531,9 @@ export function vuePret(d: DonneesPaie, id: string, jour: DateCivile): VuePret {
         ? 'L’échéance prévue est passée. Marque le prêt comme remboursé quand c’est fait.'
         : null,
     historique: h.lignes.map(ligneVue),
+    aVenir,
+    totalPrevu: totalPrevu(d, pret, jour),
+    manque: manque(pret),
     brut: pret,
   };
 }
