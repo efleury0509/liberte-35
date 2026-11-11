@@ -235,7 +235,7 @@
       }}
     >
       {#if r?.depense}
-        <p class="discret">Sa cible, sa date et sa fréquence viennent de la dépense « {r.depense} » : change-les dans Dépenses à prévoir.</p>
+        <p class="discret">Sa cible, sa date et sa fréquence viennent de la dépense « {r.depense} » : change-les dans Dépenses.</p>
       {:else}
         <p class="discret">Une réserve découpe la valeur du compte ; elle ne la change pas.</p>
       {/if}

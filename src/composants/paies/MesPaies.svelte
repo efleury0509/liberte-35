@@ -57,7 +57,7 @@
     /** Étape 8 : ouvrir la carte dans Mes dettes. */
     onvoircarte?: () => void;
     /** Étape A : ouvrir Dépenses à prévoir. */
-    onvoirdepenses?: () => void;
+    onvoirdepenses?: (elementId?: string) => void;
     /** Étape 9 : ouvrir un compte dans Mon épargne. */
     onvoircompte?: (id: string) => void;
   }
@@ -367,7 +367,8 @@
   const comptesOuverts = $derived(donnees && !exemple ? comptesDe(donnees).filter((k) => k.fermeLe === null) : []);
   const compteDeLigne = (id: string) => (donnees ? comptesDe(donnees).find((k) => k.contributions.includes(id)) : undefined);
   let formContribution: string | null = $state(null);
-  const formulaireOuvert = $derived(edition !== 'aucune' || occurrence !== null || formConfirmation !== null || formContribution !== null || formSupplement !== null || modifPaie);
+  let formulaireRegle = $state(false);
+  const formulaireOuvert = $derived(formulaireRegle || edition !== 'aucune' || occurrence !== null || formConfirmation !== null || formContribution !== null || formSupplement !== null || modifPaie);
   let fConCompte = $state('');
   let fConMontant = $state('');
   let fConDate = $state('');
@@ -528,6 +529,12 @@
     {remise}
     {proposer}
     {aGerer}
+    mode={exemple ? 'tout' : 'revenus'}
+    erreur={proposition ? null : erreurSaisie}
+    onformulaire={(ouvert) => {
+      formulaireRegle = ouvert;
+      if (ouvert) erreurSaisie = null;
+    }}
   />
 {/if}
 
@@ -672,14 +679,21 @@
     {:else if donnees && estContribution(donnees, cible.elementId)}
       <button type="button" onclick={() => onvoircompte?.(compteDeLigne(cible.elementId)?.id ?? '')}>Voir le compte</button>
     {:else if donnees && estDepenseAPrevoir(donnees, cible.elementId)}
-      <button type="button" onclick={() => onvoirdepenses?.()}>Voir dans Dépenses à prévoir</button>
+      <button type="button" onclick={() => onvoirdepenses?.()}>Voir dans Dépenses</button>
     {:else}
       <button
         type="button"
         onclick={() => {
+          // L'identifiant est lu avant de fermer la fenêtre : `cible` en dépend.
+          const id = cible.elementId;
           occurrence = null;
+          // V1 : les dépenses régulières se gèrent dans Dépenses ; les revenus restent ici.
+          if (donnees?.elements.find((e) => e.id === id)?.nature === 'depense') {
+            onvoirdepenses?.(id);
+            return;
+          }
           aGerer = null;
-          queueMicrotask(() => (aGerer = cible.elementId));
+          queueMicrotask(() => (aGerer = id));
         }}>Modifier la règle…</button
       >
     {/if}

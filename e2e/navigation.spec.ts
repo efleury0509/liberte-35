@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 // Sections développées, dans l'ordre de la barre latérale (V1).
-const SECTIONS = ['Mes paies', 'Dépenses à prévoir', 'Épargne', 'Dettes', 'Paramètres'];
+const SECTIONS = ['Mes paies', 'Dépenses', 'Épargne', 'Dettes', 'Paramètres'];
 
 test('la barre latérale prune affiche les sections développées et Mes paies par défaut', async ({ page }) => {
   await page.goto('/');
@@ -32,9 +32,9 @@ test('chaque section s’ouvre avec son en-tête et la barre latérale reste vis
 test('la navigation fonctionne entièrement au clavier', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('Tab'); // Mes paies
-  await page.keyboard.press('Tab'); // Dépenses à prévoir
+  await page.keyboard.press('Tab'); // Dépenses
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dépenses à prévoir');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dépenses');
 });
 
 test('Paramètres décrit l’installation, ici en mode aperçu', async ({ page }) => {

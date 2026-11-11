@@ -209,7 +209,7 @@ fn reserves_repartitions_et_depense_se_relisent_a_l_identique() {
         vec![ChangementPaie::SupprimerElement { id: "pneus".into() }],
     )
     .unwrap_err();
-    assert!(e.to_string().contains("Dépenses à prévoir"), "{e}");
+    assert!(e.to_string().contains("depuis Dépenses."), "{e}");
     let lu = appliquer(
         &mut s,
         vec![

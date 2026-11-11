@@ -109,8 +109,8 @@ test('P1, P2 : contribution répartie ; confirmée dans Mes paies, la part arriv
 
 test('D4, U1, U5 : Pneus couverts par leur réserve ; payés avec un seul aperçu ; annuler rétablit tout', async ({ page }) => {
   await preparer(page);
-  await nav(page, 'Dépenses à prévoir');
-  await page.getByRole('button', { name: 'Ajouter une dépense' }).click();
+  await nav(page, 'Dépenses');
+  await page.getByRole('button', { name: 'Ajouter une dépense à prévoir' }).click();
   const f = page.getByTestId('formulaire-ajout');
   await f.getByLabel('Nom').fill('Pneus');
   await f.getByLabel('Estimation ($, facultative)').fill('900');
@@ -163,8 +163,8 @@ test('D4, U1, U5 : Pneus couverts par leur réserve ; payés avec un seul aperç
 
 test('U4 : « Confirmer sans utiliser la réserve » laisse la réserve intacte', async ({ page }) => {
   await preparer(page);
-  await nav(page, 'Dépenses à prévoir');
-  await page.getByRole('button', { name: 'Ajouter une dépense' }).click();
+  await nav(page, 'Dépenses');
+  await page.getByRole('button', { name: 'Ajouter une dépense à prévoir' }).click();
   const f = page.getByTestId('formulaire-ajout');
   await f.getByLabel('Nom').fill('Pneus');
   await f.getByLabel('Estimation ($, facultative)').fill('900');
@@ -194,8 +194,8 @@ test('U4 : « Confirmer sans utiliser la réserve » laisse la réserve intacte'
 
 test('L-1 : créer la réserve liée depuis une dépense déjà créée, en un geste', async ({ page }) => {
   await preparer(page);
-  await nav(page, 'Dépenses à prévoir');
-  await page.getByRole('button', { name: 'Ajouter une dépense' }).click();
+  await nav(page, 'Dépenses');
+  await page.getByRole('button', { name: 'Ajouter une dépense à prévoir' }).click();
   const f = page.getByTestId('formulaire-ajout');
   await f.getByLabel('Nom').fill('Immatriculation');
   await f.getByLabel('Estimation ($, facultative)').fill('180');

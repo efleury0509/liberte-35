@@ -42,6 +42,10 @@ async function ajouter(page: Page, a: Ajout) {
   await f.getByRole('button', { name: 'Enregistrer' }).click();
 }
 
+// V1 lot 5 : les dépenses régulières se gèrent dans la section « Dépenses ».
+const naviguer = (page: Page, nom: string) => page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: nom, exact: true }).click();
+const fenetre = (page: Page) => page.getByTestId('fenetre-formulaire');
+
 const enregistrerApercu = (page: Page) => page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
 
 test('exemple fictif de l’étape 4 : les cycles M1 à M4 et les deux panneaux', async ({ page }) => {
@@ -78,11 +82,11 @@ test('ajouter une dépense fixe : enregistrée directement, « Annuler » la ret
   await ajouter(page, { nom: 'Loyer', montant: '1200', quand: 'Chaque mois', date: '2027-03-01' });
   await expect(page.getByTestId('apercu')).toHaveCount(0);
   await expect(page.getByTestId('enregistre')).toContainText('Ajouter une dépense');
-  await expect(page.getByTestId('panneau-fixes')).toContainText('Loyer');
   await expect(page.locator('tr[data-cycle="2027-02-18"] [data-testid="disponible"]')).toHaveText(dollars('900,00'));
   await page.getByTestId('enregistre').getByRole('button', { name: 'Annuler' }).click();
-  await expect(page.getByTestId('panneau-fixes')).not.toContainText('Loyer');
   await expect(page.locator('tr[data-cycle="2027-02-18"] [data-testid="disponible"]')).toHaveText(dollars('2 100,00'));
+  await naviguer(page, 'Dépenses');
+  await expect(page.getByTestId('panneau-fixes')).not.toContainText('Loyer');
 });
 
 test('ajouter une dépense qui touche le passé : aperçu avec avertissement', async ({ page }) => {
@@ -91,6 +95,7 @@ test('ajouter une dépense qui touche le passé : aperçu avec avertissement', a
   await ajouter(page, { nom: 'Rattrapage', montant: '50', quand: 'Une seule fois', date: '2027-01-12' });
   await expect(page.getByTestId('consequences')).toContainText('des cycles déjà passés changeraient');
   await enregistrerApercu(page);
+  await naviguer(page, 'Dépenses');
   await expect(page.getByTestId('panneau-fixes')).toContainText('Rattrapage');
 });
 
@@ -99,10 +104,11 @@ test('ajouter une enveloppe « 1re paie » : dès le cycle actuel, sans aperçu,
   await creerProfil(page);
   await ajouter(page, { nom: 'Épicerie', montant: '300', genre: 'Enveloppe variable', quand: '1re paie du mois' });
   await expect(page.getByTestId('apercu')).toHaveCount(0);
-  await expect(page.getByTestId('panneau-enveloppes')).toContainText('Épicerie');
-  await expect(page.getByTestId('panneau-fixes')).not.toContainText('Épicerie');
   await expect(page.locator('tr[data-cycle="2027-02-04"] [data-testid="disponible"]')).toHaveText(dollars('1 800,00'));
   await expect(page.locator('tr[data-cycle="2027-03-04"] [data-testid="disponible"]')).toHaveText(dollars('1 800,00'));
+  await naviguer(page, 'Dépenses');
+  await expect(page.getByTestId('panneau-enveloppes')).toContainText('Épicerie');
+  await expect(page.getByTestId('panneau-fixes')).not.toContainText('Épicerie');
 });
 
 test('un revenu incertain est affiché mais ne change pas le disponible (A3)', async ({ page }) => {
@@ -129,22 +135,28 @@ test('changer un montant à partir d’une date (direct), puis supprimer (aperç
   await creerProfil(page);
   await ajouter(page, { nom: 'Gym', montant: '40', quand: 'Chaque mois', date: '2027-02-05' });
 
+  await naviguer(page, 'Dépenses');
   const gym = page.getByTestId('panneau-fixes').getByRole('listitem').filter({ hasText: 'Gym' });
   await gym.getByRole('button', { name: 'Gérer' }).click();
-  await page.getByRole('button', { name: 'Changer le montant à partir d’une date' }).click();
-  await page.getByLabel('À partir du').fill('2027-03-01');
-  await page.getByLabel('Nouveau montant ($)').fill('45');
-  await gym.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(fenetre(page)).toContainText('Gérer « Gym »');
+  await fenetre(page).getByRole('button', { name: 'Changer le montant à partir d’une date' }).click();
+  await fenetre(page).getByLabel('À partir du').fill('2027-03-01');
+  await fenetre(page).getByLabel('Nouveau montant ($)').fill('45');
+  await fenetre(page).getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect(page.getByTestId('apercu')).toHaveCount(0);
+  await expect(fenetre(page)).toHaveCount(0);
+  await naviguer(page, 'Mes paies');
   await expect(page.locator('tr[data-cycle="2027-02-04"] [data-testid="disponible"]')).toHaveText(dollars('2 060,00'));
   await expect(page.locator('tr[data-cycle="2027-03-04"] [data-testid="disponible"]')).toHaveText(dollars('2 055,00'));
 
+  await naviguer(page, 'Dépenses');
   await gym.getByRole('button', { name: 'Gérer' }).click();
-  await page.getByRole('button', { name: 'Supprimer' }).click();
+  await fenetre(page).getByRole('button', { name: 'Supprimer' }).click();
   await expect(page.getByTestId('apercu')).toContainText('Supprimer « Gym »');
   await expect(page.getByTestId('apercu')).toContainText('Le journal garde la trace de cette suppression.');
   await enregistrerApercu(page);
   await expect(page.getByTestId('panneau-fixes')).not.toContainText('Gym');
+  await naviguer(page, 'Mes paies');
   await expect(page.locator('tr[data-cycle="2027-02-04"] [data-testid="disponible"]')).toHaveText(dollars('2 100,00'));
 });
 
@@ -175,7 +187,10 @@ test('A : ajuster une occurrence depuis le détail d’un cycle, la retirer, rev
   await expect(mars.locator('[data-testid="disponible"]')).toHaveText(dollars('1 750,00'));
   // Avril n'est pas touché, et la règle non plus.
   await expect(page.locator('tr[data-cycle="2027-04-01"] [data-testid="disponible"]')).toHaveText(dollars('1 800,00'));
+  await naviguer(page, 'Dépenses');
   await expect(page.getByTestId('panneau-enveloppes')).toContainText('1 occurrence ajustée');
+  await naviguer(page, 'Mes paies');
+  await mars.getByRole('button', { name: 'Détails' }).click();
 
   // Retirer cette fois.
   await detail.getByRole('button', { name: 'Ajuster Épicerie pour cette fois' }).click();
@@ -188,6 +203,7 @@ test('A : ajuster une occurrence depuis le détail d’un cycle, la retirer, rev
   await f.getByRole('button', { name: 'Revenir à la règle' }).click();
   await expect(detail).not.toContainText('ajusté');
   await expect(mars.locator('[data-testid="disponible"]')).toHaveText(dollars('1 800,00'));
+  await naviguer(page, 'Dépenses');
   await expect(page.getByTestId('panneau-enveloppes')).not.toContainText('occurrence ajustée');
 });
 
@@ -215,18 +231,23 @@ test('B : changer la fréquence à partir d’une date (aperçu) ; « Modifier l
   await page.locator('tr[data-cycle="2027-03-04"]').getByRole('button', { name: 'Détails' }).click();
   await page.getByTestId('detail-cycle').getByRole('button', { name: 'Ajuster Épicerie pour cette fois' }).click();
   await page.getByTestId('formulaire-occurrence').getByRole('button', { name: 'Modifier la règle…' }).click();
-  const epicerie = page.getByTestId('panneau-enveloppes').getByRole('listitem').filter({ hasText: 'Épicerie' });
-  await epicerie.getByRole('button', { name: 'Changer la fréquence à partir d’une date' }).click();
-  await epicerie.getByLabel('Nouvelle fréquence').selectOption({ label: 'À chaque paie' });
-  await epicerie.getByLabel('À partir du').fill('2027-04-01');
-  await epicerie.getByRole('button', { name: 'Enregistrer' }).click();
+  // V1 lot 5 : on arrive dans Dépenses, la fenêtre « Gérer » de l'élément déjà ouverte.
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dépenses');
+  const gestion = fenetre(page);
+  await expect(gestion).toContainText('Gérer « Épicerie »');
+  await gestion.getByRole('button', { name: 'Changer la fréquence à partir d’une date' }).click();
+  await gestion.getByLabel('Nouvelle fréquence').selectOption({ label: 'À chaque paie' });
+  await gestion.getByLabel('À partir du').fill('2027-04-01');
+  await gestion.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   const apercu = page.getByTestId('apercu');
   await expect(apercu).toContainText('Changer la fréquence de « Épicerie »');
   await expect(apercu).toContainText('Les occurrences d’avant le jeudi 1er avril 2027 ne changent pas.');
   await enregistrerApercu(page);
+  const epicerie = page.getByTestId('panneau-enveloppes').getByRole('listitem').filter({ hasText: 'Épicerie' });
+  await expect(epicerie).toContainText('à partir du 1er avr. : à chaque paie');
+  await naviguer(page, 'Mes paies');
   await expect(page.locator('tr[data-cycle="2027-03-18"] [data-testid="disponible"]')).toHaveText(dollars('2 100,00'));
   for (const jour of ['2027-04-01', '2027-04-15', '2027-04-29']) {
     await expect(page.locator(`tr[data-cycle="${jour}"] [data-testid="disponible"]`)).toHaveText(dollars('1 800,00'));
   }
-  await expect(epicerie).toContainText('à partir du 1er avr. : à chaque paie');
 });

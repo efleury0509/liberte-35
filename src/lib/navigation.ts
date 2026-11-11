@@ -34,7 +34,7 @@ export interface Section {
 export const TOUTES_LES_SECTIONS: readonly Section[] = [
   { id: 'vue-ensemble', libelle: 'Accueil', sousTitre: 'Ta situation financière et tes quatre prochaines paies.', etape: 'C', icone: 'accueil', zone: 'principale', disponible: false, illustration: 'cafe-glace' },
   { id: 'mes-paies', libelle: 'Mes paies', sousTitre: 'Planifie, répartis et confirme tes dépenses par paie.', etape: '3 à 5', icone: 'paies', zone: 'principale', disponible: true, illustration: 'cafe-glace' },
-  { id: 'depenses-a-prevoir', libelle: 'Dépenses à prévoir', sousTitre: 'Les dépenses qui ne reviennent pas à chaque paie, au bon cycle.', etape: 'A', icone: 'depenses', zone: 'principale', disponible: true, illustration: 'livres-plante' },
+  { id: 'depenses-a-prevoir', libelle: 'Dépenses', sousTitre: 'Tes dépenses régulières, tes enveloppes et tes dépenses à prévoir.', etape: '4, A et V1', icone: 'depenses', zone: 'principale', disponible: true, illustration: 'livres-plante' },
   { id: 'mon-epargne', libelle: 'Épargne', sousTitre: 'Tes comptes, tes réserves et ce qui reste non réservé.', etape: '9 et A', icone: 'epargne', zone: 'principale', disponible: true, illustration: 'cafe-glace' },
   { id: 'mes-dettes', libelle: 'Dettes', sousTitre: 'Tes remboursements, tes progrès et ta carte de crédit.', etape: '7 et 8', icone: 'dettes', zone: 'principale', disponible: true, illustration: 'paysage-liberte' },
   { id: 'mes-objectifs', libelle: 'Objectifs', sousTitre: 'Tes projets, tes priorités et tes récompenses.', etape: 'B', icone: 'objectifs', zone: 'principale', disponible: false, illustration: 'popcorn' },

@@ -6,7 +6,7 @@ describe('Navigation (cahier de conception V1, section 4)', () => {
     expect(TOUTES_LES_SECTIONS.map((s) => s.libelle)).toEqual([
       'Accueil',
       'Mes paies',
-      'Dépenses à prévoir',
+      'Dépenses',
       'Épargne',
       'Dettes',
       'Objectifs',
@@ -18,7 +18,7 @@ describe('Navigation (cahier de conception V1, section 4)', () => {
   });
 
   it('n’affiche que les sections développées ; les autres restent masquées', () => {
-    expect(SECTIONS.map((s) => s.libelle)).toEqual(['Mes paies', 'Dépenses à prévoir', 'Épargne', 'Dettes', 'Paramètres']);
+    expect(SECTIONS.map((s) => s.libelle)).toEqual(['Mes paies', 'Dépenses', 'Épargne', 'Dettes', 'Paramètres']);
     for (const id of ['vue-ensemble', 'mes-objectifs', 'et-si', 'rapports', 'aide']) expect(trouverSection(id)).toBeUndefined();
   });
 

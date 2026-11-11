@@ -27,6 +27,8 @@
   import { formaterDateCourte, type DateCivile } from '../../noyau/dates';
   import { formaterMontant } from '../../noyau/montants';
   import { montantEnVigueur } from '../../noyau/regles';
+  import { untrack } from 'svelte';
+  import FenetreFormulaire from '../base/FenetreFormulaire.svelte';
 
   interface Props {
     elements: readonly ElementStocke[];
@@ -39,8 +41,13 @@
     proposer: (fabrique: () => Proposition) => void;
     /** Élément à ouvrir (« Modifier la règle… » depuis le détail d'un cycle). */
     aGerer?: string | null;
+    /** V1 : « revenus » dans Mes paies, « depenses » dans Dépenses, « tout » pour l'exemple. */
+    mode?: 'revenus' | 'depenses' | 'fixes' | 'enveloppes' | 'tout';
+    /** Erreur de la dernière proposition, montrée dans la fenêtre ouverte. */
+    erreur?: string | null;
+    onformulaire?: (ouvert: boolean) => void;
   }
-  let { elements, donnees, modifiable, cycles, jour, remise, proposer, aGerer = null }: Props = $props();
+  let { elements, donnees, modifiable, cycles, jour, remise, proposer, aGerer = null, mode = 'tout', erreur = null, onformulaire }: Props = $props();
 
   let ajout = $state(false);
   let gere: string | null = $state(null);
@@ -74,7 +81,16 @@
     action = null;
     ajout = false;
     const id = aGerer;
-    queueMicrotask(() => document.getElementById(`element-${id}`)?.scrollIntoView({ block: 'center' }));
+    queueMicrotask(() => document.getElementById(`element-${id}`)?.scrollIntoView?.({ block: 'center' }));
+  });
+
+  let dernierEtat = false;
+  $effect(() => {
+    const ouvert = ajout || gere !== null;
+    if (ouvert !== dernierEtat) {
+      dernierEtat = ouvert;
+      untrack(() => onformulaire?.(ouvert));
+    }
   });
 
   const choixQuand = $derived(fNature === 'revenu' ? QUAND_REVENU : QUAND_DEPENSE);
@@ -156,6 +172,7 @@
   }
 </script>
 
+{#if mode !== 'depenses'}
 <section class="bloc" aria-labelledby="titre-revenus" data-testid="bloc-revenus">
   <h2 id="titre-revenus">Autres revenus</h2>
   {#if revenus.length === 0}
@@ -164,8 +181,11 @@
     <ul>{#each revenus as e (e.id)}{@render item(e)}{/each}</ul>
   {/if}
 </section>
+{/if}
 
+{#if mode !== 'revenus'}
 <div class="panneaux">
+  {#if mode !== 'enveloppes'}
   <section class="bloc" aria-labelledby="titre-fixes" data-testid="panneau-fixes">
     <h2 id="titre-fixes">Dépenses fixes</h2>
     {#if fixes.length === 0}
@@ -174,6 +194,8 @@
       <ul>{#each fixes as e (e.id)}{@render item(e)}{/each}</ul>
     {/if}
   </section>
+  {/if}
+  {#if mode !== 'fixes'}
   <section class="bloc" aria-labelledby="titre-enveloppes" data-testid="panneau-enveloppes">
     <h2 id="titre-enveloppes">Enveloppes variables</h2>
     <p class="discret">Montant prévu par cycle, jamais réconcilié ; rien n’est reporté.</p>
@@ -183,11 +205,14 @@
       <ul>{#each enveloppes as e (e.id)}{@render item(e)}{/each}</ul>
     {/if}
   </section>
+  {/if}
 </div>
+{/if}
 
 {#if modifiable}
   <p><button type="button" onclick={ouvrirAjout}>Ajouter un revenu ou une dépense</button></p>
   {#if ajout}
+    <FenetreFormulaire titre="Ajouter un revenu ou une dépense" {erreur} onabandonner={() => (ajout = false)}>
     <form class="formulaire" data-testid="formulaire-element" onsubmit={soumettreAjout}>
       <label
         >Nature
@@ -235,8 +260,9 @@
         <label class="case"><input type="checkbox" bind:checked={fIncertain} /> Revenu incertain</label>
       {/if}
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (ajout = false)}>Annuler</button>
+      <button type="button" onclick={() => (ajout = false)}>Abandonner</button>
     </form>
+    </FenetreFormulaire>
   {/if}
 {/if}
 
@@ -252,6 +278,15 @@
       {/if}
     </div>
     {#if gere === e.id}
+      <FenetreFormulaire
+        titre={`Gérer « ${e.libelle} »`}
+        contexte={`${montantAffiche(e)} · ${decrireQuand(e, jour)}`}
+        {erreur}
+        onabandonner={() => {
+          gere = null;
+          action = null;
+        }}
+      >
       <div class="boutons">
         <button type="button" onclick={() => choisirAction('montant')}>Changer le montant à partir d’une date</button>
         {#if !e.cyclePaie && e.frequence.type !== 'ponctuelle'}
@@ -293,31 +328,34 @@
             <label>Dernière date incluse <input type="date" bind:value={fA} /></label>
           {/if}
           <button type="submit" class="principal">Enregistrer</button>
-          <button type="button" onclick={() => (action = null)}>Annuler</button>
+          <button type="button" onclick={() => (action = null)}>Abandonner</button>
         </form>
       {/if}
+      </FenetreFormulaire>
     {/if}
   </li>
 {/snippet}
 
 <style>
   .bloc {
-    border: 1px solid var(--couleur-bordure);
-    border-radius: var(--arrondi);
-    padding: var(--espace-3) var(--espace-4);
+    background: var(--couleur-surface);
+    border: 2px solid var(--couleur-bordure);
+    border-radius: var(--arrondi-carte);
+    box-shadow: var(--ombre-carte);
+    padding: var(--espace-4) var(--espace-6);
     margin: 0 0 var(--espace-4);
   }
   .panneaux {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
     gap: var(--espace-4);
-    max-width: 1100px;
+    max-width: var(--largeur-contenu);
   }
   .bloc[data-testid='bloc-revenus'] {
-    max-width: 1100px;
+    max-width: var(--largeur-contenu);
   }
   h2 {
-    font-size: 16px;
+    font-size: var(--titre-carte);
     margin: 0 0 var(--espace-2);
   }
   ul {

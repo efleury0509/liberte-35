@@ -145,12 +145,14 @@ test('protection : une suspension qui effacerait un loyer confirmé est refusée
   await preparer(page);
   const detail = await details(page, '2027-02-18');
   await detail.locator('tr[data-ligne]', { hasText: 'Loyer' }).getByRole('button', { name: 'Confirmer Loyer' }).click();
+  await page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: 'Dépenses', exact: true }).click();
   const loyer = page.getByTestId('panneau-fixes').getByRole('listitem').filter({ hasText: 'Loyer' });
   await loyer.getByRole('button', { name: 'Gérer' }).click();
-  await loyer.getByRole('button', { name: 'Suspendre' }).click();
-  await loyer.getByLabel('Du').fill('2027-03-01');
-  await loyer.getByLabel('Au (inclus)').fill('2027-03-31');
-  await loyer.getByRole('button', { name: 'Enregistrer' }).click();
+  const gestion = page.getByTestId('fenetre-formulaire');
+  await gestion.getByRole('button', { name: 'Suspendre' }).click();
+  await gestion.getByLabel('Du').fill('2027-03-01');
+  await gestion.getByLabel('Au (inclus)').fill('2027-03-31');
+  await gestion.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect(page.getByTestId('erreur-saisie')).toContainText('ferait disparaître une opération confirmée : « Loyer » du 1er mars');
   await expect(page.getByTestId('apercu')).toHaveCount(0);
 });

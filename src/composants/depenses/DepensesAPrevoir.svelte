@@ -21,8 +21,17 @@
     type VueDepense,
   } from '../../actions/depenses';
   import { comptesDe, nomCompte } from '../../actions/comptes';
+  import { estDepenseAPrevoir } from '../../actions/depenses';
   import { reservesDe } from '../../actions/couvertures';
-  import { LIBELLES_QUAND, type Quand } from '../../actions/elements';
+  import { LIBELLES_QUAND, NOMBRE_CYCLES, cyclesAffiches, type Quand } from '../../actions/elements';
+  import { versNoyau } from '../../actions/paie';
+  import { estPret } from '../../actions/prets';
+  import { estPaiementCarte } from '../../actions/cartes';
+  import { estContribution } from '../../actions/comptes';
+  import RevenusDepenses from '../paies/RevenusDepenses.svelte';
+  import FenetreFormulaire from '../base/FenetreFormulaire.svelte';
+  import CarteBandeau from '../base/CarteBandeau.svelte';
+  import { CalendarClock } from '@lucide/svelte';
   import { inverser } from '../../lib/appliquer';
   import { aujourdhui } from '../../lib/aujourdhui';
   import type { ChangementPaie, DonneesPaie, EntreeJournal, Plateforme } from '../../lib/plateforme';
@@ -31,8 +40,15 @@
     plateforme: Plateforme;
     onchangement: () => void;
     onvoircompte: (id: string) => void;
+    /** Dépense régulière à ouvrir (« Modifier la règle… » depuis Mes paies). */
+    gerer?: string | null;
   }
-  let { plateforme, onchangement, onvoircompte }: Props = $props();
+  let { plateforme, onchangement, onvoircompte, gerer = null }: Props = $props();
+  /** V1 lot 5 : filtres de la section Dépenses (dépenses régulières, enveloppes, à prévoir). */
+  type Filtre = 'toutes' | 'regulieres' | 'enveloppes' | 'aPrevoir';
+  let filtre: Filtre = $state('toutes');
+  let remise = $state(0);
+  let formulaireRegle = $state(false);
 
   const jour = aujourdhui();
   let donnees: DonneesPaie | null = $state(null);
@@ -74,6 +90,37 @@
           .flatMap((k) => reservesDe(k).filter((r) => r.arreteeLe === null && r.depenseId === null).map((r) => ({ id: `${k.id}:${r.id}`, texte: `« ${r.nom} » — ${nomCompte(donnees!, k)}` })))
       : [],
   );
+  const TITRES: Record<Formulaire, string> = {
+    ajout: 'Ajouter une dépense à prévoir',
+    estimation: 'Changer l’estimation',
+    quand: 'Date et fréquence',
+    fin: 'Dernière fois le…',
+    note: 'Nom et note',
+    lien: 'Réserve liée',
+    suggestion: 'Appliquer la suggestion',
+  };
+  /** Dépenses régulières (fixes et enveloppes) : sans les prêts, la carte, les contributions ni les dépenses à prévoir. */
+  const reguliers = $derived.by(() => {
+    const d = donnees as DonneesPaie | null;
+    return d ? d.elements.filter((e) => e.nature === 'depense' && !estPret(d, e.id) && !estPaiementCarte(d, e.id) && !estContribution(d, e.id) && !estDepenseAPrevoir(d, e.id)) : [];
+  });
+  const cyclesRegles = $derived.by(() => {
+    if (!donnees?.profil) return [];
+    try {
+      const n = versNoyau(donnees);
+      return cyclesAffiches(n.profil!, { exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, confirmations: n.confirmations, seuil: n.seuil, couvertures: n.couvertures }, jour, NOMBRE_CYCLES, 0).cycles;
+    } catch {
+      return [];
+    }
+  });
+  const compte = (f: Filtre) =>
+    f === 'regulieres' ? reguliers.filter((e) => e.genre === 'fixe').length : f === 'enveloppes' ? reguliers.filter((e) => e.genre === 'enveloppe').length : f === 'aPrevoir' ? liste.length : reguliers.length + liste.length;
+  const FILTRES: { id: Filtre; libelle: string }[] = [
+    { id: 'toutes', libelle: 'Toutes' },
+    { id: 'regulieres', libelle: 'Régulières' },
+    { id: 'enveloppes', libelle: 'Enveloppes' },
+    { id: 'aPrevoir', libelle: 'À prévoir' },
+  ];
   const finPhrase = (t: string) => (t.endsWith('.') ? t : `${t}.`);
 
   async function montrer(testid: string) {
@@ -114,6 +161,7 @@
       const nouvelle = (donnees.depenses ?? []).find((x) => !(avant.depenses ?? []).some((y) => y.id === x.id));
       if (nouvelle) fiche = nouvelle.id;
       if (fiche && !(donnees.depenses ?? []).some((x) => x.id === fiche)) fiche = null;
+      remise += 1;
       onchangement();
     } catch (e) {
       erreurSaisie = typeof e === 'string' ? e : e instanceof Error ? e.message : 'Enregistrement impossible.';
@@ -175,7 +223,7 @@
 {#snippet formulaires(v: VueDepense)}
   {#if formulaire === 'estimation'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-estimation"
       onsubmit={(e) => {
         e.preventDefault();
@@ -186,11 +234,11 @@
       <label>À partir du <input type="date" bind:value={fDate} /></label>
       <label>Nouvelle estimation ($) <input inputmode="decimal" bind:value={fMontant} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'quand'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-quand"
       onsubmit={(e) => {
         e.preventDefault();
@@ -206,11 +254,11 @@
       </label>
       <label>Prochaine date <input type="date" bind:value={fDate} /></label>
       <button type="submit" class="principal">Voir l’aperçu</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'fin'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-fin"
       onsubmit={(e) => {
         e.preventDefault();
@@ -220,11 +268,11 @@
       <p class="discret">Elle ne revient plus après cette date ; son historique reste.</p>
       <label>Dernière fois le <input type="date" bind:value={fDate} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'note'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-note"
       onsubmit={(e) => {
         e.preventDefault();
@@ -234,11 +282,11 @@
       <label>Nom <input bind:value={fNom} /></label>
       <label>Note (facultative) <input bind:value={fNote} /></label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'lien'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-lien"
       onsubmit={(e) => {
         e.preventDefault();
@@ -256,11 +304,11 @@
         </select>
       </label>
       <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {:else if formulaire === 'suggestion'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-suggestion"
       onsubmit={(e) => {
         e.preventDefault();
@@ -284,7 +332,7 @@
         </label>
       {/if}
       <button type="submit" class="principal">Voir l’aperçu</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
     </form>
   {/if}
 {/snippet}
@@ -346,26 +394,32 @@
         <button type="button" onclick={() => ouvrir('fin', v)}>Dernière fois le…</button>
         <button type="button" onclick={() => proposer(() => proposerSuppressionDepense(donnees!, v.id, jour))}>Supprimer…</button>
       </p>
-      {@render formulaires(v)}
+      {#if formulaire && formulaire !== 'ajout'}
+        <FenetreFormulaire titre={TITRES[formulaire]} contexte={`Dépense à prévoir « ${v.nom} » · ${v.quand} · estimation ${v.estimation}`} erreur={proposition ? null : erreurSaisie} onabandonner={() => (formulaire = null)}>
+          {@render formulaires(v)}
+        </FenetreFormulaire>
+      {/if}
     {/if}
   </article>
 {/snippet}
 
-<section aria-label="Dépenses à prévoir">
+<section aria-label="Dépenses">
   {#if erreurChargement}
     <p role="alert" class="erreur">{erreurChargement}</p>
   {:else if donnees}
-    <p class="discret intro">
-      Les dépenses qui ne reviennent pas à chaque paie (pneus, immatriculation, cadeaux…). Elles apparaissent dans Mes paies, au bon cycle. Avec une réserve liée, seule la partie non couverte sort du disponible.
-    </p>
-    <div class="entete">
-      <h2>Mes dépenses à prévoir</h2>
-      <button type="button" class="principal" onclick={() => ouvrir('ajout')}>Ajouter une dépense</button>
+    <div class="barre-filtres">
+      <div class="filtres" role="group" aria-label="Afficher">
+        {#each FILTRES as f (f.id)}
+          <button type="button" class="filtre" aria-pressed={filtre === f.id} onclick={() => (filtre = f.id)}>{f.libelle} ({compte(f.id)})</button>
+        {/each}
+      </div>
+      <button type="button" class="principal" onclick={() => ouvrir('ajout')}>Ajouter une dépense à prévoir</button>
     </div>
 
     {#if formulaire === 'ajout'}
+      <FenetreFormulaire titre={TITRES.ajout} erreur={proposition ? null : erreurSaisie} onabandonner={() => (formulaire = null)}>
       <form
-        class="formulaire encadre"
+        class="formulaire"
         data-testid="formulaire-ajout"
         onsubmit={(e) => {
           e.preventDefault();
@@ -394,22 +448,50 @@
           </label>
         {/if}
         <button type="submit" class="principal">Enregistrer</button>
-        <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+        <button type="button" onclick={() => (formulaire = null)}>Abandonner</button>
       </form>
+      </FenetreFormulaire>
     {/if}
 
-    {#if liste.length === 0 && formulaire !== 'ajout'}
-      <p class="discret">Aucune dépense à prévoir pour l’instant.</p>
-    {/if}
-    {#each liste as v (v.id)}
-      {@render carte(v)}
-    {/each}
-
-    {#if annee && annee.mois.length > 0}
-      <h2 class="annee">Les 12 prochains mois</h2>
+    <div class="colonnes">
+      <div class="principale">
+        {#if filtre !== 'aPrevoir'}
+          <RevenusDepenses
+            elements={reguliers}
+            {donnees}
+            modifiable={true}
+            cycles={cyclesRegles}
+            {jour}
+            {remise}
+            {proposer}
+            aGerer={gerer}
+            mode={filtre === 'regulieres' ? 'fixes' : filtre === 'enveloppes' ? 'enveloppes' : 'depenses'}
+            erreur={proposition ? null : erreurSaisie}
+            onformulaire={(ouvert) => {
+              formulaireRegle = ouvert;
+              if (ouvert) erreurSaisie = null;
+            }}
+          />
+        {/if}
+        {#if filtre === 'toutes' || filtre === 'aPrevoir'}
+          <h2 class="titre-a-prevoir">Mes dépenses à prévoir</h2>
+          <p class="discret intro">
+            Les dépenses qui ne reviennent pas à chaque paie (pneus, immatriculation, cadeaux…). Elles apparaissent dans Mes paies, au bon cycle. Avec une réserve liée, seule la partie non couverte sort du disponible.
+          </p>
+          {#if liste.length === 0}
+            <p class="discret">Aucune dépense à prévoir pour l’instant.</p>
+          {/if}
+          {#each liste as v (v.id)}
+            {@render carte(v)}
+          {/each}
+        {/if}
+      </div>
+      <aside class="contexte" aria-label="Les 12 prochains mois">
+        <CarteBandeau titre="Les 12 prochains mois" teinte="beurre" icone={CalendarClock}>
+          {#if annee && annee.mois.length > 0}
       <div data-testid="douze-mois">
         {#each annee.mois as m (m.mois)}
-          <h4>{m.mois}</h4>
+          <h3 class="mois">{m.mois}</h3>
           <ul class="liste">
             {#each m.lignes as l, i (i)}
               <li><span class="date">{l.date}</span> <strong>{l.nom}</strong> {l.montant} <span class="discret">— {l.couverture}</span></li>
@@ -421,11 +503,16 @@
           {#if annee.aCompleter.length > 0}<span class="attention"> — dont à compléter : {annee.aCompleter.join(', ')}</span>{/if}
         </p>
       </div>
-    {/if}
+          {:else}
+            <p class="discret">Aucune dépense à prévoir dans les 12 prochains mois.</p>
+          {/if}
+        </CarteBandeau>
+      </aside>
+    </div>
   {/if}
 </section>
 
-{#if erreurSaisie && !proposition}
+{#if erreurSaisie && !proposition && formulaire === null && !formulaireRegle}
   <p role="alert" class="erreur" data-testid="erreur-saisie">{erreurSaisie}</p>
 {/if}
 {#if dernier}
@@ -453,7 +540,8 @@
 
 <style>
   section {
-    max-width: 1100px;
+    max-width: var(--largeur-contenu);
+    font-size: var(--texte-courant);
   }
   .intro {
     max-width: 760px;
@@ -462,9 +550,6 @@
   h2 {
     font-size: 17px;
     margin: 0 0 var(--espace-2);
-  }
-  h2.annee {
-    margin-top: var(--espace-8);
   }
   h3 {
     font-size: var(--taille-texte);
@@ -512,5 +597,52 @@
     display: flex;
     flex-direction: column;
     gap: var(--espace-2);
+  }
+  .barre-filtres {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--espace-3);
+    margin: 0 0 var(--espace-5);
+  }
+  .filtres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--espace-2);
+  }
+  .filtre[aria-pressed='true'] {
+    background: var(--couleur-bandeau);
+    border-color: var(--couleur-bandeau);
+    color: var(--couleur-bandeau-texte);
+  }
+  .colonnes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: var(--espace-6);
+    align-items: start;
+  }
+  .contexte {
+    position: sticky;
+    top: var(--espace-4);
+  }
+  .mois {
+    font-family: var(--police);
+    font-size: var(--texte-dense);
+    font-weight: 800;
+    margin: var(--espace-3) 0 var(--espace-1);
+    text-transform: capitalize;
+  }
+  .titre-a-prevoir {
+    margin-top: var(--espace-4);
+    font-size: var(--titre-carte);
+  }
+  @media (max-width: 1180px) {
+    .colonnes {
+      grid-template-columns: 1fr;
+    }
+    .contexte {
+      position: static;
+    }
   }
 </style>

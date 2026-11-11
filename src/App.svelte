@@ -31,6 +31,12 @@
   }
   /** Étape 9 : « Voir le compte » depuis Mes paies. */
   let compteOuvert: string | null = $state(null);
+  /** V1 lot 5 : dépense régulière à ouvrir dans Dépenses (« Modifier la règle… »). */
+  let depenseAGerer: string | null = $state(null);
+  function voirDepenses(id?: string) {
+    depenseAGerer = id ?? null;
+    sectionActive = 'depenses-a-prevoir';
+  }
   function voirCompte(id: string) {
     compteOuvert = id;
     sectionActive = 'mon-epargne';
@@ -66,6 +72,7 @@
     onchoisir={(id) => {
       pretOuvert = null;
       compteOuvert = null;
+      depenseAGerer = null;
       sectionActive = id;
     }}
   />
@@ -89,7 +96,7 @@
       {#if section.id === 'parametres'}
         <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} />
       {:else if section.id === 'mes-paies' && !erreur}
-        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} onvoircarte={voirCarte} onvoircompte={voirCompte} onvoirdepenses={() => (sectionActive = 'depenses-a-prevoir')} />
+        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} onvoircarte={voirCarte} onvoircompte={voirCompte} onvoirdepenses={voirDepenses} />
       {:else if section.id === 'mes-dettes' && !erreur}
         {#key pretOuvert}
           <MesDettes {plateforme} onchangement={chargerEtat} ouvert={pretOuvert} />
@@ -99,7 +106,9 @@
           <MonEpargne {plateforme} onchangement={chargerEtat} ouvert={compteOuvert} />
         {/key}
       {:else if section.id === 'depenses-a-prevoir' && !erreur}
-        <DepensesAPrevoir {plateforme} onchangement={chargerEtat} onvoircompte={voirCompte} />
+        {#key depenseAGerer}
+          <DepensesAPrevoir {plateforme} onchangement={chargerEtat} onvoircompte={voirCompte} gerer={depenseAGerer} />
+        {/key}
       {:else}
         <SectionAVenir etape={section.etape} />
       {/if}

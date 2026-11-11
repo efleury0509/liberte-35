@@ -1449,7 +1449,7 @@ impl Stockage {
                         |r| r.get(0),
                     )?;
                     if depense {
-                        return Err(erreur("Cette dépense se gère depuis Dépenses à prévoir."));
+                        return Err(erreur("Cette dépense se gère depuis Dépenses."));
                     }
                     // Ses montants, suspensions, périodes et ajustements partent avec lui.
                     tx.execute("DELETE FROM elements WHERE id = ?1", [id])?;
