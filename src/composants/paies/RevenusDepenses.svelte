@@ -122,7 +122,16 @@
     return t;
   }
 
+  /** V1 lot 5 : dans Dépenses, on n'ajoute que des dépenses (les revenus restent dans Mes paies). */
+  const seulementDepenses = $derived(mode === 'depenses' || mode === 'fixes' || mode === 'enveloppes');
+  const libelleAjout = $derived(seulementDepenses ? 'Ajouter une dépense régulière' : 'Ajouter un revenu ou une dépense');
+
   function ouvrirAjout() {
+    if (seulementDepenses) {
+      fNature = 'depense';
+      if (mode === 'fixes') fGenre = 'fixe';
+      else if (mode === 'enveloppes') fGenre = 'enveloppe';
+    }
     ajout = true;
     gere = null;
     action = null;
@@ -210,17 +219,19 @@
 {/if}
 
 {#if modifiable}
-  <p><button type="button" onclick={ouvrirAjout}>Ajouter un revenu ou une dépense</button></p>
+  <p><button type="button" onclick={ouvrirAjout}>{libelleAjout}</button></p>
   {#if ajout}
-    <FenetreFormulaire titre="Ajouter un revenu ou une dépense" {erreur} onabandonner={() => (ajout = false)}>
+    <FenetreFormulaire titre={libelleAjout} {erreur} onabandonner={() => (ajout = false)}>
     <form class="formulaire" data-testid="formulaire-element" onsubmit={soumettreAjout}>
-      <label
-        >Nature
-        <select bind:value={fNature}>
-          <option value="depense">Dépense</option>
-          <option value="revenu">Revenu</option>
-        </select>
-      </label>
+      {#if !seulementDepenses}
+        <label
+          >Nature
+          <select bind:value={fNature}>
+            <option value="depense">Dépense</option>
+            <option value="revenu">Revenu</option>
+          </select>
+        </label>
+      {/if}
       <label>Nom <input bind:value={fNom} /></label>
       <label>Montant ($, facultatif) <input inputmode="decimal" bind:value={fMontant} /></label>
       {#if fNature === 'depense'}

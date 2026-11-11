@@ -6,6 +6,12 @@
   import { onMount, tick } from 'svelte';
   import Apercu from '../Apercu.svelte';
   import CarteVisa from './CarteVisa.svelte';
+  import CarteBandeau from '../base/CarteBandeau.svelte';
+  import FenetreFormulaire from '../base/FenetreFormulaire.svelte';
+  import MenuActions from '../base/MenuActions.svelte';
+  import Pastille from '../base/Pastille.svelte';
+  import { CalendarClock, Landmark, Mountain } from '@lucide/svelte';
+  import { vueCarte } from '../../actions/cartes';
   import { ErreurSaisie, type Proposition } from '../../actions/paie';
   import {
     LIBELLES_QUAND_PRET,
@@ -36,6 +42,10 @@
   let erreurChargement: string | null = $state(null);
   let fiche: string | null = $state(null);
   let formulaire: 'ajout' | 'renseignements' | 'versement' | 'solde' | 'remboursement' | null = $state(null);
+  /** V1 lot 5 : le prêt dont le formulaire est ouvert (fenêtre centrée). */
+  let pretFormulaire: string | null = $state(null);
+  /** Un formulaire de la carte est ouvert : son erreur s'y affiche. */
+  let formulaireCarte = $state(false);
   let proposition: Proposition | null = $state(null);
   let erreurSaisie: string | null = $state(null);
   let enCours = $state(false);
@@ -74,6 +84,20 @@
   });
 
   const liste = $derived(donnees ? listePrets(donnees, jour) : { actifs: [], liberes: [] });
+  const carte = $derived(donnees ? vueCarte(donnees, jour) : null);
+  const pretOuvert = $derived(pretFormulaire ? (liste.actifs.find((x) => x.id === pretFormulaire) ?? null) : null);
+  const TITRES = {
+    ajout: 'Ajouter un prêt',
+    renseignements: 'Compléter les renseignements',
+    versement: 'Changer le versement',
+    solde: 'Mettre à jour le solde',
+    remboursement: 'Marquer comme remboursé',
+  } as const;
+  function fermerFormulaire() {
+    formulaire = null;
+    pretFormulaire = null;
+    erreurSaisie = null;
+  }
   const enTexte = (c: number | null) => (c === null ? '' : (c / 100).toFixed(2).replace('.', ','));
   const finPhrase = (t: string) => (t.endsWith('.') ? t : `${t}.`);
 
@@ -112,6 +136,7 @@
       dernier = inverse.length > 0 ? { titre: p.titre, inverse, journal: p.journal } : null;
       proposition = null;
       formulaire = null;
+      pretFormulaire = null;
       erreurSaisie = null;
       remise += 1;
       // Un prêt qui vient d'être ajouté s'ouvre ; un prêt supprimé se ferme.
@@ -158,6 +183,7 @@
 
   function ouvrirFormulaire(v: VuePret, f: 'renseignements' | 'versement' | 'solde' | 'remboursement') {
     formulaire = f;
+    pretFormulaire = v.id;
     erreurSaisie = null;
     proposition = null;
     const p = v.brut;
@@ -177,6 +203,7 @@
   function basculer(id: string) {
     fiche = fiche === id ? null : id;
     formulaire = null;
+    pretFormulaire = null;
     proposition = null;
     erreurSaisie = null;
   }
@@ -274,17 +301,10 @@
   </div>
 {/snippet}
 
-{#snippet actions(v: VuePret)}
-  <p class="boutons">
-    <button type="button" onclick={() => ouvrirFormulaire(v, 'renseignements')}>Compléter les renseignements…</button>
-    <button type="button" onclick={() => ouvrirFormulaire(v, 'versement')}>Changer le versement…</button>
-    <button type="button" onclick={() => ouvrirFormulaire(v, 'solde')}>Mettre à jour le solde…</button>
-    <button type="button" onclick={() => ouvrirFormulaire(v, 'remboursement')}>Marquer comme remboursé…</button>
-    <button type="button" onclick={() => proposer(() => proposerSuppressionPret(donnees!, v.id, jour))}>Supprimer…</button>
-  </p>
+{#snippet formulairePret(v: VuePret)}
   {#if formulaire === 'renseignements'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-renseignements"
       onsubmit={(e) => {
         e.preventDefault();
@@ -299,12 +319,14 @@
         <label>Solde ($) <input inputmode="decimal" bind:value={fSolde} /></label>
         <label>Solde au <input type="date" bind:value={fSoldeLe} /></label>
       {/if}
-      <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <p class="boutons-fenetre">
+        <button type="submit" class="principal">Enregistrer</button>
+        <button type="button" onclick={fermerFormulaire}>Abandonner</button>
+      </p>
     </form>
   {:else if formulaire === 'versement'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-versement"
       onsubmit={(e) => {
         e.preventDefault();
@@ -314,12 +336,14 @@
       <p class="discret">Les versements d’avant cette date et les versements confirmés ne changent pas.</p>
       <label>À partir du <input type="date" bind:value={fDate} /></label>
       <label>Nouveau versement ($) <input inputmode="decimal" bind:value={fMontant} /></label>
-      <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <p class="boutons-fenetre">
+        <button type="submit" class="principal">Enregistrer</button>
+        <button type="button" onclick={fermerFormulaire}>Abandonner</button>
+      </p>
     </form>
   {:else if formulaire === 'solde'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-solde"
       onsubmit={(e) => {
         e.preventDefault();
@@ -330,12 +354,14 @@
       <label>Date du solde <input type="date" bind:value={fDate} /></label>
       <label>Solde ($) <input inputmode="decimal" bind:value={fMontant} /></label>
       <label>Note (facultative) <input bind:value={fNote} /></label>
-      <button type="submit" class="principal">Enregistrer</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <p class="boutons-fenetre">
+        <button type="submit" class="principal">Enregistrer</button>
+        <button type="button" onclick={fermerFormulaire}>Abandonner</button>
+      </p>
     </form>
   {:else if formulaire === 'remboursement'}
     <form
-      class="formulaire encadre"
+      class="formulaire"
       data-testid="formulaire-remboursement"
       onsubmit={(e) => {
         e.preventDefault();
@@ -344,8 +370,10 @@
     >
       <p class="discret">Vide : la date du dernier versement confirmé (ou aujourd’hui). Un aperçu suit avant d’enregistrer.</p>
       <label>Remboursé le <input type="date" bind:value={fDate} /></label>
-      <button type="submit" class="principal">Voir l’aperçu</button>
-      <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
+      <p class="boutons-fenetre">
+        <button type="submit" class="principal">Voir l’aperçu</button>
+        <button type="button" onclick={fermerFormulaire}>Abandonner</button>
+      </p>
     </form>
   {/if}
 {/snippet}
@@ -359,15 +387,116 @@
     Crée d’abord ton profil de paie dans « Mes paies » : les versements de tes prêts se placent dans tes cycles de paie.
   </p>
 {:else}
-  <section aria-labelledby="titre-prets">
-    <div class="entete">
-      <h2 id="titre-prets">Mes prêts</h2>
-      <button type="button" class="principal" onclick={ouvrirAjout}>Ajouter un prêt</button>
+  <div class="colonnes">
+    <div class="principale">
+      <section aria-labelledby="titre-prets">
+        <div class="entete">
+          <h2 id="titre-prets">Mes prêts</h2>
+          <button type="button" class="principal" onclick={ouvrirAjout}>Ajouter un prêt</button>
+        </div>
+        <p class="discret intro">Des versements réguliers jusqu’au remboursement complet. Chaque versement se confirme dans Mes paies, au bon cycle.</p>
+
+        {#each liste.actifs as v (v.id)}
+          <div class="pret" data-pret={v.id}>
+            <CarteBandeau titre={v.nom} teinte="lilas" icone={Landmark}>
+              {#snippet badge()}<Pastille>{v.rythme}</Pastille>{/snippet}
+              <dl class="cles">
+                <div>
+                  <dt>Versement</dt>
+                  <dd>{v.versement}</dd>
+                </div>
+                <div>
+                  <dt>Prochain versement</dt>
+                  <dd>{v.prochainVersement ?? 'Aucun versement planifié'}</dd>
+                </div>
+                <div>
+                  <dt>Solde actuel</dt>
+                  <dd class:inconnu={v.soldeActuel === 'À compléter'}>{v.soldeActuel}</dd>
+                </div>
+              </dl>
+              {#if v.note}<p class="attention">{v.note}</p>{/if}
+              <p class="actions-pret">
+                <button type="button" aria-expanded={fiche === v.id} onclick={() => basculer(v.id)}>{fiche === v.id ? 'Fermer la fiche' : 'Ouvrir la fiche'}</button>
+                <button type="button" onclick={() => ouvrirFormulaire(v, 'solde')}>Mettre à jour le solde…</button>
+                <MenuActions nom={`prêt « ${v.nom} »`}>
+                  <button type="button" onclick={() => ouvrirFormulaire(v, 'renseignements')}>Compléter les renseignements…</button>
+                  <button type="button" onclick={() => ouvrirFormulaire(v, 'versement')}>Changer le versement…</button>
+                  <button type="button" onclick={() => ouvrirFormulaire(v, 'remboursement')}>Marquer comme remboursé…</button>
+                  <button type="button" onclick={() => proposer(() => proposerSuppressionPret(donnees!, v.id, jour))}>Supprimer…</button>
+                </MenuActions>
+              </p>
+              {#if fiche === v.id}
+                <div class="fiche-ouverte">{@render details(v)}</div>
+              {/if}
+            </CarteBandeau>
+          </div>
+        {:else}
+          <p class="discret">Aucun prêt pour l’instant.</p>
+        {/each}
+      </section>
+
+      {#if liste.liberes.length > 0}
+        <details class="liberes" data-testid="dettes-liberees">
+          <summary>Dettes libérées ({liste.liberes.length})</summary>
+          {#each liste.liberes as v (v.id)}
+            <article class="carte" data-pret={v.id}>
+              <h3>{v.nom}</h3>
+              {@render details(v)}
+            </article>
+          {/each}
+        </details>
+      {/if}
+
+      <CarteVisa donnees={donnees} {jour} {proposer} {remise} erreur={proposition ? null : erreurSaisie} onformulaire={(ouvert) => (formulaireCarte = ouvert)} />
     </div>
 
-    {#if formulaire === 'ajout'}
+    <aside class="contexte" aria-label="Vue d’ensemble des dettes">
+      <CarteBandeau titre="Prochains paiements" teinte="peche" icone={CalendarClock}>
+        <ul class="prochains" data-testid="prochains-paiements">
+          {#each liste.actifs as v (v.id)}
+            <li>
+              <span class="nom">{v.nom}</span>
+              <Pastille>{v.rythme}</Pastille>
+              <span class="quand">{v.prochainVersement ?? 'Aucun versement planifié'}</span>
+            </li>
+          {/each}
+          {#if carte}
+            <li>
+              <span class="nom">{carte.nom}</span>
+              <Pastille>Mensuel</Pastille>
+              <span class="quand">Échéance : {carte.echeance} · {carte.montantEcheance}</span>
+            </li>
+          {/if}
+          {#if liste.actifs.length === 0 && !carte}
+            <li class="discret">Aucune dette suivie pour l’instant.</li>
+          {/if}
+        </ul>
+        <p class="discret petit">Une date planifiée n’est pas une preuve de paiement : les paiements se confirment dans Mes paies.</p>
+      </CarteBandeau>
+
+      <CarteBandeau titre="Progression" teinte="sauge" icone={Mountain}>
+        <ul class="progressions" data-testid="progression-dettes">
+          {#each liste.actifs as v (v.id)}
+            <li>
+              <span class="nom">{v.nom}</span>
+              <Pastille etat="a-completer">À compléter</Pastille>
+              <span class="discret petit">{v.payeDepuisAjout}. La part de capital remboursé n’est pas encore calculable : la méthode d’intérêts du contrat manque.</span>
+            </li>
+          {:else}
+            <li class="discret">Aucun prêt en cours.</li>
+          {/each}
+        </ul>
+        {#if liste.liberes.length > 0}
+          <p class="libere-compte"><Pastille etat="confirme">{liste.liberes.length === 1 ? '1 dette libérée' : `${liste.liberes.length} dettes libérées`}</Pastille></p>
+        {/if}
+      </CarteBandeau>
+    </aside>
+  </div>
+
+  {#if formulaire === 'ajout'}
+    <FenetreFormulaire titre={TITRES.ajout} contexte="Ces quatre renseignements suffisent pour commencer." erreur={proposition ? null : erreurSaisie} onabandonner={fermerFormulaire}>
       <form
-        class="formulaire encadre"
+        class="formulaire"
         data-testid="formulaire-ajout-pret"
         onsubmit={(e) => {
           e.preventDefault();
@@ -380,7 +509,6 @@
           );
         }}
       >
-        <p class="discret">Ces quatre renseignements suffisent pour commencer.</p>
         <label>Nom du prêt <input bind:value={fNom} /></label>
         <label>Versement ($) <input inputmode="decimal" bind:value={fVersement} /></label>
         <label
@@ -403,51 +531,25 @@
             <label>Solde au <input type="date" bind:value={fSoldeLe} /></label>
           </div>
         </details>
-        <button type="submit" class="principal">Enregistrer</button>
-        <button type="button" onclick={() => (formulaire = null)}>Fermer</button>
-      </form>
-    {/if}
-
-    {#each liste.actifs as v (v.id)}
-      <article class="carte" data-pret={v.id}>
-        <div class="entete">
-          <h3>{v.nom}</h3>
-          <button type="button" aria-expanded={fiche === v.id} onclick={() => basculer(v.id)}>{fiche === v.id ? 'Fermer la fiche' : 'Ouvrir la fiche'}</button>
-        </div>
-        <p class="resume">
-          <span>{v.versement}</span>
-          {#if v.prochainVersement}<span>Prochain : {v.prochainVersement}</span>{/if}
-          <span>Solde actuel : {v.soldeActuel}</span>
+        <p class="boutons-fenetre">
+          <button type="submit" class="principal">Enregistrer</button>
+          <button type="button" onclick={fermerFormulaire}>Abandonner</button>
         </p>
-        {#if v.note}<p class="attention">{v.note}</p>{/if}
-        {#if fiche === v.id}
-          {@render details(v)}
-          {@render actions(v)}
-        {/if}
-      </article>
-    {:else}
-      {#if formulaire !== 'ajout'}
-        <p class="discret">Aucun prêt pour l’instant.</p>
-      {/if}
-    {/each}
-  </section>
-
-  {#if liste.liberes.length > 0}
-    <details class="liberes" data-testid="dettes-liberees">
-      <summary>Dettes libérées ({liste.liberes.length})</summary>
-      {#each liste.liberes as v (v.id)}
-        <article class="carte" data-pret={v.id}>
-          <h3>{v.nom}</h3>
-          {@render details(v)}
-        </article>
-      {/each}
-    </details>
+      </form>
+    </FenetreFormulaire>
+  {:else if formulaire && pretOuvert}
+    <FenetreFormulaire
+      titre={`${TITRES[formulaire]} — ${pretOuvert.nom}`}
+      contexte={`${pretOuvert.versement} · solde actuel : ${pretOuvert.soldeActuel}`}
+      erreur={proposition ? null : erreurSaisie}
+      onabandonner={fermerFormulaire}
+    >
+      {@render formulairePret(pretOuvert)}
+    </FenetreFormulaire>
   {/if}
-
-  <CarteVisa donnees={donnees} {jour} {proposer} {remise} />
 {/if}
 
-{#if erreurSaisie && !proposition}
+{#if erreurSaisie && !proposition && !formulaire && !formulaireCarte}
   <p role="alert" class="erreur" data-testid="erreur-saisie">{erreurSaisie}</p>
 {/if}
 {#if dernier}
@@ -474,36 +576,127 @@
 {/if}
 
 <style>
-  section {
-    max-width: 1100px;
+  .colonnes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: var(--espace-6);
+    align-items: start;
+    max-width: var(--largeur-contenu);
+    font-size: var(--texte-courant);
   }
-  .carte {
-    max-width: 1100px;
+  @media (max-width: 1180px) {
+    .colonnes {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .principale {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--espace-5);
+  }
+  .contexte {
+    position: sticky;
+    top: var(--espace-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--espace-5);
   }
   h2 {
-    font-size: 17px;
-    margin: 0 0 var(--espace-2);
+    font-size: var(--titre-carte);
+    margin: 0;
   }
   h3 {
-    font-size: var(--taille-texte);
+    font-size: var(--titre-bloc);
     margin: 0;
   }
   h4 {
-    font-size: var(--taille-petit);
+    font-size: var(--texte-dense);
     color: var(--couleur-texte-discret);
     margin: var(--espace-4) 0 var(--espace-2);
   }
-  .resume {
+  .intro {
+    margin: var(--espace-1) 0 var(--espace-4);
+  }
+  .pret + .pret {
+    margin-top: var(--espace-5);
+  }
+  .cles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: var(--espace-3) var(--espace-6);
+    margin: 0;
+  }
+  .cles dt {
+    font-size: var(--texte-petit);
+    color: var(--couleur-texte-discret);
+    font-weight: 700;
+  }
+  .cles dd {
+    margin: var(--espace-1) 0 0;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .inconnu {
+    color: var(--etat-a-completer-texte);
+  }
+  .actions-pret {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--espace-2) var(--espace-6);
-    margin: var(--espace-2) 0 0;
+    gap: var(--espace-3);
+    align-items: center;
+    margin: var(--espace-4) 0 0;
+  }
+  .fiche-ouverte {
+    border-top: 1px solid var(--couleur-bordure);
+    margin-top: var(--espace-4);
+    padding-top: var(--espace-2);
+  }
+  .prochains,
+  .progressions {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--espace-3);
+  }
+  .prochains li,
+  .progressions li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--espace-1) var(--espace-2);
+    padding-bottom: var(--espace-3);
+    border-bottom: 1px dashed var(--couleur-bordure);
+  }
+  .prochains li:last-child,
+  .progressions li:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  .nom {
+    font-weight: 700;
+  }
+  .quand {
+    flex-basis: 100%;
+    font-variant-numeric: tabular-nums;
+  }
+  .petit {
+    font-size: var(--texte-petit);
+  }
+  .progressions .petit {
+    flex-basis: 100%;
+  }
+  .libere-compte {
+    margin: var(--espace-3) 0 0;
   }
   .fiche {
     display: grid;
     grid-template-columns: max-content 1fr;
     gap: var(--espace-1) var(--espace-6);
     margin: var(--espace-4) 0 var(--espace-2);
+    font-size: var(--texte-dense);
   }
   dt {
     color: var(--couleur-texte-discret);
@@ -511,20 +704,16 @@
   dd {
     margin: 0;
   }
-  .boutons {
+  .boutons-fenetre {
     display: flex;
     flex-wrap: wrap;
     gap: var(--espace-3);
-    align-items: flex-end;
-    margin-top: var(--espace-3);
-  }
-  .facultatif {
-    flex-basis: 100%;
+    margin: var(--espace-2) 0 0;
   }
   .facultatif summary {
     cursor: pointer;
     color: var(--couleur-texte-discret);
-    font-size: var(--taille-petit);
+    font-size: var(--texte-petit);
   }
   .defilement {
     overflow-x: auto;
@@ -532,6 +721,7 @@
   table {
     border-collapse: collapse;
     min-width: 640px;
+    font-size: var(--texte-dense);
   }
   th,
   td {
@@ -542,12 +732,12 @@
   }
   thead th {
     color: var(--couleur-texte-discret);
-    font-size: var(--taille-petit);
+    font-size: var(--texte-petit);
   }
   .note {
     display: block;
     color: var(--couleur-attention);
-    font-size: var(--taille-petit);
+    font-size: var(--texte-petit);
   }
   .ligne-solde th,
   .ligne-solde td {
@@ -556,14 +746,15 @@
   }
   .liberes summary {
     cursor: pointer;
-    margin: var(--espace-6) 0 var(--espace-3);
-    font-weight: 600;
+    margin: var(--espace-2) 0 var(--espace-3);
+    font-weight: 700;
   }
   .a-venir {
     list-style: none;
     padding: 0;
     margin: 0 0 var(--espace-2);
     max-width: 420px;
+    font-size: var(--texte-dense);
   }
   .a-venir li {
     display: flex;

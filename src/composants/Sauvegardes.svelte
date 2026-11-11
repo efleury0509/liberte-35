@@ -17,8 +17,10 @@
   interface Props {
     plateforme: Plateforme;
     onrestauration: () => void;
+    /** V1 lot 5 : l'onglet des Paramètres qui est affiché. */
+    vue?: 'sauvegardes' | 'export';
   }
-  let { plateforme, onrestauration }: Props = $props();
+  let { plateforme, onrestauration, vue = 'sauvegardes' }: Props = $props();
 
   const jour = aujourdhui();
   let etat: EtatSauvegardes | null = $state(null);
@@ -132,6 +134,7 @@
   </li>
 {/snippet}
 
+{#if vue === 'sauvegardes'}
 <section aria-labelledby="titre-sauvegardes">
   <h2 id="titre-sauvegardes">Sauvegardes</h2>
   {#if erreurLecture}
@@ -185,7 +188,21 @@
 
     {#if apercu}
       {@const l = lignesApercu(apercu)}
-      <div class="apercu" role="dialog" aria-modal="false" aria-labelledby="titre-apercu-restauration" data-testid="apercu-restauration" tabindex="-1" use:montrer>
+      <!-- V1 lot 5 : la confirmation s'ouvre dans une fenêtre centrée, par-dessus la page. -->
+      <div class="voile" aria-hidden="true"></div>
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div
+        class="apercu"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titre-apercu-restauration"
+        data-testid="apercu-restauration"
+        tabindex="-1"
+        use:montrer
+        onkeydown={(e) => {
+          if (e.key === 'Escape' && !enCours) apercu = null;
+        }}
+      >
         <p class="avis">À vérifier avant de restaurer</p>
         <h3 id="titre-apercu-restauration">{titreApercu(apercu, jour)}</h3>
         <p>{l.contenu}</p>
@@ -210,6 +227,7 @@
   {/if}
 </section>
 
+{:else}
 <section aria-labelledby="titre-export">
   <h2 id="titre-export">Exporter mes données</h2>
   <p>
@@ -226,24 +244,25 @@
     <p role="alert" class="erreur" data-testid="erreur-export" use:montrer>{erreurExport}</p>
   {/if}
 </section>
+{/if}
 
 <style>
   section {
-    max-width: 760px;
-    margin-top: var(--espace-8);
+    max-width: 860px;
   }
   h2 {
-    font-size: 17px;
+    font-size: var(--titre-carte);
     margin: 0 0 var(--espace-4);
   }
   h3 {
-    font-size: var(--taille-texte);
+    font-size: var(--titre-bloc);
     margin: var(--espace-6) 0 var(--espace-1);
   }
   .copies {
     list-style: none;
     padding: 0;
     margin: var(--espace-2) 0;
+    font-size: var(--texte-dense);
   }
   .copies li {
     display: flex;
@@ -258,17 +277,31 @@
     flex-direction: column;
   }
   .libelle {
-    font-weight: 500;
+    font-weight: 700;
   }
   .succes {
     color: var(--couleur-succes);
   }
+  .voile {
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    background: var(--voile);
+  }
   .apercu {
-    border: 1px solid var(--couleur-accent);
-    border-radius: var(--arrondi);
+    position: fixed;
+    z-index: 16;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(620px, calc(100vw - 2 * var(--espace-6)));
+    max-height: calc(100vh - 2 * var(--espace-8));
+    overflow-y: auto;
+    border: var(--bordure-structure);
+    border-radius: var(--arrondi-grand);
     background: var(--couleur-surface);
-    padding: var(--espace-4) var(--espace-6);
-    margin: var(--espace-4) 0;
+    box-shadow: var(--ombre-flottante);
+    padding: var(--espace-6);
   }
   .apercu:focus {
     outline: 2px solid var(--couleur-focus);
@@ -279,7 +312,8 @@
   }
   .avis {
     margin: 0 0 var(--espace-1);
-    font-size: var(--taille-petit);
+    font-size: var(--texte-petit);
+    font-weight: 700;
     color: var(--couleur-texte-discret);
   }
   .apercu ul {

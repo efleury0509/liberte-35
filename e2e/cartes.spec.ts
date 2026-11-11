@@ -48,7 +48,10 @@ test('F1, C1, C2, C4 : la carte se crée sans montant ; son échéance est « À
   await preparer(page);
   await ajouterCarte(page);
   const fiche = page.getByTestId('fiche-carte');
-  await expect(fiche).toContainText('Montant de chaque échéance : à choisir à chaque relevé');
+  // V1 lot 5 : libellé et valeur côte à côte, dans la carte.
+  await expect(fiche).toContainText('Montant de chaque échéance');
+  await expect(fiche).toContainText('à choisir à chaque relevé');
+  await expect(fiche).toContainText('Mensuel');
   await expect(fiche.getByTestId('solde-actuel')).toHaveText('À compléter');
   await expect(fiche.getByTestId('utilisation')).toHaveText('À compléter');
   await expect(fiche.getByTestId('a-choisir')).toHaveText('Échéance du 11 févr. 2027 : montant à choisir dans Mes paies.');
@@ -99,6 +102,7 @@ test('X1, O1, G2 : paiement supplémentaire depuis Mes paies, rattaché au relev
   await preparer(page);
   await ajouterCarte(page);
   await ajouterReleve(page);
+  await page.getByRole('button', { name: /^Actions — carte/ }).click();
   await page.getByRole('button', { name: 'Mettre à jour le solde actuel…' }).click();
   const fs = page.getByTestId('formulaire-solde-carte');
   await fs.getByLabel('Solde actuel ($)').fill('1410');

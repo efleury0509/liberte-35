@@ -73,6 +73,7 @@ test('C5, P4, H0, F4, S3 : confirmer dans Mes paies, voir l’historique, compl�
   await expect(fiche.getByTestId('paye-depuis-ajout')).toHaveText($('Payé depuis l’ajout : 205,00 $'));
 
   // F4 : compléter plus tard ; la ligne confirmée ne change pas.
+  await page.getByRole('button', { name: /^Actions — prêt/ }).click();
   await page.getByRole('button', { name: 'Compléter les renseignements…' }).click();
   const r = page.getByTestId('formulaire-renseignements');
   await r.getByLabel('Taux annuel (%)').fill('6,49');
@@ -129,6 +130,7 @@ test('F2, E2 : fiche presque complète avec échéance finale ; F3 : refus clair
 test('L2, L3 : marquer comme remboursé avec un aperçu ; D1 : supprimer avec un aperçu', async ({ page }) => {
   await preparer(page);
   await ajouterPretMinimal(page);
+  await page.getByRole('button', { name: /^Actions — prêt/ }).click();
   await page.getByRole('button', { name: 'Marquer comme remboursé…' }).click();
   await page.getByTestId('formulaire-remboursement').getByLabel('Remboursé le').fill('2027-01-14');
   await page.getByRole('button', { name: 'Voir l’aperçu' }).click();
@@ -146,6 +148,7 @@ test('L2, L3 : marquer comme remboursé avec un aperçu ; D1 : supprimer avec un
   await expect(page.getByTestId('dettes-liberees')).toHaveCount(0);
 
   // La fiche est restée ouverte.
+  await page.getByRole('button', { name: /^Actions — prêt/ }).click();
   await page.getByRole('button', { name: 'Supprimer…' }).click();
   await expect(page.getByTestId('apercu')).toContainText('Supprimer le prêt « Prêt auto (fictif) »');
   await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
@@ -175,6 +178,7 @@ test('7b-1 : prochains versements, somme prévue jusqu’à l’échéance, ce q
   );
 
   // Q50 : avec une échéance finale, la somme des versements prévus, clairement nommée.
+  await page.getByRole('button', { name: /^Actions — prêt/ }).click();
   await page.getByRole('button', { name: 'Compléter les renseignements…' }).click();
   const f = page.getByTestId('formulaire-renseignements');
   await f.getByLabel('Échéance finale').fill('2027-03-11');

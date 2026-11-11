@@ -116,6 +116,7 @@ test('Q32 : un export choisi pour une restauration est refusé avec une explicat
 test('E5, E7 : exporter dit où le fichier a été enregistré, et s’il est vide', async ({ page }) => {
   await ouvrir(page);
   await section(page, 'Paramètres');
+  await page.getByRole('tab', { name: 'Exporter mes données' }).click();
   await expect(page.getByText('L’export n’est pas chiffré : garde-le en lieu sûr.')).toBeVisible();
   await page.getByRole('button', { name: 'Exporter mes données…' }).click();
   await expect(page.getByTestId('exporte')).toHaveText(
@@ -123,6 +124,7 @@ test('E5, E7 : exporter dit où le fichier a été enregistré, et s’il est vi
   );
   await creerProfil(page);
   await section(page, 'Paramètres');
+  await page.getByRole('tab', { name: 'Exporter mes données' }).click();
   await page.getByRole('button', { name: 'Exporter mes données…' }).click();
   await expect(page.getByTestId('exporte')).toHaveText('Export enregistré : Documents\\liberte-35-apercu-export-2026-11-08.zip');
 });

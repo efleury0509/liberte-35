@@ -40,6 +40,9 @@ test('la navigation fonctionne entièrement au clavier', async ({ page }) => {
 test('Paramètres décrit l’installation, ici en mode aperçu', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Paramètres' }).click();
+  // V1 lot 5 : onglets par catégorie ; « Sauvegardes locales » s'ouvre d'abord.
+  await expect(page.getByRole('tab', { name: 'Sauvegardes locales' })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: 'Installation' }).click();
   await expect(page.getByTestId('profil')).toHaveText('Aperçu dans le navigateur — rien n’est enregistré');
   await expect(page.getByTestId('version-schema')).toHaveText('9');
   await expect(page.getByTestId('integrite')).toHaveText('Aucun problème détecté');

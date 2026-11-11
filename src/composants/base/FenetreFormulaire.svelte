@@ -106,6 +106,12 @@
   .corps :global(form) {
     margin-top: 0;
   }
+  /* V1 lot 5 : une explication occupe toute la largeur, au-dessus des champs. */
+  .corps :global(form.formulaire > p),
+  .corps :global(form.formulaire > details) {
+    flex-basis: 100%;
+    margin: 0;
+  }
   .erreur {
     margin: var(--espace-3) 0 0;
     font-weight: 700;

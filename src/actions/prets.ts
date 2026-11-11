@@ -72,6 +72,25 @@ export function quandPret(e: Pick<ElementStocke, 'frequence'>): string {
   }
 }
 
+/**
+ * V1 lot 5 : le rythme du versement, en un mot, pour distinguer d'un coup
+ * d'œil les paiements par paie des paiements mensuels (cahier V1, 5.5).
+ */
+export function rythmePret(e: Pick<ElementStocke, 'frequence'>): string {
+  const f = e.frequence;
+  const n = typeof f['n'] === 'number' ? f['n'] : 1;
+  switch (f.type) {
+    case 'chaquePaie':
+      return 'Par paie';
+    case 'mois':
+      return n === 1 ? 'Mensuel' : `Aux ${n} mois`;
+    case 'semaines':
+      return n === 1 ? 'Hebdomadaire' : n === 2 ? 'Aux deux semaines' : `Aux ${n} semaines`;
+    default:
+      return 'Selon sa règle';
+  }
+}
+
 /** Taux saisi (« 9,90 », « 9.9 % ») → texte stocké avec un point. */
 export function lireTaux(texte: string): string | null {
   const t = texte.replace(/[%\s]/g, '').replace(',', '.');
@@ -382,6 +401,8 @@ export interface VuePret {
   rembourse: boolean;
   statut: string;
   versement: string;
+  /** V1 lot 5 : « Par paie », « Mensuel », « Aux deux semaines »… */
+  rythme: string;
   prochainVersement: string | null;
   minimum: string;
   taux: string;
@@ -516,6 +537,7 @@ export function vuePret(d: DonneesPaie, id: string, jour: DateCivile): VuePret {
     rembourse,
     statut: rembourse ? `Remboursé le ${avecAnnee(pret.rembourseLe!)}` : 'En cours',
     versement: `${versement === null ? A_COMPLETER : formaterMontant(versement)} — ${quandPret(element)}`,
+    rythme: rythmePret(element),
     prochainVersement: aVenir[0] ? `${aVenir[0].montant} le ${aVenir[0].date}` : null,
     minimum: pret.minimum === null ? 'Identique au versement' : formaterMontant(pret.minimum),
     taux: tauxTexte(pret.taux),
