@@ -130,6 +130,14 @@ et dans le cahier fonctionnel de référence.
   passée, blocage si les conséquences ne peuvent pas être calculées,
   redécoupage du calendrier chiffré (H4). Aucune règle financière ni
   structure de données changées (toujours 9).
+- Lot 1 d'ajustements, fabrication Essai (version 0.15.0) : titres des
+  cartes de paie (« Paie actuelle », « Prochaine paie », « Paie suivante »,
+  « Paie d'après », ou « Première paie à venir ») ; ordre de priorité des
+  dettes choisi à la main, simple repère sans effet sur les paiements ;
+  « Solde réduit de X % depuis le départ » à partir des soldes déclarés,
+  distinct du capital remboursé ; copies reconnaissables par le début du
+  calendrier ; Mes paies découpé en composants sans changement visible.
+  Aucune règle financière ni structure de données changées (toujours 9).
 
 ## Organisation du code
 
