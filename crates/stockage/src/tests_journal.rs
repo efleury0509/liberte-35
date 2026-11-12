@@ -1,16 +1,27 @@
-//! Accueil et journal (0.16.0) : lecture du journal par pages. Lecture
-//! seule ; toutes les données sont fictives.
+//! Journal (0.16.0) : lecture par pages numérotées, filtres de section et de
+//! période. Lecture seule ; toutes les données sont fictives.
 
 use super::*;
+use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 
-fn ouvrir(d: &TempDir) -> Stockage {
-    Stockage::ouvrir(
+/// Horloge de test dont on choisit l'heure avant chaque écriture.
+struct HorlogeReglable(Arc<Mutex<String>>);
+impl Horloge for HorlogeReglable {
+    fn maintenant(&self) -> String {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+fn ouvrir(d: &TempDir) -> (Stockage, Arc<Mutex<String>>) {
+    let h = Arc::new(Mutex::new("2026-11-08T14:00:00Z".to_string()));
+    let s = Stockage::ouvrir(
         &d.path().join("donnees.sqlite"),
         Profil::Essai,
-        Box::new(HorlogeFixe("2026-11-08T14:00:00Z".to_string())),
+        Box::new(HorlogeReglable(h.clone())),
     )
-    .unwrap()
+    .unwrap();
+    (s, h)
 }
 
 fn entree(section: &str, champ: &str) -> NouvelleEntree {
@@ -24,8 +35,8 @@ fn entree(section: &str, champ: &str) -> NouvelleEntree {
     }
 }
 
-fn remplir(s: &mut Stockage) {
-    for i in 0..7 {
+fn remplir(s: &mut Stockage, n: usize) {
+    for i in 0..n {
         let section = if i % 2 == 0 {
             "Mes paies"
         } else {
@@ -36,57 +47,101 @@ fn remplir(s: &mut Stockage) {
     }
 }
 
-#[test]
-fn journal_par_pages_du_plus_recent_au_plus_ancien() {
-    let d = TempDir::new().unwrap();
-    let mut s = ouvrir(&d);
-    remplir(&mut s);
-    let p1 = s.lire_page_journal(None, 3, &[]).unwrap();
-    let champs: Vec<_> = p1.entrees.iter().map(|e| e.champ.as_str()).collect();
-    assert_eq!(champs, ["changement 6", "changement 5", "changement 4"]);
-    assert_eq!(p1.restantes, 4);
-    let p2 = s
-        .lire_page_journal(Some(p1.entrees.last().unwrap().id), 3, &[])
-        .unwrap();
-    assert_eq!(p2.entrees[0].champ, "changement 3");
-    assert_eq!(p2.restantes, 1);
-    let p3 = s
-        .lire_page_journal(Some(p2.entrees.last().unwrap().id), 3, &[])
-        .unwrap();
-    assert_eq!(p3.entrees.len(), 1);
-    assert_eq!(p3.restantes, 0);
+fn champs(p: &PageJournal) -> Vec<&str> {
+    p.entrees.iter().map(|e| e.champ.as_str()).collect()
 }
 
 #[test]
-fn journal_filtre_par_section_sans_rien_modifier() {
+fn pages_numerotees_sans_doublon_ni_oubli() {
     let d = TempDir::new().unwrap();
-    let mut s = ouvrir(&d);
-    remplir(&mut s);
+    let (mut s, _) = ouvrir(&d);
+    remplir(&mut s, 7);
+    let tous = FiltreJournal::default();
+    let p1 = s.lire_page_journal(0, 3, &tous).unwrap();
+    assert_eq!(
+        champs(&p1),
+        ["changement 6", "changement 5", "changement 4"]
+    );
+    assert_eq!(p1.total, 7);
+    let p2 = s.lire_page_journal(3, 3, &tous).unwrap();
+    assert_eq!(
+        champs(&p2),
+        ["changement 3", "changement 2", "changement 1"]
+    );
+    let p3 = s.lire_page_journal(6, 3, &tous).unwrap();
+    assert_eq!(champs(&p3), ["changement 0"]);
+    // Au-delà de la fin : rien, mais le total reste juste.
+    let vide = s.lire_page_journal(9, 3, &tous).unwrap();
+    assert!(vide.entrees.is_empty());
+    assert_eq!(vide.total, 7);
+    assert_eq!(p1.plus_ancien.as_deref(), Some("2026-11-08T14:00:00Z"));
+}
+
+#[test]
+fn filtre_section_puis_pagination() {
+    let d = TempDir::new().unwrap();
+    let (mut s, _) = ouvrir(&d);
+    remplir(&mut s, 7);
+    let dettes = FiltreJournal {
+        sections: vec!["Mes dettes".into()],
+        ..Default::default()
+    };
+    let p = s.lire_page_journal(0, 2, &dettes).unwrap();
+    assert_eq!(champs(&p), ["changement 5", "changement 3"]);
+    assert_eq!(p.total, 3);
+    let p2 = s.lire_page_journal(2, 2, &dettes).unwrap();
+    assert_eq!(champs(&p2), ["changement 1"]);
+}
+
+#[test]
+fn periode_debut_compris_fin_exclue_et_lecture_seule() {
+    let d = TempDir::new().unwrap();
+    let (mut s, h) = ouvrir(&d);
+    // 30 nov. 21 h à Montréal = 1er déc. 02 h en heure universelle.
+    for (moment, champ) in [
+        ("2026-11-01T03:59:59Z", "octobre local"),
+        ("2026-11-01T04:00:00Z", "début novembre local"),
+        ("2026-12-01T02:00:00Z", "30 nov. 21 h local"),
+        ("2026-12-01T05:00:00Z", "décembre local"),
+    ] {
+        *h.lock().unwrap() = moment.to_string();
+        s.consigner(&entree("Mes paies", champ)).unwrap();
+    }
     let avant = s.lire_journal(100).unwrap();
-    let dettes = s
-        .lire_page_journal(None, 50, &["Mes dettes".to_string()])
+    let novembre = FiltreJournal {
+        debut: Some("2026-11-01T04:00:00Z".into()),
+        fin: Some("2026-12-01T05:00:00Z".into()),
+        ..Default::default()
+    };
+    let p = s.lire_page_journal(0, 50, &novembre).unwrap();
+    assert_eq!(champs(&p), ["30 nov. 21 h local", "début novembre local"]);
+    assert_eq!(p.total, 2);
+    let n = s
+        .compter_journal(&[
+            PeriodeJournal {
+                debut: "2025-01-01T05:00:00Z".into(),
+                fin: "2026-01-01T05:00:00Z".into(),
+            },
+            PeriodeJournal {
+                debut: "2026-01-01T05:00:00Z".into(),
+                fin: "2027-01-01T05:00:00Z".into(),
+            },
+        ])
         .unwrap();
-    assert_eq!(dettes.entrees.len(), 3);
-    assert!(dettes.entrees.iter().all(|e| e.section == "Mes dettes"));
-    assert_eq!(dettes.restantes, 0);
-    let deux = s
-        .lire_page_journal(
-            None,
-            50,
-            &["Mes dettes".to_string(), "Mes paies".to_string()],
-        )
-        .unwrap();
-    assert_eq!(deux.entrees.len(), 7);
-    // Lire ne change rien : même journal, même nombre.
+    assert_eq!(n, [0, 4]);
+    // Lire ne change rien.
     assert_eq!(s.lire_journal(100).unwrap(), avant);
-    assert_eq!(s.nombre_entrees_journal().unwrap(), 7);
+    assert_eq!(s.nombre_entrees_journal().unwrap(), 4);
 }
 
 #[test]
-fn journal_vide_et_limite_bornee() {
+fn journal_vide() {
     let d = TempDir::new().unwrap();
-    let s = ouvrir(&d);
-    let p = s.lire_page_journal(None, 0, &[]).unwrap();
+    let (s, _) = ouvrir(&d);
+    let p = s
+        .lire_page_journal(0, 0, &FiltreJournal::default())
+        .unwrap();
     assert!(p.entrees.is_empty());
-    assert_eq!(p.restantes, 0);
+    assert_eq!(p.total, 0);
+    assert_eq!(p.plus_ancien, None);
 }

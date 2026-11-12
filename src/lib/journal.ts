@@ -96,15 +96,61 @@ export interface JourJournal {
   entrees: EntreePresentee[];
 }
 
-/** Regroupe des entrées déjà triées (plus récentes d'abord) par jour local. */
-export function grouperParJour(entrees: readonly EntreePresentee[], jour: DateCivile): JourJournal[] {
+/** Regroupe des entrées déjà triées (plus récentes d'abord) par jour local.
+ * `precedente` : jour de la dernière entrée de la page d'avant ; si la page
+ * commence par ce même jour, son titre porte « (suite) ». */
+export function grouperParJour(entrees: readonly EntreePresentee[], jour: DateCivile, precedente: DateCivile | null = null): JourJournal[] {
   const jours: JourJournal[] = [];
   for (const e of entrees) {
     const dernier = jours.at(-1);
     if (dernier && dernier.date === e.date) dernier.entrees.push(e);
-    else jours.push({ date: e.date, titre: titreJour(e.date, jour), entrees: [e] });
+    else {
+      const suite = jours.length === 0 && precedente === e.date;
+      jours.push({ date: e.date, titre: titreJour(e.date, jour) + (suite ? ' (suite)' : ''), entrees: [e] });
+    }
   }
   return jours;
+}
+
+// --- Pages et périodes (0.16.0, deuxième temps) ---
+
+export const TAILLE_PAGE_JOURNAL = 50;
+
+export const MOIS_JOURNAL = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'] as const;
+
+/** Instant (ms) du minuit local d'un jour ; `mois0` de 0 à 12 (12 = janvier suivant). */
+export type MinuitLocal = (annee: number, mois0: number, jour: number) => number;
+const minuitDuSysteme: MinuitLocal = (a, m, j) => new Date(a, m, j).getTime();
+const iso = (ms: number) => new Date(ms).toISOString().slice(0, 19) + 'Z';
+
+/** Bornes d'une année (ou d'un de ses mois, 1 à 12) en heure locale, traduites
+ * en heure universelle : début compris, fin exclue. Les changements d'heure
+ * sont pris en compte par le système. */
+export function bornesPeriode(annee: number, mois: number | null, minuit: MinuitLocal = minuitDuSysteme): { debut: string; fin: string } {
+  if (mois === null) return { debut: iso(minuit(annee, 0, 1)), fin: iso(minuit(annee + 1, 0, 1)) };
+  return { debut: iso(minuit(annee, mois - 1, 1)), fin: iso(minuit(annee, mois, 1)) };
+}
+
+/** Années à vérifier : de l'année locale de la plus ancienne entrée à aujourd'hui. */
+export function anneesCandidates(plusAncien: string | null, jour: DateCivile, local: PartiesLocales = partiesLocales): number[] {
+  if (plusAncien === null) return [];
+  const debut = Number(local(plusAncien).date.slice(0, 4));
+  const fin = Math.max(debut, Number(jour.slice(0, 4)));
+  const annees: number[] = [];
+  for (let a = fin; a >= debut; a--) annees.push(a);
+  return annees;
+}
+
+/** Nombre de pages (au moins 1). */
+export const nombrePages = (total: number, taille = TAILLE_PAGE_JOURNAL) => Math.max(1, Math.ceil(total / taille));
+
+/** « Page 2 sur 2 · changements 51 à 94 sur 94 ». */
+export function texteCompte(page: number, total: number, taille = TAILLE_PAGE_JOURNAL): string {
+  if (total === 0) return 'Aucun changement';
+  const de = page * taille + 1;
+  const a = Math.min(total, (page + 1) * taille);
+  const changements = total === 1 ? '1 changement' : de === a ? `changement ${de} sur ${total}` : `changements ${de} à ${a} sur ${total}`;
+  return `Page ${page + 1} sur ${nombrePages(total, taille)} · ${changements}`;
 }
 
 /** Accueil : « Aujourd’hui, 22 h 46 », « Hier, 9 h 05 », « 9 nov., 8 h 12 ». */

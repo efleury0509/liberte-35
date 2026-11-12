@@ -207,8 +207,54 @@ pub struct EntreeJournal {
 #[serde(rename_all = "camelCase")]
 pub struct PageJournal {
     pub entrees: Vec<EntreeJournal>,
-    /// Entrées plus anciennes encore à afficher (même filtre).
-    pub restantes: u64,
+    /// Nombre total d'entrées qui correspondent au filtre (toutes pages).
+    pub total: u64,
+    /// Horodatage de la plus ancienne entrée du journal entier (sans filtre),
+    /// pour proposer seulement les années où il y a des changements.
+    pub plus_ancien: Option<String>,
+}
+
+/// Filtre du journal : sections (vide = toutes) et période en heure
+/// universelle, début compris, fin exclue (`2026-11-01T04:00:00Z`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FiltreJournal {
+    #[serde(default)]
+    pub sections: Vec<String>,
+    #[serde(default)]
+    pub debut: Option<String>,
+    #[serde(default)]
+    pub fin: Option<String>,
+}
+
+/// Une période du journal à compter (début compris, fin exclue).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeriodeJournal {
+    pub debut: String,
+    pub fin: String,
+}
+
+/// Condition SQL et valeurs d'un filtre du journal.
+fn condition_journal(f: &FiltreJournal) -> (String, Vec<rusqlite::types::Value>) {
+    let mut sql = String::from("1 = 1");
+    let mut valeurs: Vec<rusqlite::types::Value> = Vec::new();
+    if !f.sections.is_empty() {
+        sql.push_str(&format!(
+            " AND section IN ({})",
+            vec!["?"; f.sections.len()].join(", ")
+        ));
+        valeurs.extend(f.sections.iter().cloned().map(Into::into));
+    }
+    if let Some(d) = &f.debut {
+        sql.push_str(" AND horodatage >= ?");
+        valeurs.push(d.clone().into());
+    }
+    if let Some(x) = &f.fin {
+        sql.push_str(" AND horodatage < ?");
+        valeurs.push(x.clone().into());
+    }
+    (sql, valeurs)
 }
 
 /// Résumé de l'état du stockage, affiché dans Paramètres.
@@ -321,37 +367,28 @@ impl Stockage {
         Ok(lignes.collect::<Result<Vec<_>, _>>()?)
     }
 
-    /// Accueil et journal (0.16.0) : une page du journal, en lecture seule,
-    /// des plus récentes aux plus anciennes. `avant` : numéro de la dernière
-    /// entrée déjà affichée (page suivante) ; `sections` : vide pour toutes.
-    /// Le journal lui-même n'est jamais modifié.
+    /// Journal (0.16.0) : une page du journal, en lecture seule, des plus
+    /// récentes aux plus anciennes. `decalage` : nombre d'entrées à sauter
+    /// (page × taille) ; le filtre s'applique avant la pagination. Le journal
+    /// lui-même n'est jamais modifié.
     pub fn lire_page_journal(
         &self,
-        avant: Option<i64>,
+        decalage: u64,
         limite: u32,
-        sections: &[String],
+        filtre: &FiltreJournal,
     ) -> Resultat<PageJournal> {
         let limite = limite.clamp(1, 200);
-        let filtre = if sections.is_empty() {
-            String::new()
-        } else {
-            let marques = vec!["?"; sections.len()].join(", ");
-            format!(" AND section IN ({marques})")
-        };
-        let mut valeurs: Vec<rusqlite::types::Value> = vec![avant.unwrap_or(i64::MAX).into()];
-        valeurs.extend(
-            sections
-                .iter()
-                .map(|x| rusqlite::types::Value::from(x.clone())),
-        );
+        let (condition, valeurs) = condition_journal(filtre);
         let total: i64 = self.conn.query_row(
-            &format!("SELECT COUNT(*) FROM journal_changements WHERE id < ?1{filtre}"),
+            &format!("SELECT COUNT(*) FROM journal_changements WHERE {condition}"),
             rusqlite::params_from_iter(valeurs.iter()),
             |r| r.get(0),
         )?;
         let mut req = self.conn.prepare(&format!(
             "SELECT id, horodatage, section, objet, champ, ancienne_valeur, nouvelle_valeur, motif
-             FROM journal_changements WHERE id < ?1{filtre} ORDER BY id DESC LIMIT {limite}"
+             FROM journal_changements WHERE {condition}
+             ORDER BY id DESC LIMIT {limite} OFFSET {}",
+            decalage.min(i64::MAX as u64)
         ))?;
         let entrees = req
             .query_map(rusqlite::params_from_iter(valeurs.iter()), |r| {
@@ -367,8 +404,35 @@ impl Stockage {
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
-        let restantes = (total as u64).saturating_sub(entrees.len() as u64);
-        Ok(PageJournal { entrees, restantes })
+        let plus_ancien: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT horodatage FROM journal_changements ORDER BY id ASC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(PageJournal {
+            entrees,
+            total: total as u64,
+            plus_ancien,
+        })
+    }
+
+    /// Journal (0.16.0) : nombre d'entrées dans chaque période (pour ne
+    /// proposer que les années où il y a des changements). Lecture seule.
+    pub fn compter_journal(&self, periodes: &[PeriodeJournal]) -> Resultat<Vec<u64>> {
+        periodes
+            .iter()
+            .map(|p| {
+                let n: i64 = self.conn.query_row(
+                    "SELECT COUNT(*) FROM journal_changements WHERE horodatage >= ?1 AND horodatage < ?2",
+                    rusqlite::params![p.debut, p.fin],
+                    |r| r.get(0),
+                )?;
+                Ok(n as u64)
+            })
+            .collect()
     }
 
     pub fn nombre_entrees_journal(&self) -> Resultat<u64> {

@@ -130,7 +130,7 @@ test('journal : derniers changements, onglet Journal, filtres, entrée telle qu�
   await expect(journal.getByTestId('entree-brute')).toContainText('Mes dettes');
   await journal.getByRole('button', { name: 'Paramètres', exact: true }).click();
   await expect(journal.getByTestId('journal-vide')).toHaveText('Aucun changement dans cette section.');
-  await expect(journal.getByRole('button', { name: 'Voir les changements plus anciens' })).toHaveCount(0);
+  await expect(journal.getByRole('button', { name: 'Plus anciens' })).toHaveCount(0);
 });
 
 test('fenêtre minimale (1024 × 640) : les pastilles des cartes restent entières, Accueil et Mes paies', async ({ page }) => {

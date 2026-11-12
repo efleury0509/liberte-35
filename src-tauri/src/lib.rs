@@ -5,8 +5,9 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use l35_stockage::{
-    ApercuRestauration, ChangementPaie, CopieFaite, DonneesPaie, HorlogeSysteme, ListeDesCopies,
-    NouvelleEntree, PageJournal, Profil, ResultatRestauration, ResumeExport, SourceCopie, Stockage,
+    ApercuRestauration, ChangementPaie, CopieFaite, DonneesPaie, FiltreJournal, HorlogeSysteme,
+    ListeDesCopies, NouvelleEntree, PageJournal, PeriodeJournal, Profil, ResultatRestauration,
+    ResumeExport, SourceCopie, Stockage,
 };
 use serde::Serialize;
 use tauri::{Emitter, Manager};
@@ -181,15 +182,24 @@ fn appliquer_changements_paie(
     Ok(donnees)
 }
 
-/// Accueil et journal (0.16.0) : une page du journal, en lecture seule.
+/// Journal (0.16.0) : une page du journal, en lecture seule.
 #[tauri::command]
 fn lire_journal(
     etat: tauri::State<'_, EtatApp>,
-    avant: Option<i64>,
+    decalage: u64,
     limite: u32,
-    sections: Vec<String>,
+    filtre: FiltreJournal,
 ) -> Result<PageJournal, String> {
-    avec_stockage(&etat, |s| s.lire_page_journal(avant, limite, &sections))
+    avec_stockage(&etat, |s| s.lire_page_journal(decalage, limite, &filtre))
+}
+
+/// Journal (0.16.0) : nombre d'entrées par période, en lecture seule.
+#[tauri::command]
+fn compter_journal(
+    etat: tauri::State<'_, EtatApp>,
+    periodes: Vec<PeriodeJournal>,
+) -> Result<Vec<u64>, String> {
+    avec_stockage(&etat, |s| s.compter_journal(&periodes))
 }
 
 #[tauri::command]
@@ -335,6 +345,7 @@ pub fn lancer() {
             etat_application,
             lire_paie,
             lire_journal,
+            compter_journal,
             appliquer_changements_paie,
             etat_sauvegardes,
             apercu_restauration,

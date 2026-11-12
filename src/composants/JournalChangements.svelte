@@ -1,41 +1,81 @@
 <script lang="ts">
-  // Paramètres → Journal (0.16.0) : consultation seulement. Les entrées sont
-  // lues par pages de 50, mises en mots pour l'œil (jours, heure locale,
-  // dates lisibles) ; « telle qu'enregistrée » montre l'entrée exacte.
-  import { onMount } from 'svelte';
-  import { Undo2, RotateCcw } from '@lucide/svelte';
+  // Paramètres → Journal (0.16.0) : consultation seulement. Pages de 50, du
+  // plus récent au plus ancien ; filtres de section, d'année et de mois
+  // appliqués avant la pagination. Les mois et années sont ceux de l'heure
+  // locale. « Telle qu'enregistrée » montre l'entrée exacte.
+  import { onMount, tick } from 'svelte';
+  import { Undo2, RotateCcw, ArrowLeft, ArrowRight } from '@lucide/svelte';
   import Pastille from './base/Pastille.svelte';
   import Icone from './base/Icone.svelte';
-  import { FILTRES_JOURNAL, grouperParJour, presenterEntree, type EntreePresentee, type IdFiltreJournal } from '../lib/journal';
+  import {
+    FILTRES_JOURNAL,
+    MOIS_JOURNAL,
+    TAILLE_PAGE_JOURNAL,
+    anneesCandidates,
+    bornesPeriode,
+    grouperParJour,
+    nombrePages,
+    presenterEntree,
+    texteCompte,
+    type EntreePresentee,
+    type IdFiltreJournal,
+  } from '../lib/journal';
   import { aujourdhui } from '../lib/aujourdhui';
+  import type { DateCivile } from '../noyau/dates';
   import type { Plateforme } from '../lib/plateforme';
 
   let { plateforme }: { plateforme: Plateforme } = $props();
 
-  const TAILLE_PAGE = 50;
   const jour = aujourdhui();
   let filtre: IdFiltreJournal = $state('toutes');
+  let annee: number | null = $state(null);
+  let mois: number | null = $state(null);
+  let page = $state(0);
+  let annees: number[] = $state([]);
   let entrees: EntreePresentee[] = $state([]);
-  let restantes = $state(0);
+  /** Jour de la dernière entrée de la page d'avant, pour « (suite) ». */
+  let precedente: DateCivile | null = $state(null);
+  let total = $state(0);
   let enCours = $state(false);
   let erreur: string | null = $state(null);
   let ouvertes: Set<number> = $state(new Set());
-  const jours = $derived(grouperParJour(entrees, jour));
+  let titre: HTMLHeadingElement | undefined = $state();
+  const jours = $derived(grouperParJour(entrees, jour, precedente));
+  const pages = $derived(nombrePages(total));
+  const filtreActif = $derived(filtre !== 'toutes' || annee !== null);
   /** Chaque chargement porte un numéro : une réponse dépassée est ignorée. */
   let demande = 0;
 
-  async function charger(suite: boolean) {
+  function filtreCourant() {
+    const periode = annee === null ? null : bornesPeriode(annee, mois);
+    return { sections: [...FILTRES_JOURNAL.find((f) => f.id === filtre)!.sections], debut: periode?.debut ?? null, fin: periode?.fin ?? null };
+  }
+
+  async function charger(versHaut: boolean) {
     const n = ++demande;
     enCours = true;
     erreur = null;
     try {
-      const sections = [...FILTRES_JOURNAL.find((f) => f.id === filtre)!.sections];
-      const avant = suite ? (entrees.at(-1)?.id ?? null) : null;
-      const page = await plateforme.lireJournal({ avant, limite: TAILLE_PAGE, sections });
+      // Une entrée de plus en tête (la dernière de la page d'avant) pour savoir
+      // si le premier jour continue : elle n'est pas affichée.
+      const avecPrecedente = page > 0;
+      const res = await plateforme.lireJournal({
+        decalage: page * TAILLE_PAGE_JOURNAL - (avecPrecedente ? 1 : 0),
+        limite: TAILLE_PAGE_JOURNAL + (avecPrecedente ? 1 : 0),
+        filtre: filtreCourant(),
+      });
       if (n !== demande) return;
-      const nouvelles = page.entrees.map((e) => presenterEntree(e));
-      entrees = suite ? [...entrees, ...nouvelles] : nouvelles;
-      restantes = page.restantes;
+      const lues = res.entrees.map((e) => presenterEntree(e));
+      precedente = avecPrecedente && lues.length > 0 ? lues[0]!.date : null;
+      entrees = avecPrecedente ? lues.slice(1) : lues;
+      total = res.total;
+      ouvertes = new Set();
+      if (annees.length === 0 && res.plusAncien !== null) void chargerAnnees(res.plusAncien);
+      if (versHaut) {
+        await tick();
+        titre?.scrollIntoView({ block: 'start' });
+        titre?.focus({ preventScroll: true });
+      }
     } catch (e) {
       if (n === demande) erreur = typeof e === 'string' ? e : 'Le journal n’a pas pu être lu. Rien n’a été modifié.';
     } finally {
@@ -43,10 +83,45 @@
     }
   }
 
-  function choisir(id: IdFiltreJournal) {
-    filtre = id;
-    ouvertes = new Set();
+  /** Seulement les années (locales) où il y a vraiment des changements. */
+  async function chargerAnnees(plusAncien: string) {
+    const candidates = anneesCandidates(plusAncien, jour);
+    try {
+      const nombres = await plateforme.compterJournal(candidates.map((a) => bornesPeriode(a, null)));
+      annees = candidates.filter((_, i) => (nombres[i] ?? 0) > 0);
+    } catch {
+      annees = [];
+    }
+  }
+
+  /** Tout changement de filtre ramène à la page 1. */
+  function filtrer() {
+    page = 0;
     void charger(false);
+  }
+  function choisirSection(id: IdFiltreJournal) {
+    filtre = id;
+    filtrer();
+  }
+  function choisirAnnee(valeur: string) {
+    annee = valeur === '' ? null : Number(valeur);
+    if (annee === null) mois = null; // « Toutes les années » → « Tous les mois »
+    filtrer();
+  }
+  function choisirMois(valeur: string) {
+    mois = valeur === '' ? null : Number(valeur);
+    filtrer();
+  }
+  function reinitialiser() {
+    filtre = 'toutes';
+    annee = null;
+    mois = null;
+    filtrer();
+  }
+  /** Changer de page garde les filtres et remonte au début du Journal. */
+  function allerA(p: number) {
+    page = Math.min(Math.max(0, p), pages - 1);
+    void charger(true);
   }
   function basculer(id: number) {
     const s = new Set(ouvertes);
@@ -59,18 +134,42 @@
 </script>
 
 <section aria-labelledby="titre-journal" data-testid="journal">
-  <h2 id="titre-journal">Journal des changements</h2>
+  <h2 id="titre-journal" tabindex="-1" bind:this={titre}>Journal des changements</h2>
   <p class="discret">Chaque changement enregistré, du plus récent au plus ancien. Consultation seulement : rien ne se modifie ici.</p>
   <div class="filtres" role="group" aria-label="Filtrer par section">
     {#each FILTRES_JOURNAL as f (f.id)}
-      <button type="button" aria-pressed={filtre === f.id} class:actif={filtre === f.id} onclick={() => choisir(f.id)}>{f.libelle}</button>
+      <button type="button" aria-pressed={filtre === f.id} class:actif={filtre === f.id} onclick={() => choisirSection(f.id)}>{f.libelle}</button>
     {/each}
   </div>
+  <div class="periode">
+    <label
+      >Année
+      <select data-testid="filtre-annee" value={annee === null ? '' : String(annee)} onchange={(e) => choisirAnnee(e.currentTarget.value)}>
+        <option value="">Toutes les années</option>
+        {#each annees as a (a)}<option value={String(a)}>{a}</option>{/each}
+      </select>
+    </label>
+    <label
+      >Mois
+      <select data-testid="filtre-mois" disabled={annee === null} value={mois === null ? '' : String(mois)} onchange={(e) => choisirMois(e.currentTarget.value)}>
+        <option value="">Tous les mois</option>
+        {#if annee !== null}
+          {#each MOIS_JOURNAL as m, i (m)}<option value={String(i + 1)}>{m}</option>{/each}
+        {/if}
+      </select>
+    </label>
+    {#if filtreActif}
+      <button type="button" class="lien" onclick={reinitialiser}>Réinitialiser les filtres</button>
+    {/if}
+  </div>
+  {#if annee === null}<p class="petit discret">Choisis une année pour filtrer par mois.</p>{/if}
 
   {#if erreur}
     <p role="alert" class="erreur">{erreur}</p>
-  {:else if !enCours && entrees.length === 0}
-    <p class="discret" data-testid="journal-vide">{filtre === 'toutes' ? 'Aucun changement enregistré pour l’instant.' : 'Aucun changement dans cette section.'}</p>
+  {:else if !enCours && total === 0}
+    <p class="discret" data-testid="journal-vide">
+      {annee !== null ? 'Aucun changement pour cette période.' : filtre !== 'toutes' ? 'Aucun changement dans cette section.' : 'Aucun changement enregistré pour l’instant.'}
+    </p>
   {/if}
 
   {#each jours as j (j.date)}
@@ -109,15 +208,16 @@
     </ul>
   {/each}
 
-  {#if entrees.length > 0}
-    <p class="pied">
-      {#if restantes > 0}
-        <button type="button" class="contour" disabled={enCours} onclick={() => charger(true)}>Voir les changements plus anciens</button>
-      {/if}
-      <span class="discret" data-testid="compte-journal">
-        {entrees.length === 1 ? '1 changement affiché' : `${entrees.length} changements affichés`}{restantes > 0 ? ` · ${restantes} plus ${restantes === 1 ? 'ancien' : 'anciens'}` : ''}
-      </span>
-    </p>
+  {#if total > 0}
+    <nav class="pages" aria-label="Pages du journal">
+      <button type="button" class="contour" disabled={enCours || page === 0} onclick={() => allerA(page - 1)}>
+        <Icone icone={ArrowLeft} taille={16} /> Plus récents
+      </button>
+      <span class="discret" data-testid="compte-journal" aria-live="polite">{texteCompte(page, total)}</span>
+      <button type="button" class="contour" disabled={enCours || page >= pages - 1} onclick={() => allerA(page + 1)}>
+        Plus anciens <Icone icone={ArrowRight} taille={16} />
+      </button>
+    </nav>
   {/if}
 </section>
 
@@ -203,10 +303,34 @@
   .brut dd {
     margin: 0;
   }
-  .pied {
+  h2 {
+    scroll-margin-top: var(--espace-6);
+  }
+  h2:focus {
+    outline: none;
+  }
+  .periode {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--espace-4);
+    align-items: flex-end;
+    margin: var(--espace-3) 0 var(--espace-1);
+  }
+  .periode label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--espace-1);
+    font-size: var(--texte-petit);
+    font-weight: 700;
+  }
+  .periode .lien {
+    margin-bottom: var(--espace-2);
+  }
+  .pages {
     display: flex;
     gap: var(--espace-4);
     align-items: center;
+    justify-content: space-between;
     flex-wrap: wrap;
     margin: var(--espace-6) 0 0;
   }

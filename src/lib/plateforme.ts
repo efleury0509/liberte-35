@@ -314,18 +314,32 @@ export interface EntreeJournalLue extends EntreeJournal {
   horodatage: string;
 }
 
-/** Une page du journal ; `restantes` : entrées plus anciennes encore à lire. */
+/** Une page du journal, avec le total des entrées qui suivent le filtre. */
 export interface PageJournal {
   entrees: EntreeJournalLue[];
-  restantes: number;
+  total: number;
+  /** Horodatage de la plus ancienne entrée du journal entier, sans filtre. */
+  plusAncien: string | null;
+}
+
+/** Filtre du journal : sections (vide = toutes) et période en heure
+ * universelle, début compris, fin exclue. */
+export interface FiltreJournal {
+  sections?: string[];
+  debut?: string | null;
+  fin?: string | null;
 }
 
 export interface DemandeJournal {
-  /** Numéro de la dernière entrée déjà affichée ; absent pour la première page. */
-  avant?: number | null;
+  /** Nombre d'entrées à sauter (page × taille). */
+  decalage: number;
   limite: number;
-  /** Sections enregistrées à garder ; vide pour toutes. */
-  sections?: string[];
+  filtre?: FiltreJournal;
+}
+
+export interface PeriodeJournal {
+  debut: string;
+  fin: string;
 }
 
 // Étape 6 : sauvegardes et export (identiques aux types Rust).
@@ -414,6 +428,8 @@ export interface Plateforme {
   lirePaie(): Promise<DonneesPaie>;
   /** Lecture seule : le journal ne se modifie jamais. */
   lireJournal(demande: DemandeJournal): Promise<PageJournal>;
+  /** Lecture seule : nombre d'entrées dans chaque période. */
+  compterJournal(periodes: PeriodeJournal[]): Promise<number[]>;
   appliquerChangementsPaie(changements: ChangementPaie[], journal: EntreeJournal[]): Promise<DonneesPaie>;
   etatSauvegardes(): Promise<EtatSauvegardes>;
   apercuRestauration(source: SourceCopie): Promise<ApercuRestauration>;
@@ -433,7 +449,13 @@ export function dansTauri(): boolean {
 const plateformeTauri: Plateforme = {
   etat: () => invoke<EtatApplication>('etat_application'),
   lirePaie: () => invoke<DonneesPaie>('lire_paie'),
-  lireJournal: (d) => invoke<PageJournal>('lire_journal', { avant: d.avant ?? null, limite: d.limite, sections: d.sections ?? [] }),
+  lireJournal: (d) =>
+    invoke<PageJournal>('lire_journal', {
+      decalage: d.decalage,
+      limite: d.limite,
+      filtre: { sections: d.filtre?.sections ?? [], debut: d.filtre?.debut ?? null, fin: d.filtre?.fin ?? null },
+    }),
+  compterJournal: (periodes) => invoke<number[]>('compter_journal', { periodes }),
   appliquerChangementsPaie: (changements, journal) =>
     invoke<DonneesPaie>('appliquer_changements_paie', { changements, journal }),
   etatSauvegardes: () => invoke<EtatSauvegardes>('etat_sauvegardes'),
@@ -601,7 +623,7 @@ export function creerApercu(): Plateforme {
       };
     },
     lirePaie: async () => cloner(donnees),
-    lireJournal: async ({ avant, limite, sections }) => {
+    lireJournal: async ({ decalage, limite, filtre }) => {
       const tous: EntreeJournalLue[] = journal.map((e, i) => ({
         id: i + 1,
         horodatage: e.horodatage,
@@ -612,10 +634,19 @@ export function creerApercu(): Plateforme {
         nouvelleValeur: e.nouvelleValeur ?? null,
         motif: e.motif ?? null,
       }));
-      const garde = tous.filter((e) => (avant == null || e.id < avant) && (!sections || sections.length === 0 || sections.includes(e.section))).reverse();
+      const sections = filtre?.sections ?? [];
+      const garde = tous
+        .filter(
+          (e) =>
+            (sections.length === 0 || sections.includes(e.section)) &&
+            (filtre?.debut == null || e.horodatage >= filtre.debut) &&
+            (filtre?.fin == null || e.horodatage < filtre.fin),
+        )
+        .reverse();
       const n = Math.min(200, Math.max(1, limite));
-      return { entrees: garde.slice(0, n), restantes: Math.max(0, garde.length - n) };
+      return { entrees: garde.slice(decalage, decalage + n), total: garde.length, plusAncien: tous[0]?.horodatage ?? null };
     },
+    compterJournal: async (periodes) => periodes.map((p) => journal.filter((e) => e.horodatage >= p.debut && e.horodatage < p.fin).length),
     appliquerChangementsPaie: async (changements, entrees) => {
       if (entrees.length === 0) throw 'Un changement de paie doit être consigné au journal. Rien n’a été enregistré.';
       // Tout ou rien : en cas d'erreur, rien n'est modifié.

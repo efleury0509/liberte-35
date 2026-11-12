@@ -43,7 +43,7 @@
     }
     // Secondaires : un échec ici ne cache pas l'essentiel.
     try {
-      derniers = (await plateforme.lireJournal({ limite: 3 })).entrees.map((e) => presenterEntree(e));
+      derniers = (await plateforme.lireJournal({ decalage: 0, limite: 3 })).entrees.map((e) => presenterEntree(e));
     } catch {
       derniers = [];
     }
