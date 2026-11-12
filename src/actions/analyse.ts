@@ -12,20 +12,10 @@ import { appliquerChangements } from '../lib/appliquer';
 import type { AjustementStocke, ChangementPaie, DonneesPaie } from '../lib/plateforme';
 import { ajustementsOrphelins, comparerRattachements, planifier, type ChangementRattachement, type Cycle } from '../noyau/cycles';
 import { ajouterJours, formaterDateCourte, type DateCivile } from '../noyau/dates';
-import { paiesEntre, type ProfilPaie } from '../noyau/paie';
+import { debutDuCalendrier, type ProfilPaie } from '../noyau/paie';
 import { montantOuACompleter, versNoyau, type DonneesNoyau } from './paie';
 
 export const NOMBRE_CYCLES = 13;
-
-/**
- * Premier jour du calendrier : la date de départ, ou la toute première paie
- * si une exception l'a versée avant (0.4.3).
- */
-function debutDuCalendrier(profil: ProfilPaie, exceptions: Parameters<typeof paiesEntre>[1]): DateCivile {
-  const depart = profil.frequence.depart;
-  const premiere = paiesEntre(profil, exceptions, ajouterJours(depart, -31), ajouterJours(depart, 31))[0]?.date ?? depart;
-  return premiere < depart ? premiere : depart;
-}
 
 /**
  * Cycles affichés : le cycle actuel et les suivants (13 par défaut ; « Voir
@@ -93,8 +83,10 @@ export function aVerifierAvant(
 export interface Analyse {
   /** « Cycle du … : disponible planifié A → B », quatre au plus. */
   cycles: string[];
-  /** Des cycles terminés avant le cycle actuel changeraient. */
+  /** Des cycles terminés avant le cycle actuel changeraient (H4 : tout l'historique). */
   passes: boolean;
+  /** H4 : combien de paies passées changeraient, et la plus ancienne. */
+  paiesPassees: { nombre: number; plusAncienne: DateCivile | null };
   /** Éléments à date fixe qui changeraient de paie (A11). */
   rattachements: ChangementRattachement[];
   /** Ajustements qui deviendraient orphelins avec ces changements. */
@@ -113,7 +105,7 @@ const entreeDe = (n: DonneesNoyau) => ({
 });
 
 export function analyser(d: DonneesPaie, changements: readonly ChangementPaie[], jour: DateCivile): Analyse {
-  const vide: Analyse = { cycles: [], passes: false, rattachements: [], orphelins: [] };
+  const vide: Analyse = { cycles: [], passes: false, paiesPassees: { nombre: 0, plusAncienne: null }, rattachements: [], orphelins: [] };
   const avant = versNoyau(d);
   const apresDonnees = appliquerChangements(d, changements);
   const apres = versNoyau(apresDonnees);
@@ -138,24 +130,29 @@ export function analyser(d: DonneesPaie, changements: readonly ChangementPaie[],
     cycles = [...lignes.slice(0, MAX_CYCLES_MONTRES), reste === 1 ? 'Et 1 autre cycle.' : `Et ${reste} autres cycles.`];
   }
 
-  // Cycles passés : du 200e jour avant aujourd'hui à la veille du cycle actuel.
+  // H4 : cycles passés, sur TOUT l'historique (du début du calendrier à la
+  // veille du cycle actuel), quelle que soit leur ancienneté.
   const debutActuel = vueAvant.cycles[0]?.debut ?? jour;
-  let passes = false;
-  const debutPasse = ajouterJours(jour, -200);
+  const debutAvant = debutDuCalendrier(avant.profil, avant.exceptions);
+  const debutApres = debutDuCalendrier(apres.profil, apres.exceptions);
+  const debutPasse = debutAvant < debutApres ? debutAvant : debutApres;
   const finPasse = ajouterJours(debutActuel, -1);
+  const paiesPassees: Analyse['paiesPassees'] = { nombre: 0, plusAncienne: null };
   if (finPasse >= debutPasse) {
-    const empreinte = (n: DonneesNoyau) =>
-      JSON.stringify(
+    const empreintes = (n: DonneesNoyau) =>
+      new Map(
         planifier({ ...entreeDe(n), profil: n.profil! }, debutPasse, finPasse).cycles.map((c) => [
-          c.paie.dateOrigine,
-          c.paie.date,
-          c.paie.montant,
-          c.disponible,
-          c.lignes.map((l) => [l.elementId, l.origine, l.montant, l.compte]),
+          c.paie.dateOrigine as string,
+          JSON.stringify([c.paie.date, c.fin, c.paie.montant, c.disponible, c.lignes.map((l) => [l.elementId, l.origine, l.montant, l.compte])]),
         ]),
       );
-    passes = empreinte(avant) !== empreinte(apres);
+    const a = empreintes(avant);
+    const b = empreintes(apres);
+    const changees = [...new Set([...a.keys(), ...b.keys()])].filter((k) => a.get(k) !== b.get(k)).sort();
+    paiesPassees.nombre = changees.length;
+    paiesPassees.plusAncienne = (changees[0] as DateCivile | undefined) ?? null;
   }
+  const passes = paiesPassees.nombre > 0;
 
   // A11 : rattachements des éléments à date fixe, sur le passé récent et l'avenir affiché.
   const fenetre = (n: DonneesNoyau) => planifier({ ...entreeDe(n), profil: n.profil! }, debutPasse, vueAvant.cycles.at(-1)?.debut ?? jour);
@@ -168,5 +165,5 @@ export function analyser(d: DonneesPaie, changements: readonly ChangementPaie[],
   const nouveaux = orph(apres);
   const orphelins = (apresDonnees.ajustements ?? []).filter((a) => nouveaux.has(`${a.elementId}|${a.origine}`) && !deja.has(`${a.elementId}|${a.origine}`));
 
-  return { cycles, passes, rattachements, orphelins };
+  return { cycles, passes, paiesPassees, rattachements, orphelins };
 }

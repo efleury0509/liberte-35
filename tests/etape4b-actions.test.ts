@@ -69,7 +69,8 @@ describe('C — l’aperçu seulement quand il protège', () => {
   it('ajout qui touche des cycles passés : aperçu, avec un avertissement en tête', () => {
     const p = proposerAjout(donnees(), saisie({ date: '2027-01-10' }), JOUR);
     expect(p.apercu).toBe(true);
-    expect(p.consequences[0]).toBe('Attention : des cycles déjà passés changeraient.');
+    // H4 : la phrase dit aussi quelles paies passées changent.
+    expect(p.consequences[0]).toBe('Attention : des cycles déjà passés changeraient (la paie du jeudi 7 janvier 2027).');
   });
   it('montant futur : direct ; suppression et changement de fréquence : toujours un aperçu', () => {
     expect(proposerMontant(donnees(), 'epicerie', '2027-03-01', '350', JOUR).apercu).toBe(false);

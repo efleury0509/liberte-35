@@ -11,6 +11,8 @@ import { paiesEntre, type ExceptionPaie, type Paie, type ProfilPaie } from '../n
 import { montantEnVigueur, type MontantDate } from '../noyau/regles';
 import { versAjustementNoyau, versConfirmationNoyau, versElementNoyau } from './elementsStockes';
 import { confirmationsPerdues, messageConfirmationsPerdues } from './protection';
+import { redecoupage } from './redecoupage';
+import { appliquerChangements } from '../lib/appliquer';
 import type {
   ChangementPaie,
   DonneesPaie,
@@ -160,7 +162,7 @@ export interface SaisieProfil {
   montant?: string;
 }
 
-export function proposerProfil(d: DonneesPaie, s: SaisieProfil): Proposition {
+export function proposerProfil(d: DonneesPaie, s: SaisieProfil, jour?: DateCivile): Proposition {
   const depart = lireDate(s.depart, 'Date de la première paie');
   let jours: [number, number] | null = null;
   if (s.frequence === 'deuxFoisParMois') {
@@ -188,7 +190,28 @@ export function proposerProfil(d: DonneesPaie, s: SaisieProfil): Proposition {
       consequences.push('Le montant net reste « À compléter » : aucun disponible ne sera calculé avant que tu l’indiques.');
     }
   } else {
-    consequences.push('Le calendrier de paie est recalculé. Les salaires datés sont conservés.');
+    consequences.push('Le calendrier de paie est recalculé en entier : il n’a pas d’historique « à partir du ». Les salaires datés sont conservés.');
+    // H4 : ce que ce nouveau calendrier ferait aux paies passées, chiffré.
+    // Si on ne peut pas le savoir, rien n'est enregistré.
+    if (jour !== undefined) {
+      let r: ReturnType<typeof redecoupage>;
+      try {
+        r = redecoupage(versNoyau(d), versNoyau(appliquerChangements(d, changements)), jour);
+      } catch {
+        throw new ErreurSaisie(
+          'Les conséquences de ce nouveau calendrier sur tes paies passées n’ont pas pu être calculées : rien n’est enregistré. Tes données ne changent pas.',
+        );
+      }
+      if (r.periodes === 0 && r.operations === 0) {
+        consequences.push('Les paies passées gardent leurs périodes et leurs opérations.');
+      } else {
+        consequences.push(
+          `Attention : ce changement redécoupe tes paies passées. ${r.periodes === 1 ? '1 paie passée change de période' : `${r.periodes} paies passées changent de période`} ; ${
+            r.operations === 1 ? '1 opération passée change de paie' : `${r.operations} opérations passées changent de paie`
+          }${r.confirmees > 0 ? ` (dont ${r.confirmees} confirmée${r.confirmees > 1 ? 's' : ''} : ${r.confirmees > 1 ? 'leurs confirmations sont gardées' : 'sa confirmation est gardée'})` : ''}.`,
+        );
+      }
+    }
     if (d.exceptions.length > 0) {
       consequences.push(
         `${d.exceptions.length} exception(s) de paie restent attachées à leur date d'origine ; celles qui ne correspondent plus à une paie seront ignorées.`,

@@ -186,6 +186,20 @@ export interface Brouillon {
   apercuForce?: boolean;
 }
 
+/** H4 : message quand les conséquences ne peuvent pas être calculées. */
+export const CONSEQUENCES_INCONNUES =
+  'Les conséquences de cette modification n’ont pas pu être calculées : rien n’est enregistré. Tes données ne changent pas ; réessaie, ou fais une sauvegarde avant de recommencer.';
+
+/** H4 : « Attention : des cycles déjà passés changeraient (… ) ». */
+export function phrasePaiesPassees(p: { nombre: number; plusAncienne: DateCivile | null }): string {
+  const detail = p.plusAncienne
+    ? p.nombre === 1
+      ? ` (la paie du ${formaterDateLongue(p.plusAncienne)})`
+      : ` (${p.nombre} paies passées, depuis celle du ${formaterDateLongue(p.plusAncienne)})`
+    : '';
+  return `Attention : des cycles déjà passés changeraient${detail}.`;
+}
+
 /**
  * Complète une proposition avec l'analyse de ses conséquences (C) :
  * cycles touchés, cycles passés, ajustements devenus orphelins. Un
@@ -196,14 +210,20 @@ export function finaliser(d: DonneesPaie, b: Brouillon, jour: DateCivile): Propo
   // Q23 : une modification qui ferait disparaître une opération confirmée est refusée.
   const perdues = confirmationsPerdues(d, b.changements);
   if (perdues.length > 0) throw new ErreurSaisie(messageConfirmationsPerdues(d, perdues));
-  const an = analyser(d, b.changements, jour);
+  // H4 : si les conséquences ne peuvent pas être calculées, rien n'est enregistré.
+  let an: ReturnType<typeof analyser>;
+  try {
+    an = analyser(d, b.changements, jour);
+  } catch {
+    throw new ErreurSaisie(CONSEQUENCES_INCONNUES);
+  }
   const nom = (id: string) => (d.elements ?? []).find((e) => e.id === id)?.libelle ?? id;
   const objet = (id: string) => {
     const e = (d.elements ?? []).find((x) => x.id === id);
     return e ? nomObjet(e) : id;
   };
   const consequences = [
-    ...(an.passes ? ['Attention : des cycles déjà passés changeraient.'] : []),
+    ...(an.passes ? [phrasePaiesPassees(an.paiesPassees)] : []),
     ...(b.avant ?? []),
     ...an.cycles,
     ...an.orphelins.map(

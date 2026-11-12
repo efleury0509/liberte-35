@@ -744,7 +744,7 @@
           depart: fDepart,
           ...(fFrequence === 'deuxFoisParMois' ? { jours: [Number(fJour1), Number(fJour2)] as [number, number] } : {}),
           ...(creation ? { montant: fMontant } : {}),
-        }),
+        }, jour),
       );
     }}
   >

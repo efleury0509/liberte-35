@@ -10,7 +10,7 @@
 // - Une paie déplacée reste strictement entre la précédente et la suivante
 //   (Q11) : jamais de doublon ni de versement supplémentaire.
 
-import { ajouterMois, composer, parties, type DateCivile } from './dates';
+import { ajouterJours, ajouterMois, composer, parties, type DateCivile } from './dates';
 import { datesDe, rangsDesPaies, type Frequence } from './frequences';
 import type { Cents } from './montants';
 import { montantEnVigueur, type MontantDate } from './regles';
@@ -129,4 +129,14 @@ export function paiesEntre(
   }
 
   return toutes.filter((p) => p.date >= debut && p.date <= fin);
+}
+
+/**
+ * Premier jour du calendrier : la date de départ, ou la toute première paie
+ * si une exception l'a versée avant (0.4.3).
+ */
+export function debutDuCalendrier(profil: ProfilPaie, exceptions: readonly ExceptionPaie[]): DateCivile {
+  const depart = profil.frequence.depart;
+  const premiere = paiesEntre(profil, exceptions, ajouterJours(depart, -31), ajouterJours(depart, 31))[0]?.date ?? depart;
+  return premiere < depart ? premiere : depart;
 }
