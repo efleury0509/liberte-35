@@ -117,13 +117,21 @@
 </div>
 
 <style>
+  /* V1 lot 6a : exactement la hauteur de la fenêtre ; la barre reste fixe et
+     seule la zone principale défile (elle contient tout son contenu). */
   .application {
     display: grid;
-    grid-template-columns: var(--largeur-barre) 1fr;
-    height: 100%;
+    grid-template-columns: var(--largeur-barre) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   main {
+    position: relative;
+    min-height: 0;
+    min-width: 0;
     padding: var(--espace-6) var(--espace-10) var(--espace-8);
     overflow-y: auto;
   }

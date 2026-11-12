@@ -126,11 +126,4 @@
     color: var(--couleur-attention);
     font-size: var(--taille-petit);
   }
-  .visuellement-cache {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-  }
 </style>

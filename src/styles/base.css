@@ -42,6 +42,55 @@ body {
   height: 100%;
 }
 
+/* V1 lot 6a : la page elle-même ne défile jamais ; seule la zone principale
+   défile (et la barre latérale, si la fenêtre est très petite). */
+html,
+body {
+  overflow: hidden;
+}
+
+/* Texte réservé aux lecteurs d'écran. */
+.visuellement-cache {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* V1 lot 6a : barres de défilement fines, prune pâle sur crème, plus
+   foncées au survol. WebView2 (Chromium) utilise les pseudo-éléments ;
+   les autres moteurs, les propriétés standard. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--couleur-fond);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--prune-300);
+  border-radius: var(--arrondi-pilule);
+  border: 2px solid var(--couleur-fond);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--prune-600);
+}
+::-webkit-scrollbar-corner {
+  background: var(--couleur-fond);
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--prune-300) var(--couleur-fond);
+  }
+}
+
 :focus-visible {
   outline: 3px solid var(--couleur-focus);
   outline-offset: 2px;
