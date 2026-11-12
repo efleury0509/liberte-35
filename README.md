@@ -151,6 +151,11 @@ et dans le cahier fonctionnel de référence.
   appliqués avant la pagination, « Réinitialiser les filtres ». Lecture
   seule ; aucun calcul, aucune règle ni structure de données changés
   (toujours 9).
+- Illustrations — Dépenses, fabrication Essai (version 0.18.0) : loutre
+  gestionnaire (2e version approuvée) en tête de la colonne de droite,
+  entière ; soleil d'en-tête retiré ; plus de débordement horizontal à
+  1024 px. Aucun calcul, aucune règle ni structure de données changés
+  (toujours 9).
 
 ## Organisation du code
 
