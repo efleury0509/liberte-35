@@ -14,7 +14,9 @@
     type Proposition,
   } from '../../actions/paie';
   import { cyclesAffiches, NOMBRE_CYCLES } from '../../actions/elements';
-  import { aVerifierAvant } from '../../actions/analyse';
+  import { aVerifierAvant, paiesTerminees } from '../../actions/analyse';
+  import HistoriquePaies from './HistoriquePaies.svelte';
+  import { anneeParDefaut, anneesHistorique } from '../../lib/historique';
   import {
     lireOccurrence,
     proposerAjustement,
@@ -77,7 +79,6 @@
   let enCours = $state(false);
   let remise = $state(0);
   let nombreCycles = $state(NOMBRE_CYCLES);
-  let nombrePrecedents = $state(0);
   /** Dernier enregistrement direct, qu'on peut annuler (C). */
   let dernier: { titre: string; inverse: ChangementPaie[]; journal: EntreeJournal[] } | null = $state(null);
   let messageAnnulation: string | null = $state(null);
@@ -153,7 +154,7 @@
     }
     if (!noyau?.profil) return null;
     const entree = { exceptions: noyau.exceptions, elements: noyau.elements, ajustements: noyau.ajustements, confirmations: noyau.confirmations, seuil: noyau.seuil, couvertures: noyau.couvertures };
-    const v = cyclesAffiches(noyau.profil, entree, jour, nombreCycles, nombrePrecedents);
+    const v = cyclesAffiches(noyau.profil, entree, jour, nombreCycles);
     // H1 : le rappel compte tout l'historique, quelle que soit son ancienneté.
     return { ...v, aVerifierAvant: v.cycles[0] ? aVerifierAvant(noyau.profil, entree, jour, v.cycles[0].debut) : 0 };
   }
@@ -377,6 +378,32 @@
     { id: 'toutes', libelle: 'Toutes mes paies' },
   ];
   let ongletPaies: OngletPaies = $state('prochaines');
+  // H2 : « Toutes mes paies » montre soit les paies en cours et à venir, soit
+  // les paies terminées (par année et par mois).
+  let vueToutes: 'avenir' | 'terminees' = $state('avenir');
+  let anneeHistorique: number | null = $state(null);
+  let filtreAVerifier = $state(false);
+  const terminees: Cycle[] = $derived.by(() => {
+    if (exemple || !noyau?.profil) return [];
+    try {
+      const n = noyau;
+      return paiesTerminees(
+        n.profil!,
+        { exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, confirmations: n.confirmations, seuil: n.seuil, couvertures: n.couvertures },
+        jour,
+      );
+    } catch {
+      return [];
+    }
+  });
+  /** Le rappel « à vérifier » mène aux paies terminées concernées, même anciennes. */
+  function voirAVerifier() {
+    ongletPaies = 'toutes';
+    fenetre = null;
+    vueToutes = 'terminees';
+    filtreAVerifier = true;
+    anneeHistorique = anneeParDefaut(anneesHistorique(terminees), true);
+  }
   interface CibleFenetre {
     cycle: DateCivile;
     ligne: { elementId: string; origine: DateCivile } | null;
@@ -384,7 +411,8 @@
   let fenetre = $state(null) as CibleFenetre | null;
   const cycleFenetre: Cycle | null = $derived.by(() => {
     const f = fenetre as CibleFenetre | null;
-    return f && vue ? (vue.cycles.find((x) => x.paie.dateOrigine === f.cycle) ?? null) : null;
+    if (!f) return null;
+    return vue?.cycles.find((x) => x.paie.dateOrigine === f.cycle) ?? terminees.find((x) => x.paie.dateOrigine === f.cycle) ?? null;
   });
   const ligneFenetre: Ligne | null = $derived.by(() => {
     const cible = (fenetre as CibleFenetre | null)?.ligne;
@@ -504,14 +532,7 @@
   {#if !exemple && vue.aVerifierAvant > 0}
     <p class="rappel-passees" data-testid="a-verifier-avant">
       {vue.aVerifierAvant === 1 ? '1 élément à vérifier' : `${vue.aVerifierAvant} éléments à vérifier`} dans les paies précédentes.
-      <button
-        type="button"
-        class="petit"
-        onclick={() => {
-          nombrePrecedents += 2;
-          choisirOnglet('toutes');
-        }}>Les afficher dans « Toutes mes paies »</button
-      >
+      <button type="button" class="petit" onclick={voirAVerifier}>Les retrouver dans les paies terminées</button>
     </p>
   {/if}
   <QuatrePaies
@@ -528,6 +549,15 @@
 {#if vue && ongletPaies === 'toutes'}
   <div role="tabpanel" id="panneau-paies-toutes" aria-labelledby="onglet-paies-toutes">
   <h2 class="titre-tableau">Toutes mes paies</h2>
+  {#if !exemple}
+    <div class="choix-vue" role="group" aria-label="Paies à afficher">
+      <button type="button" aria-pressed={vueToutes === 'avenir'} onclick={() => (vueToutes = 'avenir')}>En cours et à venir</button>
+      <button type="button" aria-pressed={vueToutes === 'terminees'} onclick={() => (vueToutes = 'terminees')}>Terminées</button>
+    </div>
+  {/if}
+  {#if !exemple && vueToutes === 'terminees'}
+    <HistoriquePaies cycles={terminees} bind:annee={anneeHistorique} bind:seulementAVerifier={filtreAVerifier} onouvrir={(c) => ouvrirFenetre(c.paie.dateOrigine)} />
+  {:else}
   {#if vue.plan.avantPremierCycle.length > 0}
     <p class="discret" data-testid="avant-premier-cycle">
       Avant le premier cycle (non compté) :
@@ -540,25 +570,19 @@
 
   {#if !exemple && vue.aVerifierAvant > 0}
     <p class="discret" data-testid="a-verifier-avant">
-      {vue.aVerifierAvant === 1 ? '1 élément à vérifier' : `${vue.aVerifierAvant} éléments à vérifier`} dans les cycles précédents.
-      <button type="button" class="petit" onclick={() => (nombrePrecedents += 2)}>Les afficher</button>
+      {vue.aVerifierAvant === 1 ? '1 élément à vérifier' : `${vue.aVerifierAvant} éléments à vérifier`} dans les paies terminées.
+      <button type="button" class="petit" onclick={voirAVerifier}>Les retrouver</button>
     </p>
   {/if}
   <TableauCycles cycles={vue.cycles} {choisi} courant={vue.courant} onchoisir={choisirCycle} {detail} />
   {#if !exemple}
     <p class="boutons">
-      <button type="button" onclick={() => (nombrePrecedents += 2)}>Voir les paies précédentes</button>
       <button type="button" onclick={() => (nombreCycles += NOMBRE_CYCLES)}>Voir les paies suivantes</button>
-      {#if nombreCycles > NOMBRE_CYCLES || nombrePrecedents > 0}
-        <button
-          type="button"
-          onclick={() => {
-            nombreCycles = NOMBRE_CYCLES;
-            nombrePrecedents = 0;
-          }}>Revenir au cycle actuel</button
-        >
+      {#if nombreCycles > NOMBRE_CYCLES}
+        <button type="button" onclick={() => (nombreCycles = NOMBRE_CYCLES)}>Revenir au cycle actuel</button>
       {/if}
     </p>
+  {/if}
   {/if}
   <p class="discret">
     Le disponible planifié est le résultat de la planification : ce n’est pas le solde de ton compte.
@@ -1243,6 +1267,21 @@
     background: var(--prune-700);
     border-color: var(--prune-700);
     color: var(--creme-50);
+  }
+  .choix-vue {
+    display: inline-flex;
+    gap: var(--espace-2);
+    margin: 0 0 var(--espace-4);
+  }
+  .choix-vue button {
+    border: 2px solid var(--couleur-bordure-forte);
+    background: var(--couleur-surface);
+    color: var(--couleur-texte);
+    font-weight: 700;
+  }
+  .choix-vue button[aria-pressed='true'] {
+    background: var(--couleur-panneau);
+    border-color: var(--prune-600);
   }
   .rappel-passees {
     display: flex;

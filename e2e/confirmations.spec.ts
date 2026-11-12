@@ -36,13 +36,21 @@ async function preparer(page: Page) {
 }
 
 const ligneCycle = (page: Page, debut: string) => page.locator(`tr[data-cycle="${debut}"]`);
+const paieTerminee = (page: Page, debut: string) => page.locator(`[data-testid="paie-terminee"][data-cycle="${debut}"]`);
 async function details(page: Page, debut: string) {
+  // Une fenêtre de détail déjà ouverte se referme d'abord.
+  if (await page.getByTestId('fenetre-formulaire').count()) await page.getByTestId('fenetre-formulaire').getByRole('button', { name: 'Abandonner sans enregistrer' }).click();
   await voirTout(page);
-  // Aujourd'hui = 10 mars : les cycles de février sont des cycles précédents.
-  if ((await ligneCycle(page, debut).count()) === 0) await page.getByRole('button', { name: 'Voir les paies précédentes' }).click();
-  const b = ligneCycle(page, debut).getByRole('button', { name: 'Détails' });
-  if ((await b.getAttribute('aria-expanded')) !== 'true') await b.click();
-  return page.getByTestId('detail-cycle');
+  await page.getByRole('button', { name: 'En cours et à venir' }).click();
+  if ((await ligneCycle(page, debut).count()) > 0) {
+    const b = ligneCycle(page, debut).getByRole('button', { name: 'Détails' });
+    if ((await b.getAttribute('aria-expanded')) !== 'true') await b.click();
+    return page.getByTestId('detail-cycle');
+  }
+  // H2 : aujourd'hui = 10 mars, les paies de février sont terminées.
+  await page.getByRole('button', { name: 'Terminées' }).click();
+  await paieTerminee(page, debut).click();
+  return page.getByTestId('fenetre-formulaire').getByTestId('detail-cycle');
 }
 
 test('V1 lot 6b : le tableau des cycles est dans « Toutes mes paies » ; les cartes, « Ma paie » et les revenus dans « Mes prochaines paies »', async ({ page }) => {
@@ -59,25 +67,29 @@ test('V1 lot 6b : le tableau des cycles est dans « Toutes mes paies » ; les ca
 
 test('confirmer d’un clic, puis « Annuler » : retour exact à « À vérifier »', async ({ page }) => {
   await preparer(page);
-  // Cycles précédents : une phrase discrète les signale.
-  // V1 lot 6b : le rappel reste visible sous « Mes prochaines paies » et mène à « Toutes mes paies ».
+  // Paies terminées : une phrase discrète les signale, et mène à elles (H2).
   await expect(page.getByTestId('a-verifier-avant')).toContainText('éléments à vérifier dans les paies précédentes');
-  await page.getByTestId('a-verifier-avant').getByRole('button', { name: 'Les afficher dans « Toutes mes paies »' }).click();
+  await page.getByTestId('a-verifier-avant').getByRole('button', { name: 'Les retrouver dans les paies terminées' }).click();
   await expect(page.getByRole('tab', { name: 'Toutes mes paies' })).toHaveAttribute('aria-selected', 'true');
-  // M2 (18 févr.) : paie et loyer du 1er mars sont à vérifier.
-  await expect(ligneCycle(page, '2027-02-18').getByTestId('a-verifier')).toHaveText('2 à vérifier');
-  const detail = await details(page, '2027-02-18');
+  await expect(page.getByRole('button', { name: 'Terminées' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('filtre-a-verifier')).toBeChecked();
+  // M2 (18 févr.) : paie et loyer du 1er mars sont à vérifier ; « Terminée » est dit à part.
+  const m2 = paieTerminee(page, '2027-02-18');
+  await expect(m2).toContainText('Terminée');
+  await expect(m2).toContainText('2 à vérifier');
+  await m2.click();
+  const detail = page.getByTestId('fenetre-formulaire').getByTestId('detail-cycle');
   const loyer = detail.locator('tr[data-ligne]', { hasText: 'Loyer' });
   await expect(loyer.getByTestId('statut')).toHaveText('À vérifier');
   await loyer.getByRole('button', { name: 'Confirmer Loyer' }).click();
   await expect(page.getByTestId('apercu')).toHaveCount(0);
   await expect(loyer.getByTestId('statut')).toHaveText('Confirmé le 10 mars');
-  await expect(ligneCycle(page, '2027-02-18').getByTestId('a-verifier')).toHaveText('1 à vérifier');
+  await expect(m2).toContainText('1 à vérifier');
   await expect(page.getByTestId('enregistre')).toContainText('Enregistré : Confirmer « Loyer » (1er mars).');
   await expect(page.getByTestId('enregistre')).not.toContainText('..');
   await page.getByTestId('enregistre').getByRole('button', { name: 'Annuler' }).click();
   await expect(loyer.getByTestId('statut')).toHaveText('À vérifier');
-  await expect(ligneCycle(page, '2027-02-18').getByTestId('a-verifier')).toHaveText('2 à vérifier');
+  await expect(m2).toContainText('2 à vérifier');
 });
 
 test('confirmer autrement : la date du jour est proposée ; la paie reçue différente change le disponible', async ({ page }) => {
@@ -155,6 +167,7 @@ test('protection : une suspension qui effacerait un loyer confirmé est refusée
   await preparer(page);
   const detail = await details(page, '2027-02-18');
   await detail.locator('tr[data-ligne]', { hasText: 'Loyer' }).getByRole('button', { name: 'Confirmer Loyer' }).click();
+  await page.keyboard.press('Escape');
   await page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: 'Dépenses', exact: true }).click();
   const loyer = page.getByTestId('panneau-fixes').getByRole('listitem').filter({ hasText: 'Loyer' });
   await loyer.getByRole('button', { name: 'Gérer' }).click();

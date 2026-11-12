@@ -60,6 +60,19 @@ export function cyclesAffiches(
 }
 
 /**
+ * H2 : les paies terminées, depuis le début du calendrier. Une paie est
+ * terminée quand toute sa période est passée (fin avant aujourd'hui), qu'il
+ * lui reste ou non des éléments à vérifier : « terminée » ne veut pas dire
+ * « vérifiée ». Mêmes calculs que partout ailleurs (planifier).
+ */
+export function paiesTerminees(profil: ProfilPaie, entree: Omit<Parameters<typeof planifier>[0], 'profil'>, jour: DateCivile): Cycle[] {
+  const debut = debutDuCalendrier(profil, entree.exceptions ?? []);
+  const fin = ajouterJours(jour, -1);
+  if (fin < debut) return [];
+  return planifier({ ...entree, aujourdhui: jour, profil }, debut, fin).cycles.filter((c) => c.fin < jour);
+}
+
+/**
  * H1 : nombre d'éléments à vérifier dans toutes les paies versées avant
  * `avant` (le début du premier cycle affiché), depuis le début du
  * calendrier, quelle que soit leur ancienneté. Les statuts sont ceux du plan
