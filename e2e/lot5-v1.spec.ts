@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ouvrirMesPaies } from "./onglets";
 
 // V1 lot 5 : Dépenses, Dettes et Paramètres. Aperçu en mémoire, données fictives.
 const nav = (page: Page, nom: string) =>
@@ -9,6 +10,7 @@ const nav = (page: Page, nom: string) =>
 
 async function preparer(page: Page) {
   await page.goto("/?aujourdhui=2027-01-15");
+  await ouvrirMesPaies(page);
   await page.getByRole("button", { name: "Mes paies" }).click();
   await page.getByLabel("Date de la première paie").fill("2027-01-07");
   await page.getByLabel("Montant net habituel ($, facultatif)").fill("2100");
@@ -153,6 +155,7 @@ test("Paramètres : onglets par catégorie, utilisables au clavier", async ({
   page,
 }) => {
   await page.goto("/?aujourdhui=2027-01-15");
+  await ouvrirMesPaies(page);
   await nav(page, "Paramètres");
   const sauvegardes = page.getByRole("tab", { name: "Sauvegardes locales" });
   await expect(sauvegardes).toHaveAttribute("aria-selected", "true");

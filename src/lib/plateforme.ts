@@ -307,6 +307,27 @@ export interface EntreeJournal {
   motif: string | null;
 }
 
+/** Accueil et journal (0.16.0) : une entrée lue, telle qu'enregistrée. */
+export interface EntreeJournalLue extends EntreeJournal {
+  id: number;
+  /** Moment du changement, en heure universelle (« 2026-11-12T03:46:00Z »). */
+  horodatage: string;
+}
+
+/** Une page du journal ; `restantes` : entrées plus anciennes encore à lire. */
+export interface PageJournal {
+  entrees: EntreeJournalLue[];
+  restantes: number;
+}
+
+export interface DemandeJournal {
+  /** Numéro de la dernière entrée déjà affichée ; absent pour la première page. */
+  avant?: number | null;
+  limite: number;
+  /** Sections enregistrées à garder ; vide pour toutes. */
+  sections?: string[];
+}
+
 // Étape 6 : sauvegardes et export (identiques aux types Rust).
 export type SourceCopie =
   | { genre: 'jour'; nom: string }
@@ -391,6 +412,8 @@ export interface AvisCopie {
 export interface Plateforme {
   etat(): Promise<EtatApplication>;
   lirePaie(): Promise<DonneesPaie>;
+  /** Lecture seule : le journal ne se modifie jamais. */
+  lireJournal(demande: DemandeJournal): Promise<PageJournal>;
   appliquerChangementsPaie(changements: ChangementPaie[], journal: EntreeJournal[]): Promise<DonneesPaie>;
   etatSauvegardes(): Promise<EtatSauvegardes>;
   apercuRestauration(source: SourceCopie): Promise<ApercuRestauration>;
@@ -410,6 +433,7 @@ export function dansTauri(): boolean {
 const plateformeTauri: Plateforme = {
   etat: () => invoke<EtatApplication>('etat_application'),
   lirePaie: () => invoke<DonneesPaie>('lire_paie'),
+  lireJournal: (d) => invoke<PageJournal>('lire_journal', { avant: d.avant ?? null, limite: d.limite, sections: d.sections ?? [] }),
   appliquerChangementsPaie: (changements, journal) =>
     invoke<DonneesPaie>('appliquer_changements_paie', { changements, journal }),
   etatSauvegardes: () => invoke<EtatSauvegardes>('etat_sauvegardes'),
@@ -443,11 +467,12 @@ function simulation(): string | null {
 export function creerApercu(): Plateforme {
   interface Instantane {
     donnees: DonneesPaie;
-    journal: ChangementJournal[];
+    journal: (ChangementJournal & Partial<Pick<EntreeJournal, 'ancienneValeur' | 'nouvelleValeur' | 'motif'>>)[];
     horodatage: string;
   }
   let donnees: DonneesPaie = donneesVides();
-  let journal: ChangementJournal[] = [];
+  type ChangementComplet = ChangementJournal & Partial<Pick<EntreeJournal, 'ancienneValeur' | 'nouvelleValeur' | 'motif'>>;
+  let journal: ChangementComplet[] = [];
   const copiesDuJour = new Map<string, Instantane & { lisible: boolean }>();
   let precautions: (Instantane & { nom: string; motif: 'restauration' | 'miseANiveau' })[] = [];
   const abonnes = new Set<(a: AvisCopie) => void>();
@@ -556,7 +581,7 @@ export function creerApercu(): Plateforme {
       miseANiveau: false,
       resume: resume(c),
       nombreRetires: retires.length,
-      retires: retires.slice(0, 5),
+      retires: retires.slice(0, 5).map((e) => ({ horodatage: e.horodatage, section: e.section, objet: e.objet, champ: e.champ })),
       nombreRetrouves: c.journal.filter((e) => !dansActuel.has(cle(e))).length,
     };
   };
@@ -576,12 +601,27 @@ export function creerApercu(): Plateforme {
       };
     },
     lirePaie: async () => cloner(donnees),
+    lireJournal: async ({ avant, limite, sections }) => {
+      const tous: EntreeJournalLue[] = journal.map((e, i) => ({
+        id: i + 1,
+        horodatage: e.horodatage,
+        section: e.section,
+        objet: e.objet,
+        champ: e.champ,
+        ancienneValeur: e.ancienneValeur ?? null,
+        nouvelleValeur: e.nouvelleValeur ?? null,
+        motif: e.motif ?? null,
+      }));
+      const garde = tous.filter((e) => (avant == null || e.id < avant) && (!sections || sections.length === 0 || sections.includes(e.section))).reverse();
+      const n = Math.min(200, Math.max(1, limite));
+      return { entrees: garde.slice(0, n), restantes: Math.max(0, garde.length - n) };
+    },
     appliquerChangementsPaie: async (changements, entrees) => {
       if (entrees.length === 0) throw 'Un changement de paie doit être consigné au journal. Rien n’a été enregistré.';
       // Tout ou rien : en cas d'erreur, rien n'est modifié.
       donnees = appliquerChangements(donnees, changements);
       const h = maintenant();
-      journal = [...journal, ...entrees.map((e) => ({ horodatage: h, section: e.section, objet: e.objet, champ: e.champ }))];
+      journal = [...journal, ...entrees.map((e) => ({ horodatage: h, section: e.section, objet: e.objet, champ: e.champ, ancienneValeur: e.ancienneValeur, nouvelleValeur: e.nouvelleValeur, motif: e.motif }))];
       // Dans l'aperçu, la copie suit tout de suite (pas de délai).
       copierLeJour();
       return cloner(donnees);

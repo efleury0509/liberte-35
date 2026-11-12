@@ -8,6 +8,8 @@
   import MesDettes from './composants/dettes/MesDettes.svelte';
   import MonEpargne from './composants/epargne/MonEpargne.svelte';
   import DepensesAPrevoir from './composants/depenses/DepensesAPrevoir.svelte';
+  import Accueil from './composants/accueil/Accueil.svelte';
+  import type { CibleMesPaies } from './actions/accueil';
   import { SECTION_PAR_DEFAUT, trouverSection, type IdSection } from './lib/navigation';
   import { obtenirPlateforme, type EtatApplication } from './lib/plateforme';
   import { TEXTES } from './lib/textes.fr';
@@ -36,6 +38,21 @@
   function voirDepenses(id?: string) {
     depenseAGerer = id ?? null;
     sectionActive = 'depenses-a-prevoir';
+  }
+  /** 0.16.0 : un lien de l'Accueil vers Mes paies (une paie, une opération, les paies à vérifier). */
+  let ciblePaies: CibleMesPaies | null = $state(null);
+  /** Chaque lien ouvre Mes paies à neuf, même deux fois de suite. */
+  let ouverturePaies = $state(0);
+  function ouvrirPaies(cible: CibleMesPaies | null) {
+    ciblePaies = cible;
+    ouverturePaies += 1;
+    sectionActive = 'mes-paies';
+  }
+  /** 0.16.0 : « Voir le journal » ouvre Paramètres sur l'onglet Journal. */
+  let ongletParametres: 'sauvegardes' | 'journal' = $state('sauvegardes');
+  function voirJournal() {
+    ongletParametres = 'journal';
+    sectionActive = 'parametres';
   }
   function voirCompte(id: string) {
     compteOuvert = id;
@@ -73,6 +90,8 @@
       pretOuvert = null;
       compteOuvert = null;
       depenseAGerer = null;
+      ciblePaies = null;
+      ongletParametres = 'sauvegardes';
       sectionActive = id;
     }}
   />
@@ -92,11 +111,23 @@
     {/if}
 
     {#if section}
-      <EnTeteSection id="titre-section" titre={section.libelle} sousTitre={section.sousTitre} illustration={section.illustration} />
-      {#if section.id === 'parametres'}
-        <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} />
+      {#if section.id !== 'vue-ensemble'}
+        <EnTeteSection id="titre-section" titre={section.libelle} sousTitre={section.sousTitre} illustration={section.illustration} />
+      {/if}
+      {#if section.id === 'vue-ensemble'}
+        {#if !erreur}
+          <Accueil {plateforme} onouvrirpaies={ouvrirPaies} onjournal={voirJournal} />
+        {:else}
+          <h1 id="titre-section" class="visuellement-cache">Accueil</h1>
+        {/if}
+      {:else if section.id === 'parametres'}
+        {#key ongletParametres}
+          <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} ongletInitial={ongletParametres} />
+        {/key}
       {:else if section.id === 'mes-paies' && !erreur}
-        <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} onvoircarte={voirCarte} onvoircompte={voirCompte} onvoirdepenses={voirDepenses} />
+        {#key ouverturePaies}
+          <MesPaies {plateforme} profilInstallation={etat?.profil} onchangement={chargerEtat} onvoirpret={voirPret} onvoircarte={voirCarte} onvoircompte={voirCompte} onvoirdepenses={voirDepenses} cible={ciblePaies} />
+        {/key}
       {:else if section.id === 'mes-dettes' && !erreur}
         {#key pretOuvert}
           <MesDettes {plateforme} onchangement={chargerEtat} ouvert={pretOuvert} />

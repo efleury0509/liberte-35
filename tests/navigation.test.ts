@@ -18,8 +18,8 @@ describe('Navigation (cahier de conception V1, section 4)', () => {
   });
 
   it('n’affiche que les sections développées ; les autres restent masquées', () => {
-    expect(SECTIONS.map((s) => s.libelle)).toEqual(['Mes paies', 'Dépenses', 'Épargne', 'Dettes', 'Paramètres']);
-    for (const id of ['vue-ensemble', 'mes-objectifs', 'et-si', 'rapports', 'aide']) expect(trouverSection(id)).toBeUndefined();
+    expect(SECTIONS.map((s) => s.libelle)).toEqual(['Accueil', 'Mes paies', 'Dépenses', 'Épargne', 'Dettes', 'Paramètres']);
+    for (const id of ['mes-objectifs', 'et-si', 'rapports', 'aide']) expect(trouverSection(id)).toBeUndefined();
   });
 
   it('Paramètres et Aide sont en pied de barre', () => {
@@ -35,8 +35,8 @@ describe('Navigation (cahier de conception V1, section 4)', () => {
     }
   });
 
-  it('ouvre Mes paies par défaut (l’Accueil viendra à l’étape C)', () => {
-    expect(SECTION_PAR_DEFAUT).toBe('mes-paies');
+  it('ouvre l’Accueil par défaut (0.16.0)', () => {
+    expect(SECTION_PAR_DEFAUT).toBe('vue-ensemble');
     expect(trouverSection(SECTION_PAR_DEFAUT)?.disponible).toBe(true);
   });
 

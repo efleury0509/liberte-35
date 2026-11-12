@@ -1,12 +1,14 @@
 // Étape 6 : Paramètres → Sauvegardes, restauration, export, avis unique,
 // et correctif « À partir du… ». Aperçu en mémoire, données fictives.
 import { expect, test, type Page } from '@playwright/test';
+import { ouvrirMesPaies } from './onglets';
 
 const ESP = ' ';
 const JOUR = '2026-11-08';
 
 const ouvrir = async (page: Page, simuler?: string) => {
   await page.goto(`/?aujourdhui=${JOUR}${simuler ? `&simuler=${simuler}` : ''}`);
+  await ouvrirMesPaies(page);
 };
 const section = (page: Page, nom: string) =>
   page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: nom }).click();

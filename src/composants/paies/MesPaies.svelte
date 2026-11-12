@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
+  import type { CibleMesPaies } from '../../actions/accueil';
   import {
     A_COMPLETER,
     ErreurSaisie,
@@ -61,8 +62,10 @@
     onvoirdepenses?: (elementId?: string) => void;
     /** Étape 9 : ouvrir un compte dans Mon épargne. */
     onvoircompte?: (id: string) => void;
+    /** 0.16.0 : ce que l'Accueil demande d'ouvrir en arrivant. */
+    cible?: CibleMesPaies | null;
   }
-  let { plateforme, profilInstallation, onchangement, onvoirpret, onvoircarte, onvoircompte, onvoirdepenses }: Props = $props();
+  let { plateforme, profilInstallation, onchangement, onvoirpret, onvoircarte, onvoircompte, onvoirdepenses, cible = null }: Props = $props();
 
   const jour = aujourdhui();
   const ELEMENTS_EXEMPLE = ELEMENTS_ETAPE4.map(versElementStocke);
@@ -408,6 +411,21 @@
     proposition = null;
     fenetre = { cycle, ligne: ligne ? { elementId: ligne.elementId, origine: ligne.origine } : null };
   }
+  // 0.16.0 : un lien de l'Accueil ouvre directement la paie, l'opération ou
+  // les paies passées à vérifier, une seule fois, une fois les données lues.
+  let cibleAppliquee = false;
+  $effect(() => {
+    if (cibleAppliquee || !cible || !donnees || !vue) return;
+    cibleAppliquee = true;
+    const c = cible;
+    untrack(() => {
+      if (c.type === 'aVerifierPassees') voirAVerifier();
+      else {
+        fermerSousFormulaires();
+        fenetre = { cycle: c.date, ligne: c.ligne ?? null };
+      }
+    });
+  });
   function fermerFenetre() {
     fermerSousFormulaires();
     fenetre = null;

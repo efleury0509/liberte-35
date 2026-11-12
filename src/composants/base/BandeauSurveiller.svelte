@@ -14,7 +14,7 @@
   let { evenements, reserver = false }: { evenements: Evenement[]; reserver?: boolean } = $props();
 </script>
 
-<section class="surveiller" aria-labelledby="titre-surveiller">
+<section class="surveiller" aria-labelledby="titre-surveiller" data-testid="bandeau-surveiller">
   <div class="gauche">
     <span class="cloche"><Illustration nom="cloche" largeur={64} hauteur={64} {reserver} /></span>
     <h2 id="titre-surveiller"><span class="souligne">À surveiller</span></h2>
@@ -23,9 +23,11 @@
     {#each evenements as e, i (i)}
       <li>
         <span class="point" aria-hidden="true"></span>
-        <span>{e.texte}</span>
-        <span aria-hidden="true">·</span>
-        <button type="button" class="lien-creme" onclick={e.onaction}>{e.action} <Icone icone={ArrowRight} taille={16} /></button>
+        <!-- 0.16.0 : le lien suit le texte et ne se coupe jamais en deux lignes. -->
+        <span class="texte"
+          >{e.texte} <span aria-hidden="true">·</span>
+          <button type="button" class="lien-creme" onclick={e.onaction}>{e.action} <Icone icone={ArrowRight} taille={16} /></button></span
+        >
       </li>
     {/each}
   </ul>
@@ -53,6 +55,7 @@
   }
   h2 {
     margin: 0;
+    white-space: nowrap;
     font-size: 30px;
     color: var(--couleur-bandeau-texte);
   }
@@ -61,6 +64,8 @@
     padding-bottom: 4px;
   }
   ul {
+    flex: 1;
+    min-width: 0;
     list-style: none;
     margin: 0;
     padding: 0;
@@ -70,8 +75,9 @@
     font-size: var(--texte-courant);
   }
   li {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    align-items: start;
     gap: var(--espace-2);
   }
   .etoiles {
@@ -87,8 +93,10 @@
     border-radius: 50%;
     background: var(--sorbet-peche);
     flex-shrink: 0;
+    margin-top: 5px;
   }
   .lien-creme {
+    white-space: nowrap;
     display: inline-flex;
     align-items: center;
     gap: var(--espace-1);

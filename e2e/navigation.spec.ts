@@ -1,21 +1,23 @@
 import { expect, test } from '@playwright/test';
 
 // Sections développées, dans l'ordre de la barre latérale (V1).
-const SECTIONS = ['Mes paies', 'Dépenses', 'Épargne', 'Dettes', 'Paramètres'];
+const SECTIONS = ['Accueil', 'Mes paies', 'Dépenses', 'Épargne', 'Dettes', 'Paramètres'];
+// 0.16.0 : l'Accueil a un titre de page « Bonjour ! » (la loutre le dit aussi).
+const TITRE: Record<string, string> = { Accueil: 'Bonjour !' };
 
-test('la barre latérale prune affiche les sections développées et Mes paies par défaut', async ({ page }) => {
+test('la barre latérale prune affiche les sections développées et l’Accueil par défaut', async ({ page }) => {
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
   await expect(nav.getByRole('button')).toHaveText(SECTIONS);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mes paies');
-  await expect(nav.getByRole('button', { name: 'Mes paies' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Bonjour !');
+  await expect(nav.getByRole('button', { name: 'Accueil' })).toHaveAttribute('aria-current', 'page');
   await expect(nav.getByText('Des rêves, mais')).toBeVisible();
 });
 
 test('les modules non développés restent masqués', async ({ page }) => {
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
-  for (const absent of ['Accueil', 'Objectifs', 'Scénarios', 'Rapports', 'Aide']) await expect(nav.getByRole('button', { name: absent })).toHaveCount(0);
+  for (const absent of ['Objectifs', 'Scénarios', 'Rapports', 'Aide']) await expect(nav.getByRole('button', { name: absent })).toHaveCount(0);
 });
 
 test('chaque section s’ouvre avec son en-tête et la barre latérale reste visible', async ({ page }) => {
@@ -23,7 +25,7 @@ test('chaque section s’ouvre avec son en-tête et la barre latérale reste vis
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
   for (const libelle of SECTIONS) {
     await nav.getByRole('button', { name: libelle, exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(libelle);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(TITRE[libelle] ?? libelle);
     await expect(nav).toBeVisible();
     await expect(nav.getByRole('button', { name: libelle, exact: true })).toHaveAttribute('aria-current', 'page');
   }
@@ -31,6 +33,7 @@ test('chaque section s’ouvre avec son en-tête et la barre latérale reste vis
 
 test('la navigation fonctionne entièrement au clavier', async ({ page }) => {
   await page.goto('/');
+  await page.keyboard.press('Tab'); // Accueil
   await page.keyboard.press('Tab'); // Mes paies
   await page.keyboard.press('Tab'); // Dépenses
   await page.keyboard.press('Enter');

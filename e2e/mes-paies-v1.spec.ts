@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { voirTout } from './onglets';
+import { voirTout, ouvrirMesPaies } from './onglets';
 
 // V1 lot 4 : Mes paies. Paie actuelle et suivante côte à côte, 3e et 4e en
 // aperçu, détail complet dans le tableau, formulaires en fenêtre centrée,
@@ -9,6 +9,7 @@ const $ = (t: string) => t.replace(/(\d) (?=\d{3}\b)/g, `$1${ESP}`).replace(/ \$
 
 async function preparer(page: Page) {
   await page.goto('/?aujourdhui=2027-01-10');
+  await ouvrirMesPaies(page);
   await page.getByLabel('Date de la première paie').fill('2027-01-07');
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();
@@ -121,6 +122,7 @@ test('« Ma paie » : changer le salaire s’ouvre dans une fenêtre, Abandonner
 
 test('Lot 1 : avant toute paie, la première carte est la « Première paie à venir » ; les dates restent visibles', async ({ page }) => {
   await page.goto('/?aujourdhui=2027-01-02');
+  await ouvrirMesPaies(page);
   await page.getByLabel('Date de la première paie').fill('2027-01-07');
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();

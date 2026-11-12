@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { ouvrirMesPaies } from './onglets';
 
 // H3 : mini-bilan d'une paie terminée, en tête de sa grande fenêtre.
 // Données fictives ; aujourd'hui : 10 mars 2027 ; paies aux deux semaines depuis le 7 janv.
@@ -19,6 +20,7 @@ async function ajouter(page: Page, nom: string, montant: string, date: string) {
 
 test('le bilan d’une paie terminée : prévu et confirmé côte à côte, à vérifier, « À compléter », jamais un solde', async ({ page }) => {
   await page.goto('/?aujourdhui=2027-03-10');
+  await ouvrirMesPaies(page);
   await page.getByLabel('Date de la première paie').fill('2027-01-07');
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();

@@ -32,7 +32,7 @@ export interface Section {
 }
 
 export const TOUTES_LES_SECTIONS: readonly Section[] = [
-  { id: 'vue-ensemble', libelle: 'Accueil', sousTitre: 'Ta situation financière et tes quatre prochaines paies.', etape: 'C', icone: 'accueil', zone: 'principale', disponible: false, illustration: 'cafe-glace' },
+  { id: 'vue-ensemble', libelle: 'Accueil', sousTitre: 'Où tu en es, ce qui t’attend et ce qui arrive bientôt.', etape: '0.16.0', icone: 'accueil', zone: 'principale', disponible: true, illustration: 'loutre-bienvenue' },
   { id: 'mes-paies', libelle: 'Mes paies', sousTitre: 'Planifie, répartis et confirme tes dépenses par paie.', etape: '3 à 5', icone: 'paies', zone: 'principale', disponible: true, illustration: 'cafe-glace' },
   { id: 'depenses-a-prevoir', libelle: 'Dépenses', sousTitre: 'Tes dépenses régulières, tes enveloppes et tes dépenses à prévoir.', etape: '4, A et V1', icone: 'depenses', zone: 'principale', disponible: true, illustration: 'livres-plante' },
   { id: 'mon-epargne', libelle: 'Épargne', sousTitre: 'Tes comptes, tes réserves et ce qui reste non réservé.', etape: '9 et A', icone: 'epargne', zone: 'principale', disponible: true, illustration: 'cafe-glace' },
@@ -47,7 +47,8 @@ export const TOUTES_LES_SECTIONS: readonly Section[] = [
 /** Les sections développées, dans l'ordre de la barre latérale. */
 export const SECTIONS: readonly Section[] = TOUTES_LES_SECTIONS.filter((s) => s.disponible);
 
-export const SECTION_PAR_DEFAUT: IdSection = 'mes-paies';
+/** 0.16.0 : l'application s'ouvre sur l'Accueil. */
+export const SECTION_PAR_DEFAUT: IdSection = 'vue-ensemble';
 
 export function trouverSection(id: string): Section | undefined {
   return SECTIONS.find((s) => s.id === id);

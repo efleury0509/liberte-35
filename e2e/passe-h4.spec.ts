@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { ouvrirMesPaies } from './onglets';
 
 // H4 : une modification de règle qui touche une paie passée, même très
 // ancienne, passe par un aperçu ; « Abandonner » ne change rien.
@@ -7,6 +8,7 @@ const nav = (page: Page, nom: string) => page.getByRole('navigation', { name: 'N
 
 async function preparer(page: Page) {
   await page.goto('/?aujourdhui=2027-06-10');
+  await ouvrirMesPaies(page);
   await page.getByLabel('Date de la première paie').fill('2025-01-02');
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();

@@ -202,6 +202,15 @@ pub struct EntreeJournal {
     pub motif: Option<String>,
 }
 
+/// Une page du journal (onglet Journal de Paramètres).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageJournal {
+    pub entrees: Vec<EntreeJournal>,
+    /// Entrées plus anciennes encore à afficher (même filtre).
+    pub restantes: u64,
+}
+
 /// Résumé de l'état du stockage, affiché dans Paramètres.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EtatStockage {
@@ -310,6 +319,56 @@ impl Stockage {
             })
         })?;
         Ok(lignes.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Accueil et journal (0.16.0) : une page du journal, en lecture seule,
+    /// des plus récentes aux plus anciennes. `avant` : numéro de la dernière
+    /// entrée déjà affichée (page suivante) ; `sections` : vide pour toutes.
+    /// Le journal lui-même n'est jamais modifié.
+    pub fn lire_page_journal(
+        &self,
+        avant: Option<i64>,
+        limite: u32,
+        sections: &[String],
+    ) -> Resultat<PageJournal> {
+        let limite = limite.clamp(1, 200);
+        let filtre = if sections.is_empty() {
+            String::new()
+        } else {
+            let marques = vec!["?"; sections.len()].join(", ");
+            format!(" AND section IN ({marques})")
+        };
+        let mut valeurs: Vec<rusqlite::types::Value> = vec![avant.unwrap_or(i64::MAX).into()];
+        valeurs.extend(
+            sections
+                .iter()
+                .map(|x| rusqlite::types::Value::from(x.clone())),
+        );
+        let total: i64 = self.conn.query_row(
+            &format!("SELECT COUNT(*) FROM journal_changements WHERE id < ?1{filtre}"),
+            rusqlite::params_from_iter(valeurs.iter()),
+            |r| r.get(0),
+        )?;
+        let mut req = self.conn.prepare(&format!(
+            "SELECT id, horodatage, section, objet, champ, ancienne_valeur, nouvelle_valeur, motif
+             FROM journal_changements WHERE id < ?1{filtre} ORDER BY id DESC LIMIT {limite}"
+        ))?;
+        let entrees = req
+            .query_map(rusqlite::params_from_iter(valeurs.iter()), |r| {
+                Ok(EntreeJournal {
+                    id: r.get(0)?,
+                    horodatage: r.get(1)?,
+                    section: r.get(2)?,
+                    objet: r.get(3)?,
+                    champ: r.get(4)?,
+                    ancienne_valeur: r.get(5)?,
+                    nouvelle_valeur: r.get(6)?,
+                    motif: r.get(7)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let restantes = (total as u64).saturating_sub(entrees.len() as u64);
+        Ok(PageJournal { entrees, restantes })
     }
 
     pub fn nombre_entrees_journal(&self) -> Resultat<u64> {
@@ -518,6 +577,8 @@ mod tests_confirmations;
 mod tests_elements;
 #[cfg(test)]
 mod tests_export;
+#[cfg(test)]
+mod tests_journal;
 #[cfg(test)]
 mod tests_paie;
 #[cfg(test)]

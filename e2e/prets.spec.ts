@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { voirProchaines, voirTout } from './onglets';
+import { voirProchaines, voirTout, ouvrirMesPaies } from './onglets';
 
 // Étape 7a : les prêts au quotidien, dans l'aperçu en mémoire. Données fictives.
 // Aujourd'hui = 15 janvier 2027 ; profil aux deux semaines dès le 7 janvier.
@@ -163,6 +163,7 @@ test('L2, L3 : marquer comme remboursé avec un aperçu ; D1 : supprimer avec un
 
 test('sans profil de paie, Mes dettes explique quoi faire', async ({ page }) => {
   await page.goto('/?aujourdhui=2027-01-15');
+  await ouvrirMesPaies(page);
   await nav(page, 'Dettes');
   await expect(page.getByText('Crée d’abord ton profil de paie dans « Mes paies »')).toBeVisible();
 });

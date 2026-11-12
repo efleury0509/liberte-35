@@ -138,6 +138,13 @@ et dans le cahier fonctionnel de référence.
   distinct du capital remboursé ; copies reconnaissables par le début du
   calendrier ; Mes paies découpé en composants sans changement visible.
   Aucune règle financière ni structure de données changées (toujours 9).
+- Accueil et journal, fabrication Essai (version 0.16.0) : l'application
+  s'ouvre sur l'Accueil (date, phrase d'état, loutre de bienvenue entière,
+  « À surveiller » avec ses liens, deux cartes de paie, « Bientôt »,
+  derniers changements) ; onglet « Journal » dans Paramètres, en lecture
+  seule, par pages de 50, filtré par section, dates et heures lisibles.
+  Aucun calcul financier, aucune règle ni structure de données changés
+  (toujours 9).
 
 ## Organisation du code
 

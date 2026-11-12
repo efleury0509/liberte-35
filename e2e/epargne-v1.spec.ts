@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { ouvrirMesPaies } from './onglets';
 
 // V1 lot 3 : Épargne. Comptes côte à côte, synthèse sans double comptage,
 // formulaires en fenêtre centrée, « Déplacer de l'argent », première
@@ -13,6 +14,7 @@ const fenetre = (page: Page) => page.getByTestId('fenetre-formulaire');
 
 async function preparer(page: Page) {
   await page.goto('/?aujourdhui=2027-01-02');
+  await ouvrirMesPaies(page);
   await nav(page, 'Épargne');
   await page.getByRole('button', { name: 'Ajouter un compte' }).click();
   await expect(fenetre(page)).toBeVisible();

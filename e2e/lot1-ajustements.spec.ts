@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { ouvrirMesPaies } from './onglets';
 
 // Lot 1 : priorité de remboursement (choisie à la main) et « Solde réduit de
 // X % depuis le départ ». Données fictives ; aujourd'hui : 15 févr. 2027.
@@ -6,6 +7,7 @@ const nav = (page: Page, nom: string) => page.getByRole('navigation', { name: 'N
 
 async function preparer(page: Page) {
   await page.goto('/?aujourdhui=2027-02-15');
+  await ouvrirMesPaies(page);
   await page.getByLabel('Date de la première paie').fill('2027-01-07');
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();

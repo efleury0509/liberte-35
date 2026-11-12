@@ -10,3 +10,9 @@ async function choisir(page: Page, nom: string) {
 }
 export const voirTout = (page: Page) => choisir(page, 'Toutes mes paies');
 export const voirProchaines = (page: Page) => choisir(page, 'Mes prochaines paies');
+
+// 0.16.0 : l'application s'ouvre sur l'Accueil ; les parcours existants
+// commencent dans Mes paies, comme avant.
+export async function ouvrirMesPaies(page: Page) {
+  await page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: 'Mes paies', exact: true }).click();
+}

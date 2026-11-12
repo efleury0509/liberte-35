@@ -1,10 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { voirTout } from './onglets';
+import { voirTout, ouvrirMesPaies } from './onglets';
 
 // H2 : les paies terminées dans « Toutes mes paies », par année et par mois.
 // Données fictives ; aujourd'hui : 14 janv. 2027 ; paies aux deux semaines depuis le 6 nov. 2025.
 async function preparer(page: Page) {
   await page.goto('/?aujourdhui=2027-01-14');
+  await ouvrirMesPaies(page);
   await page.getByLabel('Date de la première paie').fill('2025-11-06');
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use l35_stockage::{
     ApercuRestauration, ChangementPaie, CopieFaite, DonneesPaie, HorlogeSysteme, ListeDesCopies,
-    NouvelleEntree, Profil, ResultatRestauration, ResumeExport, SourceCopie, Stockage,
+    NouvelleEntree, PageJournal, Profil, ResultatRestauration, ResumeExport, SourceCopie, Stockage,
 };
 use serde::Serialize;
 use tauri::{Emitter, Manager};
@@ -181,6 +181,17 @@ fn appliquer_changements_paie(
     Ok(donnees)
 }
 
+/// Accueil et journal (0.16.0) : une page du journal, en lecture seule.
+#[tauri::command]
+fn lire_journal(
+    etat: tauri::State<'_, EtatApp>,
+    avant: Option<i64>,
+    limite: u32,
+    sections: Vec<String>,
+) -> Result<PageJournal, String> {
+    avec_stockage(&etat, |s| s.lire_page_journal(avant, limite, &sections))
+}
+
 #[tauri::command]
 fn etat_sauvegardes(etat: tauri::State<'_, EtatApp>) -> Result<EtatSauvegardes, String> {
     let copies = avec_stockage(&etat, |s| s.lister_copies())?;
@@ -323,6 +334,7 @@ pub fn lancer() {
         .invoke_handler(tauri::generate_handler![
             etat_application,
             lire_paie,
+            lire_journal,
             appliquer_changements_paie,
             etat_sauvegardes,
             apercu_restauration,

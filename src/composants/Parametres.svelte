@@ -3,26 +3,31 @@
   // existe déjà — sauvegardes locales, export, installation. Rien de neuf
   // n'est ajouté (pas de Google Drive) ; un problème d'intégrité reste
   // visible quel que soit l'onglet.
+  import { untrack } from 'svelte';
   import type { EtatApplication, Plateforme } from '../lib/plateforme';
   import { TEXTES } from '../lib/textes.fr';
   import Sauvegardes from './Sauvegardes.svelte';
+  import JournalChangements from './JournalChangements.svelte';
 
   interface Props {
     etat: EtatApplication | null;
     erreur: string | null;
     plateforme: Plateforme;
     onrestauration: () => void;
+    /** 0.16.0 : « Voir le journal » depuis l'Accueil ouvre l'onglet Journal. */
+    ongletInitial?: 'sauvegardes' | 'export' | 'installation' | 'journal';
   }
-  let { etat, erreur, plateforme, onrestauration }: Props = $props();
+  let { etat, erreur, plateforme, onrestauration, ongletInitial = 'sauvegardes' }: Props = $props();
   const T = TEXTES.parametres;
 
-  type Onglet = 'sauvegardes' | 'export' | 'installation';
+  type Onglet = 'sauvegardes' | 'export' | 'installation' | 'journal';
   const ONGLETS: { id: Onglet; libelle: string }[] = [
     { id: 'sauvegardes', libelle: 'Sauvegardes locales' },
     { id: 'export', libelle: 'Exporter mes données' },
     { id: 'installation', libelle: 'Installation' },
+    { id: 'journal', libelle: 'Journal' },
   ];
-  let onglet: Onglet = $state('sauvegardes');
+  let onglet: Onglet = $state(untrack(() => ongletInitial));
 
   function clavier(e: KeyboardEvent, i: number) {
     let j = i;
@@ -91,8 +96,10 @@
         </dl>
       {/if}
     </section>
+  {:else if onglet === 'journal' && !erreur}
+    <JournalChangements {plateforme} />
   {:else if etat && !erreur}
-    <Sauvegardes {plateforme} {onrestauration} vue={onglet} />
+    <Sauvegardes {plateforme} {onrestauration} vue={onglet === 'export' ? 'export' : 'sauvegardes'} />
   {:else if !etat && !erreur}
     <p>{T.chargement}</p>
   {:else}

@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { ouvrirMesPaies } from './onglets';
 
 // H1 : le rappel « à vérifier » couvre tout l'historique. Données fictives :
 // un calendrier commencé deux ans et demi avant aujourd'hui, rien de confirmé.
 test('le rappel compte les paies non confirmées de plus de 200 jours', async ({ page }) => {
   await page.goto('/?aujourdhui=2027-06-10');
+  await ouvrirMesPaies(page);
   await page.getByLabel('Date de la première paie').fill('2025-01-02');
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();
