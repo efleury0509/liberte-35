@@ -251,6 +251,7 @@ fn un_fichier_de_l_etape_3_passe_en_version_3_sans_perte() {
         cartes: Vec::new(),
         comptes: Vec::new(),
         depenses: Vec::new(),
+        priorite_dettes: Vec::new(),
     };
     let s = Stockage::ouvrir(&chemin, Profil::Essai, horloge()).unwrap();
     assert_eq!(

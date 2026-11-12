@@ -3,12 +3,7 @@
   import {
     A_COMPLETER,
     ErreurSaisie,
-    LIBELLES_FREQUENCE,
-    decrireFrequence,
     proposerException,
-    proposerProfil,
-    proposerSalaire,
-    proposerSeuil,
     salaireAffiche,
     versNoyau,
     type Proposition,
@@ -30,9 +25,9 @@
   import { ELEMENTS_ETAPE4, PERIODE_ETAPE4, PROFIL_ETAPE4 } from '../../exemple/scenarioEtape4';
   import { aujourdhui } from '../../lib/aujourdhui';
   import { exempleAutorise } from '../../lib/exemple';
-  import type { ChangementPaie, DonneesPaie, EntreeJournal, FrequenceStockee, Plateforme, Profil } from '../../lib/plateforme';
+  import type { ChangementPaie, DonneesPaie, EntreeJournal, Plateforme, ProfilPaieStocke, Profil } from '../../lib/plateforme';
   import { planifier, type Cycle, type FaitConfirme, type Ligne, type Plan } from '../../noyau/cycles';
-  import { dateCivile, formaterDateCourte, formaterDateLongue, type DateCivile } from '../../noyau/dates';
+  import { formaterDateCourte, formaterDateLongue, type DateCivile } from '../../noyau/dates';
   import { formaterMontant } from '../../noyau/montants';
   import Apercu from '../Apercu.svelte';
   import {
@@ -48,6 +43,8 @@
   import { modeOccurrence, reserveDeDepense } from '../../actions/couvertures';
   import { choixRapides, estPaiementCarte, estSupplement, laCarte, libelleLigne, proposerSupplement, proposerSuppressionSupplement, raisonsACompleter } from '../../actions/cartes';
   import RevenusDepenses from './RevenusDepenses.svelte';
+  import MaPaie from './MaPaie.svelte';
+  import FormulaireProfil from './FormulaireProfil.svelte';
   import QuatrePaies from './QuatrePaies.svelte';
   import FenetreFormulaire from '../base/FenetreFormulaire.svelte';
   import TableauCycles from './TableauCycles.svelte';
@@ -73,7 +70,8 @@
   let donnees: DonneesPaie | null = $state(null);
   let erreurChargement: string | null = $state(null);
   let exemple = $state(false);
-  let edition: 'aucune' | 'profil' | 'salaire' | 'seuil' = $state('aucune');
+  /** V1 lot 1 : une fenêtre de « Ma paie » est ouverte. */
+  let formulaireMaPaie = $state(false);
   let choisi: DateCivile | null = $state(null);
   let proposition: Proposition | null = $state(null);
   let erreurSaisie: string | null = $state(null);
@@ -108,14 +106,6 @@
   let fSupDate = $state('');
 
   // Champs des formulaires
-  let fFrequence: FrequenceStockee = $state('deuxSemaines');
-  let fDepart = $state('');
-  let fJour1 = $state(15);
-  let fJour2 = $state(31);
-  let fMontant = $state('');
-  let fSalaireDate = $state('');
-  let fSalaireMontant = $state('');
-  let fSeuil = $state('');
   let fDateReelle = $state('');
   let fMontantPaie = $state('');
 
@@ -229,7 +219,6 @@
       const inverse = inverser(avant, p.changements);
       dernier = direct && inverse.length > 0 ? { titre: p.titre, inverse, journal: p.journal } : null;
       proposition = null;
-      edition = 'aucune';
       erreurSaisie = null;
       occurrence = null;
       modifPaie = false;
@@ -286,7 +275,6 @@
 
   function annuler() {
     proposition = null;
-    edition = 'aucune';
     erreurSaisie = null;
     remise += 1;
   }
@@ -325,27 +313,14 @@
     fMontantPaie = '';
   }
 
-  function ouvrirEdition(mode: 'profil' | 'salaire' | 'seuil') {
-    edition = mode;
-    proposition = null;
-    erreurSaisie = null;
-    if (mode === 'profil' && donnees?.profil) {
-      fFrequence = donnees.profil.frequence;
-      fDepart = donnees.profil.depart;
-      [fJour1, fJour2] = donnees.profil.jours ?? [15, 31];
-    }
-    if (mode === 'seuil') fSeuil = donnees?.seuil !== null && donnees?.seuil !== undefined ? String(donnees.seuil / 100) : '';
-  }
-
   function basculerExemple() {
     exemple = !exemple;
     choisi = null;
     fenetre = null;
     proposition = null;
-    edition = 'aucune';
+    formulaireMaPaie = false;
   }
 
-  const libelleSalaire = (d: string) => formaterDateLongue(dateCivile(d));
   /** Étape 7a : versements de prêts du cycle, groupés sous « Dettes ». */
   const dettesDe = (c: Cycle) => (donnees && !exemple ? c.lignes.filter((l) => l.nature === 'depense' && estPret(donnees!, l.elementId)) : []);
   /** Étape 8 (Q65) : paiements de la carte du cycle, dans un seul groupe « Visa ». */
@@ -367,7 +342,7 @@
   const compteDeLigne = (id: string) => (donnees ? comptesDe(donnees).find((k) => k.contributions.includes(id)) : undefined);
   let formContribution: string | null = $state(null);
   let formulaireRegle = $state(false);
-  const formulaireOuvert = $derived(formulaireRegle || edition !== 'aucune' || occurrence !== null || formConfirmation !== null || formContribution !== null || formSupplement !== null || modifPaie);
+  const formulaireOuvert = $derived(formulaireRegle || formulaireMaPaie || occurrence !== null || formConfirmation !== null || formContribution !== null || formSupplement !== null || modifPaie);
   /** V1 lot 6b : un formulaire d'action du détail d'un cycle est ouvert. */
   const sousFormulaireOuvert = $derived(occurrence !== null || formConfirmation !== null || formContribution !== null || formSupplement !== null || modifPaie);
 
@@ -506,7 +481,7 @@
   <section aria-labelledby="titre-config">
     <h2 id="titre-config">Configurer ma paie</h2>
     <p class="discret">Indique comment et quand tu es payée. Le montant peut attendre : il restera « À compléter ».</p>
-    {@render formulaireProfil(true)}
+    <FormulaireProfil donnees={donnees} {jour} creation={true} {proposer} />
   </section>
 {/if}
 
@@ -592,66 +567,22 @@
 {/if}
 
 {#if !exemple && donnees?.profil && ongletPaies === 'prochaines'}
-  <section class="carte" aria-labelledby="titre-paie">
-    <h2 id="titre-paie">Ma paie</h2>
-    <p data-testid="description-profil">{decrireFrequence(donnees.profil)}</p>
-    <p>
-      Salaire net en vigueur : <strong data-testid="salaire-actuel">{salaireActuel}</strong>
-    </p>
-    {#if donnees.salaires.length > 1}
-      <ul class="discret">
-        {#each donnees.salaires as s (s.aPartirDu)}
-          <li>À partir du {libelleSalaire(s.aPartirDu)} : {formaterMontant(s.montant)}</li>
-        {/each}
-      </ul>
-    {/if}
-    <p>
-      Seuil d’attention : <span data-testid="seuil">{donnees.seuil === null ? 'aucun' : formaterMontant(donnees.seuil)}</span>
-    </p>
-    <div class="boutons">
-      <button type="button" onclick={() => ouvrirEdition('salaire')}>Changer le salaire à partir d’une date</button>
-      <button type="button" onclick={() => ouvrirEdition('profil')}>Modifier le calendrier de paie</button>
-      <button type="button" onclick={() => ouvrirEdition('seuil')}>Seuil d’attention</button>
-    </div>
-
-    {#if edition !== 'aucune'}
-    <FenetreFormulaire
-      titre={edition === 'profil' ? 'Modifier le calendrier de paie' : edition === 'salaire' ? 'Changer le salaire à partir d’une date' : 'Seuil d’attention'}
-      contexte={`Ma paie · ${decrireFrequence(donnees.profil)}`}
-      erreur={proposition ? null : erreurSaisie}
-      onabandonner={annuler}
-    >
-    {#if edition === 'profil'}
-      {@render formulaireProfil(false)}
-    {:else if edition === 'salaire'}
-      <form
-        class="formulaire"
-        onsubmit={(e) => {
-          e.preventDefault();
-          proposer(() => proposerSalaire(donnees!, fSalaireDate, fSalaireMontant, jour));
-        }}
-      >
-        <label>À partir du <input type="date" bind:value={fSalaireDate} required /></label>
-        <label>Nouveau salaire net ($) <input inputmode="decimal" bind:value={fSalaireMontant} required /></label>
-        <button type="submit" class="principal">Enregistrer</button>
-        <button type="button" onclick={annuler}>Abandonner</button>
-      </form>
-    {:else if edition === 'seuil'}
-      <form
-        class="formulaire"
-        onsubmit={(e) => {
-          e.preventDefault();
-          proposer(() => proposerSeuil(donnees!, fSeuil));
-        }}
-      >
-        <label>Seuil d’attention ($, vide pour aucun) <input inputmode="decimal" bind:value={fSeuil} /></label>
-        <button type="submit" class="principal">Enregistrer</button>
-        <button type="button" onclick={annuler}>Abandonner</button>
-      </form>
-    {/if}
-    </FenetreFormulaire>
-    {/if}
-  </section>
+  <MaPaie
+    donnees={donnees as DonneesPaie & { profil: ProfilPaieStocke }}
+    {jour}
+    {salaireActuel}
+    {remise}
+    {proposer}
+    erreur={proposition ? null : erreurSaisie}
+    onabandonner={annuler}
+    onformulaire={(ouvert) => {
+      formulaireMaPaie = ouvert;
+      if (ouvert) {
+        proposition = null;
+        erreurSaisie = null;
+      }
+    }}
+  />
 {/if}
 
 {#if (exemple || donnees?.profil) && ongletPaies === 'prochaines'}
@@ -731,42 +662,6 @@
       <p class="discret">Choisir la source ne déplace rien : l’aperçu se met à jour, et rien n’est enregistré avant ta confirmation.</p>
     </fieldset>
   {/if}
-{/snippet}
-
-{#snippet formulaireProfil(creation: boolean)}
-  <form
-    class="formulaire"
-    onsubmit={(e) => {
-      e.preventDefault();
-      proposer(() =>
-        proposerProfil(donnees!, {
-          frequence: fFrequence,
-          depart: fDepart,
-          ...(fFrequence === 'deuxFoisParMois' ? { jours: [Number(fJour1), Number(fJour2)] as [number, number] } : {}),
-          ...(creation ? { montant: fMontant } : {}),
-        }, jour),
-      );
-    }}
-  >
-    <label
-      >Fréquence
-      <select bind:value={fFrequence}>
-        {#each Object.entries(LIBELLES_FREQUENCE) as [valeur, libelle] (valeur)}
-          <option value={valeur}>{libelle}</option>
-        {/each}
-      </select>
-    </label>
-    <label>Date de la première paie <input type="date" bind:value={fDepart} required /></label>
-    {#if fFrequence === 'deuxFoisParMois'}
-      <label>Premier jour <input type="number" min="1" max="27" bind:value={fJour1} /></label>
-      <label>Second jour (31 = dernier jour) <input type="number" min="2" max="31" bind:value={fJour2} /></label>
-    {/if}
-    {#if creation}
-      <label>Montant net habituel ($, facultatif) <input inputmode="decimal" bind:value={fMontant} /></label>
-    {/if}
-    <button type="submit" class="principal">Enregistrer</button>
-    {#if !creation}<button type="button" onclick={annuler}>Abandonner</button>{/if}
-  </form>
 {/snippet}
 
 {#snippet marques(l: Ligne)}

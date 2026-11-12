@@ -34,8 +34,10 @@
     /** V1 lot 5 : erreur de la dernière proposition, montrée dans la fenêtre ouverte. */
     erreur?: string | null;
     onformulaire?: (ouvert: boolean) => void;
+    /** Lot 1 : rang de priorité choisi à la main, ou null. */
+    rang?: number | null;
   }
-  let { donnees, jour, proposer, remise, erreur = null, onformulaire }: Props = $props();
+  let { donnees, jour, proposer, remise, erreur = null, onformulaire, rang = null }: Props = $props();
 
   type Formulaire = 'ajout' | 'renseignements' | 'releve' | 'solde' | 'frais';
   let formulaire: Formulaire | null = $state(null);
@@ -99,7 +101,10 @@
   {:else}
     <div data-testid="fiche-carte">
       <CarteBandeau titre={v.nom} teinte="rose" icone={CreditCard}>
-        {#snippet badge()}<Pastille>Mensuel</Pastille>{/snippet}
+        {#snippet badge()}
+          {#if rang !== null}<Pastille etat="neutre">Priorité {rang}</Pastille>{/if}
+          <Pastille>Mensuel</Pastille>
+        {/snippet}
         <dl class="cles">
           <div>
             <dt>Échéance</dt>

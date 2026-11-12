@@ -11,7 +11,10 @@
   import MenuActions from '../base/MenuActions.svelte';
   import Pastille from '../base/Pastille.svelte';
   import { CalendarClock, Landmark, Mountain } from '@lucide/svelte';
-  import { vueCarte } from '../../actions/cartes';
+  import { laCarte, vueCarte } from '../../actions/cartes';
+  import { dettesParPriorite, proposerPrioriteDettes, rangPriorite } from '../../actions/priorite';
+  import { ArrowDown, ArrowUp, ListOrdered } from '@lucide/svelte';
+  import Icone from '../base/Icone.svelte';
   import { ErreurSaisie, type Proposition } from '../../actions/paie';
   import {
     LIBELLES_QUAND_PRET,
@@ -22,10 +25,14 @@
     proposerRenseignements,
     proposerSuppressionPret,
     proposerVersement,
+    reductionSolde,
+    texteReductionSolde,
     type QuandPret,
     type VuePret,
   } from '../../actions/prets';
   import { inverser } from '../../lib/appliquer';
+  import { formaterDateCourte, type DateCivile } from '../../noyau/dates';
+  import { formaterMontant } from '../../noyau/montants';
   import { aujourdhui } from '../../lib/aujourdhui';
   import type { ChangementPaie, DonneesPaie, EntreeJournal, Plateforme } from '../../lib/plateforme';
 
@@ -46,6 +53,23 @@
   let pretFormulaire: string | null = $state(null);
   /** Un formulaire de la carte est ouvert : son erreur s'y affiche. */
   let formulaireCarte = $state(false);
+  /** Lot 1 : fenêtre « Ordre de priorité » et l'ordre en cours d'édition. */
+  let fenetrePriorite = $state(false);
+  let ordreEdition: { id: string; nom: string }[] = $state([]);
+  const parPriorite = $derived(donnees ? dettesParPriorite(donnees) : []);
+  const prioriteChoisie = $derived(parPriorite.some((x) => x.rang !== null));
+  function ouvrirPriorite() {
+    ordreEdition = parPriorite.map((x) => ({ id: x.id, nom: x.nom }));
+    erreurSaisie = null;
+    fenetrePriorite = true;
+  }
+  function deplacer(i: number, sens: -1 | 1) {
+    const j = i + sens;
+    if (j < 0 || j >= ordreEdition.length) return;
+    const copie = [...ordreEdition];
+    [copie[i], copie[j]] = [copie[j]!, copie[i]!];
+    ordreEdition = copie;
+  }
   let proposition: Proposition | null = $state(null);
   let erreurSaisie: string | null = $state(null);
   let enCours = $state(false);
@@ -137,6 +161,7 @@
       proposition = null;
       formulaire = null;
       pretFormulaire = null;
+      fenetrePriorite = false;
       erreurSaisie = null;
       remise += 1;
       // Un prêt qui vient d'être ajouté s'ouvre ; un prêt supprimé se ferme.
@@ -399,7 +424,10 @@
         {#each liste.actifs as v (v.id)}
           <div class="pret" data-pret={v.id}>
             <CarteBandeau titre={v.nom} teinte="lilas" icone={Landmark}>
-              {#snippet badge()}<Pastille>{v.rythme}</Pastille>{/snippet}
+              {#snippet badge()}
+                {#if rangPriorite(donnees!, v.id) !== null}<Pastille etat="neutre">Priorité {rangPriorite(donnees!, v.id)}</Pastille>{/if}
+                <Pastille>{v.rythme}</Pastille>
+              {/snippet}
               <dl class="cles">
                 <div>
                   <dt>Versement</dt>
@@ -447,7 +475,7 @@
         </details>
       {/if}
 
-      <CarteVisa donnees={donnees} {jour} {proposer} {remise} erreur={proposition ? null : erreurSaisie} onformulaire={(ouvert) => (formulaireCarte = ouvert)} />
+      <CarteVisa donnees={donnees} {jour} {proposer} {remise} rang={laCarte(donnees) ? rangPriorite(donnees, laCarte(donnees)!.id) : null} erreur={proposition ? null : erreurSaisie} onformulaire={(ouvert) => (formulaireCarte = ouvert)} />
     </div>
 
     <aside class="contexte" aria-label="Vue d’ensemble des dettes">
@@ -474,13 +502,43 @@
         <p class="discret petit">Une date planifiée n’est pas une preuve de paiement : les paiements se confirment dans Mes paies.</p>
       </CarteBandeau>
 
+      {#if parPriorite.length > 0}
+        <CarteBandeau titre="Priorité" teinte="lilas" icone={ListOrdered}>
+          <div data-testid="priorite-dettes">
+            {#if prioriteChoisie}
+              <ol class="priorites">
+                {#each parPriorite.filter((x) => x.rang !== null) as x (x.id)}<li>{x.nom}</li>{/each}
+              </ol>
+              {#if parPriorite.some((x) => x.rang === null)}
+                <p class="discret petit">Sans priorité : {parPriorite.filter((x) => x.rang === null).map((x) => x.nom).join(', ')}.</p>
+              {/if}
+            {:else}
+              <p class="discret petit">Aucune priorité choisie.</p>
+            {/if}
+            <p class="discret petit">Un repère pour toi : il ne change aucun paiement ni aucun calcul.</p>
+            <p class="actions-priorite"><button type="button" class="action-secondaire" onclick={ouvrirPriorite}>{prioriteChoisie ? 'Modifier l’ordre…' : 'Choisir un ordre…'}</button></p>
+          </div>
+        </CarteBandeau>
+      {/if}
+
       <CarteBandeau titre="Progression" teinte="sauge" icone={Mountain}>
         <ul class="progressions" data-testid="progression-dettes">
           {#each liste.actifs as v (v.id)}
-            <li>
+            {@const r = reductionSolde(v.brut.soldes)}
+            <li data-pret-progression={v.id}>
               <span class="nom">{v.nom}</span>
-              <Pastille etat="a-completer">À compléter</Pastille>
-              <span class="discret petit">{v.payeDepuisAjout}. La part de capital remboursé n’est pas encore calculable : la méthode d’intérêts du contrat manque.</span>
+              {#if r.etat === 'a-completer'}
+                <Pastille etat="a-completer">À compléter</Pastille>
+                <span class="discret petit">{r.raison}</span>
+              {:else}
+                <Pastille etat={r.etat === 'reduit' ? 'confirme' : r.etat === 'augmente' ? 'alerte' : 'neutre'}>{texteReductionSolde(r)}</Pastille>
+                <span class="discret petit"
+                  >Soldes déclarés : {formaterMontant(r.depart.montant)} au {formaterDateCourte(r.depart.date as DateCivile)}
+                  {r.depart.date.slice(0, 4)}, puis {formaterMontant(r.dernier.montant)} au {formaterDateCourte(r.dernier.date as DateCivile)}
+                  {r.dernier.date.slice(0, 4)}.</span
+                >
+              {/if}
+              <span class="discret petit">{v.payeDepuisAjout}. La part de capital remboursé reste à compléter : la méthode d’intérêts du contrat manque.</span>
             </li>
           {:else}
             <li class="discret">Aucun prêt en cours.</li>
@@ -492,6 +550,34 @@
       </CarteBandeau>
     </aside>
   </div>
+
+  {#if fenetrePriorite}
+    <FenetreFormulaire
+      titre="Ordre de priorité des dettes"
+      contexte="La première est celle que tu veux rembourser en premier. Aucun paiement ne change."
+      erreur={proposition ? null : erreurSaisie}
+      onabandonner={() => {
+        fenetrePriorite = false;
+        erreurSaisie = null;
+      }}
+    >
+      <ol class="ordre-edition" data-testid="ordre-priorite">
+        {#each ordreEdition as x, i (x.id)}
+          <li>
+            <span class="rang">{i + 1}</span>
+            <span class="nom">{x.nom}</span>
+            <button type="button" class="petit" aria-label={`Monter « ${x.nom} »`} disabled={i === 0} onclick={() => deplacer(i, -1)}><Icone icone={ArrowUp} taille={16} /></button>
+            <button type="button" class="petit" aria-label={`Descendre « ${x.nom} »`} disabled={i === ordreEdition.length - 1} onclick={() => deplacer(i, 1)}><Icone icone={ArrowDown} taille={16} /></button>
+          </li>
+        {/each}
+      </ol>
+      <p class="boutons-fenetre">
+        <button type="button" class="principal" onclick={() => proposer(() => proposerPrioriteDettes(donnees!, ordreEdition.map((x) => x.id)))}>Enregistrer cet ordre</button>
+        {#if prioriteChoisie}<button type="button" onclick={() => proposer(() => proposerPrioriteDettes(donnees!, []))}>Retirer les priorités</button>{/if}
+        <button type="button" onclick={() => (fenetrePriorite = false)}>Abandonner</button>
+      </p>
+    </FenetreFormulaire>
+  {/if}
 
   {#if formulaire === 'ajout'}
     <FenetreFormulaire titre={TITRES.ajout} contexte="Ces quatre renseignements suffisent pour commencer." erreur={proposition ? null : erreurSaisie} onabandonner={fermerFormulaire}>
@@ -549,7 +635,7 @@
   {/if}
 {/if}
 
-{#if erreurSaisie && !proposition && !formulaire && !formulaireCarte}
+{#if erreurSaisie && !proposition && !formulaire && !formulaireCarte && !fenetrePriorite}
   <p role="alert" class="erreur" data-testid="erreur-saisie">{erreurSaisie}</p>
 {/if}
 {#if dernier}
@@ -687,6 +773,43 @@
   }
   .progressions .petit {
     flex-basis: 100%;
+  }
+  .priorites {
+    margin: 0 0 var(--espace-2);
+    padding-left: var(--espace-6);
+    font-weight: 700;
+  }
+  .priorites li + li {
+    margin-top: var(--espace-1);
+  }
+  .actions-priorite {
+    margin: var(--espace-2) 0 0;
+  }
+  .ordre-edition {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--espace-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--espace-2);
+  }
+  .ordre-edition li {
+    display: flex;
+    align-items: center;
+    gap: var(--espace-3);
+    padding: var(--espace-2) var(--espace-3);
+    border: 1px solid var(--couleur-bordure);
+    border-radius: var(--arrondi);
+    background: var(--couleur-panneau);
+  }
+  .ordre-edition .rang {
+    font-weight: 800;
+    min-width: 1.5em;
+    color: var(--prune-700);
+  }
+  .ordre-edition .nom {
+    flex: 1;
+    font-weight: 700;
   }
   .libere-compte {
     margin: var(--espace-3) 0 0;

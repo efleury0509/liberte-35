@@ -28,3 +28,14 @@ export function texteAutresOperations(n: number): string | null {
   if (n <= 0) return null;
   return n === 1 ? '+ 1 autre opération' : `+ ${n} autres opérations`;
 }
+
+/**
+ * Lot 1 : intitulés des quatre cartes de « Mes prochaines paies ». Ils ne
+ * parlent ni de durée ni de cadence : ils restent justes même quand une paie
+ * est déplacée ou que la cadence change. Les dates restent sur chaque carte.
+ * `periodeCommencee` : une paie a déjà commencé (la date du jour est dans un
+ * cycle) ; sinon la première carte est la première paie à venir.
+ */
+export function titresCartes(periodeCommencee: boolean): [string, string, string, string] {
+  return [periodeCommencee ? 'Paie actuelle' : 'Première paie à venir', 'Prochaine paie', 'Paie suivante', 'Paie d’après'];
+}

@@ -13,7 +13,7 @@
   import type { Cycle, Ligne } from '../../noyau/cycles';
   import { formaterDateCourte, type DateCivile } from '../../noyau/dates';
   import { formaterMontant, type Cents } from '../../noyau/montants';
-  import { autresOperations, principales, texteAutresOperations } from '../../lib/operations';
+  import { autresOperations, principales, texteAutresOperations, titresCartes } from '../../lib/operations';
 
   interface Props {
     cycles: Cycle[];
@@ -29,6 +29,7 @@
 
   const debut = $derived(Math.max(0, courant === null ? 0 : cycles.findIndex((c) => c.paie.dateOrigine === courant)));
   const quatre = $derived(cycles.slice(debut, debut + 4));
+  const titres = $derived(titresCartes(courant !== null));
   const texte = (m: Cents | null) => (m === null ? 'À compléter' : formaterMontant(m));
   const periode = (c: Cycle) => `${formaterDateCourte(c.debut)} → ${formaterDateCourte(c.fin)}`;
   const STATUT: Record<string, { etat: 'confirme' | 'prevu' | 'alerte' | 'neutre'; texte: string }> = {
@@ -113,13 +114,13 @@
 {#if quatre.length > 0}
   <section class="quatre-paies" aria-label="Mes quatre prochaines paies">
     <div class="deux">
-      {@render principale(quatre[0]!, courant === null ? 'Première paie' : 'Paie actuelle', 'sauge', 'licorne')}
-      {#if quatre[1]}{@render principale(quatre[1], 'Paie suivante', 'peche', 'calendrier')}{/if}
+      {@render principale(quatre[0]!, titres[0], 'sauge', 'licorne')}
+      {#if quatre[1]}{@render principale(quatre[1], titres[1], 'peche', 'calendrier')}{/if}
     </div>
     {#if quatre.length > 2}
       <div class="deux apercus">
-        {@render apercu(quatre[2]!, 'Troisième paie', 'rose', 'rose')}
-        {#if quatre[3]}{@render apercu(quatre[3], 'Quatrième paie', 'lilas', 'sauge')}{/if}
+        {@render apercu(quatre[2]!, titres[2], 'rose', 'rose')}
+        {#if quatre[3]}{@render apercu(quatre[3], titres[3], 'lilas', 'sauge')}{/if}
       </div>
     {/if}
   </section>

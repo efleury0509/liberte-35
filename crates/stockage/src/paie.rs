@@ -10,6 +10,10 @@ use serde::{Deserialize, Serialize};
 use crate::{ErreurStockage, NouvelleEntree, Resultat, Stockage};
 
 const CLE_SEUIL: &str = "seuil_attention";
+/// Lot 1 : ordre de priorité de remboursement des dettes (identifiants de
+/// prêts ou de la carte), choisi à la main. Un réglage d'affichage : il ne
+/// change ni paiement, ni prévision, ni solde.
+const CLE_PRIORITE_DETTES: &str = "priorite_dettes";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -337,6 +341,9 @@ pub struct DonneesPaie {
     pub comptes: Vec<CompteStocke>,
     #[serde(default)]
     pub depenses: Vec<DepenseStockee>,
+    /// Lot 1 : priorité de remboursement, la première d'abord ; vide : aucune.
+    #[serde(default)]
+    pub priorite_dettes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -363,6 +370,10 @@ pub enum ChangementPaie {
     },
     DefinirSeuil {
         seuil: Option<i64>,
+    },
+    /// Lot 1 : ordre de priorité des dettes ; une liste vide retire les priorités.
+    DefinirPrioriteDettes {
+        ordre: Vec<String>,
     },
     DefinirElement {
         element: ElementStocke,
@@ -474,6 +485,18 @@ fn verifier(changement: &ChangementPaie) -> Resultat<()> {
         ChangementPaie::DefinirSeuil { seuil } => {
             if seuil.is_some_and(|s| s < 0) {
                 return Err(erreur("Le seuil d'attention ne peut pas être négatif."));
+            }
+            Ok(())
+        }
+        ChangementPaie::DefinirPrioriteDettes { ordre } => {
+            let mut vus = std::collections::HashSet::new();
+            if ordre
+                .iter()
+                .any(|id| id.trim().is_empty() || !vus.insert(id.as_str()))
+            {
+                return Err(erreur(
+                    "L'ordre de priorité contient une dette vide ou en double.",
+                ));
             }
             Ok(())
         }
@@ -1308,6 +1331,14 @@ impl Stockage {
         let cartes = lire_cartes(&self.conn)?;
         let comptes = lire_comptes(&self.conn)?;
         let depenses = lire_depenses(&self.conn)?;
+        // Lot 1 : seules les dettes qui existent encore gardent leur rang.
+        let priorite_dettes = self
+            .parametre(CLE_PRIORITE_DETTES)?
+            .and_then(|v| serde_json::from_str::<Vec<String>>(&v).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|id| prets.iter().any(|p| &p.id == id) || cartes.iter().any(|c| &c.id == id))
+            .collect();
         Ok(DonneesPaie {
             profil,
             salaires,
@@ -1320,6 +1351,7 @@ impl Stockage {
             cartes,
             comptes,
             depenses,
+            priorite_dettes,
         })
     }
 
@@ -1398,6 +1430,35 @@ impl Stockage {
                         tx.execute("DELETE FROM parametres WHERE cle = ?1", [CLE_SEUIL])?;
                     }
                 },
+                ChangementPaie::DefinirPrioriteDettes { ordre } => {
+                    if ordre.is_empty() {
+                        tx.execute(
+                            "DELETE FROM parametres WHERE cle = ?1",
+                            [CLE_PRIORITE_DETTES],
+                        )?;
+                    } else {
+                        for id in ordre {
+                            let existe: bool = tx.query_row(
+                                "SELECT EXISTS(SELECT 1 FROM prets WHERE id = ?1)
+                                     OR EXISTS(SELECT 1 FROM cartes WHERE id = ?1)",
+                                [id],
+                                |r| r.get(0),
+                            )?;
+                            if !existe {
+                                return Err(erreur(format!(
+                                    "Priorité : la dette « {id} » n'existe pas."
+                                )));
+                            }
+                        }
+                        let valeur =
+                            serde_json::to_string(ordre).map_err(|e| erreur(e.to_string()))?;
+                        tx.execute(
+                            "INSERT INTO parametres (cle, valeur, modifie_le) VALUES (?1, ?2, ?3)
+                             ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur, modifie_le = excluded.modifie_le",
+                            params![CLE_PRIORITE_DETTES, valeur, maintenant],
+                        )?;
+                    }
+                }
                 ChangementPaie::DefinirElement { element } => ecrire_element(&tx, element)?,
                 ChangementPaie::SupprimerElement { id } => {
                     // Q16 : un élément qui a des opérations confirmées se termine,

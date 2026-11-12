@@ -53,6 +53,8 @@ export function resumeTexte(r: ResumeCopie): string {
     nombre(r.entreesJournal, 'changement au journal', 'changements au journal', 'aucun changement au journal'),
   ];
   if (!r.paieConfiguree) morceaux.unshift('paie pas encore configurée');
+  // Lot 1 : le début du calendrier rend une copie reconnaissable d'un coup d'œil.
+  else if (r.debutPaies) morceaux.unshift(`paies depuis le ${formaterDateCourte(r.debutPaies as DateCivile)} ${r.debutPaies.slice(0, 4)}`);
   return morceaux.join(' · ');
 }
 

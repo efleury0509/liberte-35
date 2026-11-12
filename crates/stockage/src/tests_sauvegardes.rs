@@ -792,3 +792,40 @@ fn la_restauration_ne_laisse_aucun_fichier_temporaire() {
         .collect();
     assert!(restes.is_empty(), "{restes:?}");
 }
+
+/// Lot 1 : une copie se reconnaît au début de son calendrier de paie.
+#[test]
+fn lot1_le_resume_d_une_copie_donne_le_debut_du_calendrier() {
+    let d = TempDir::new().unwrap();
+    let h = HorlogeReglable::nouvelle("2026-11-08T15:00:00Z");
+    let mut s = ouvrir_avec(&d, Profil::Essai, &h);
+    salaire(&mut s, "2027-01-07", 210_000);
+    s.faire_copie_du_jour().unwrap();
+    let sans = s.lister_copies().unwrap();
+    assert_eq!(
+        sans.copies_du_jour[0].resume.as_ref().unwrap().debut_paies,
+        None
+    );
+    s.appliquer_changements_paie(
+        &[ChangementPaie::DefinirProfil {
+            profil: ProfilPaieStocke {
+                frequence: "deuxSemaines".into(),
+                depart: "2025-01-02".into(),
+                jours: None,
+            },
+        }],
+        &entree("calendrier"),
+    )
+    .unwrap();
+    s.faire_copie_du_jour().unwrap();
+    let avec = s.lister_copies().unwrap();
+    assert_eq!(
+        avec.copies_du_jour[0]
+            .resume
+            .as_ref()
+            .unwrap()
+            .debut_paies
+            .as_deref(),
+        Some("2025-01-02")
+    );
+}

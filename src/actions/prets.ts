@@ -564,3 +564,37 @@ export function listePrets(d: DonneesPaie, jour: DateCivile): { actifs: VuePret[
   const vues = (d.prets ?? []).map((p) => vuePret(d, p.id, jour)).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   return { actifs: vues.filter((v) => !v.rembourse), liberes: vues.filter((v) => v.rembourse) };
 }
+
+// ---------------------------------------------------------------------------
+// Lot 1 : « Solde réduit de X % depuis le départ »
+
+export type ReductionSolde =
+  | { etat: 'a-completer'; raison: string }
+  | { etat: 'reduit' | 'augmente' | 'inchange'; pourcent: number; depart: { date: string; montant: Cents }; dernier: { date: string; montant: Cents } };
+
+/**
+ * Compare le plus ancien solde déclaré (le départ) au plus récent. Seuls les
+ * soldes que tu as déclarés comptent : aucun intérêt ni capital n'est
+ * supposé, et ce n'est PAS du capital remboursé. Le pourcentage est arrondi
+ * vers le bas (jamais exagéré). Une hausse est montrée telle quelle.
+ */
+export function reductionSolde(soldes: readonly { date: string; montant: Cents }[]): ReductionSolde {
+  if (soldes.length < 2) return { etat: 'a-completer', raison: soldes.length === 0 ? 'Aucun solde déclaré.' : 'Un seul solde déclaré : il en faut un deuxième, plus récent.' };
+  const tries = [...soldes].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const depart = tries[0]!;
+  const dernier = tries.at(-1)!;
+  if (depart.montant <= 0) return { etat: 'a-completer', raison: 'Le solde de départ est nul : aucun pourcentage n’est calculable.' };
+  const ecart = depart.montant - dernier.montant;
+  const base = { depart: { date: depart.date, montant: depart.montant }, dernier: { date: dernier.date, montant: dernier.montant } };
+  if (ecart === 0) return { etat: 'inchange', pourcent: 0, ...base };
+  const pourcent = Math.floor((Math.abs(ecart) * 100) / depart.montant);
+  return { etat: ecart > 0 ? 'reduit' : 'augmente', pourcent, ...base };
+}
+
+/** « Solde réduit de 23 % depuis le départ », « moins de 1 % » si l'écart est minime. */
+export function texteReductionSolde(r: ReductionSolde): string {
+  if (r.etat === 'a-completer') return A_COMPLETER;
+  if (r.etat === 'inchange') return 'Solde inchangé depuis le départ';
+  const p = r.pourcent === 0 ? 'moins de 1 %' : `${r.pourcent} %`;
+  return r.etat === 'reduit' ? `Solde réduit de ${p} depuis le départ` : `Solde augmenté de ${p} depuis le départ`;
+}

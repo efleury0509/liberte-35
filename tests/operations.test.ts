@@ -1,6 +1,6 @@
 // V1 lot 6b : « + N autres opérations » sur les cartes de Mes paies.
 import { describe, expect, it } from 'vitest';
-import { autresOperations, nombreOperations, principales, texteAutresOperations } from '../src/lib/operations';
+import { autresOperations, nombreOperations, principales, texteAutresOperations, titresCartes } from '../src/lib/operations';
 import type { Cycle, Ligne } from '../src/noyau/cycles';
 
 const ligne = (id: string, nature: 'revenu' | 'depense', montant: number | null, retiree = false) =>
@@ -30,5 +30,17 @@ describe('V1 lot 6b — opérations des cartes', () => {
     expect(texteAutresOperations(0)).toBeNull();
     expect(texteAutresOperations(1)).toBe('+ 1 autre opération');
     expect(texteAutresOperations(5)).toBe('+ 5 autres opérations');
+  });
+});
+
+describe('Lot 1 — intitulés des cartes de paie', () => {
+  it('une paie a commencé : Paie actuelle, Prochaine paie, Paie suivante, Paie d’après', () => {
+    expect(titresCartes(true)).toEqual(['Paie actuelle', 'Prochaine paie', 'Paie suivante', 'Paie d’après']);
+  });
+  it('aucune période commencée : la première carte est la première paie à venir', () => {
+    expect(titresCartes(false)).toEqual(['Première paie à venir', 'Prochaine paie', 'Paie suivante', 'Paie d’après']);
+  });
+  it('aucune durée ni cadence dans les intitulés', () => {
+    for (const t of [...titresCartes(true), ...titresCartes(false)]) expect(t).not.toMatch(/semaine|mois|jour|\d/);
   });
 });

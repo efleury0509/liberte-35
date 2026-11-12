@@ -46,6 +46,9 @@ pub struct ResumeCopie {
     pub elements: u64,
     pub confirmations: u64,
     pub entrees_journal: u64,
+    /// Lot 1 : date de la première paie du calendrier de cette copie, pour
+    /// reconnaître une copie d'un coup d'œil (« paies depuis le … »).
+    pub debut_paies: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -151,7 +154,15 @@ pub(crate) fn resume_de(conn: &Connection) -> Result<ResumeCopie, rusqlite::Erro
         elements: compter(conn, "elements")?,
         confirmations: compter(conn, "confirmations")?,
         entrees_journal: compter(conn, "journal_changements")?,
+        debut_paies: debut_paies(conn)?,
     })
+}
+
+fn debut_paies(conn: &Connection) -> Result<Option<String>, rusqlite::Error> {
+    if compter(conn, "profil_paie")? == 0 {
+        return Ok(None);
+    }
+    conn.query_row("SELECT depart FROM profil_paie LIMIT 1", [], |r| r.get(0))
 }
 
 fn ouvrir_lecture(chemin: &Path) -> Result<Connection, rusqlite::Error> {

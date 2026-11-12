@@ -31,8 +31,11 @@ test('paie actuelle et suivante côte à côte : revenus − dépenses prévues 
   await expect(cartes.first().getByTestId('equation')).toContainText($('Dépenses prévues 1 100,00 $'));
   await expect(cartes.first().getByTestId('montant-cle')).toHaveText($('1 000,00 $'));
   await expect(cartes.first()).toContainText('Loyer');
-  await expect(cartes.nth(1)).toContainText('Paie suivante');
+  // Lot 1 : intitulés sans durée ni numéro.
+  await expect(cartes.nth(1)).toContainText('Prochaine paie');
   await expect(page.getByTestId('paie-apercu')).toHaveCount(2);
+  await expect(page.getByTestId('paie-apercu').first()).toContainText('Paie suivante');
+  await expect(page.getByTestId('paie-apercu').nth(1)).toContainText('Paie d’après');
   // Les mêmes chiffres que le tableau : rien n'est recalculé à part.
   await voirTout(page);
   await expect(page.locator('tr[data-cycle="2027-01-07"]').getByTestId('disponible')).toHaveText($('1 000,00 $'));
@@ -114,4 +117,18 @@ test('« Ma paie » : changer le salaire s’ouvre dans une fenêtre, Abandonner
   await fenetre.getByLabel('Nouveau salaire net ($)').fill('2500');
   await fenetre.getByRole('button', { name: 'Abandonner', exact: true }).click();
   await expect(page.getByTestId('salaire-actuel')).toHaveText($('2 100,00 $'));
+});
+
+test('Lot 1 : avant toute paie, la première carte est la « Première paie à venir » ; les dates restent visibles', async ({ page }) => {
+  await page.goto('/?aujourdhui=2027-01-02');
+  await page.getByLabel('Date de la première paie').fill('2027-01-07');
+  await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
+  await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();
+  await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
+  const cartes = page.getByTestId('paie-principale');
+  await expect(cartes.first()).toContainText('Première paie à venir');
+  await expect(cartes.first()).toContainText('7 janv.');
+  await expect(cartes.nth(1)).toContainText('Prochaine paie');
+  await expect(cartes.nth(1)).toContainText('21 janv.');
+  await expect(page.getByText('Paie actuelle')).toHaveCount(0);
 });

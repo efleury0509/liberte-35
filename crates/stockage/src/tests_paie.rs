@@ -249,6 +249,9 @@ fn contrat_d_echange_avec_l_interface_pour_les_six_changements() {
         r#"{"type":"retirerException","dateOrigine":"2027-04-15"}"#,
         r#"{"type":"definirSeuil","seuil":75000}"#,
         r#"{"type":"definirSeuil","seuil":null}"#,
+        // Lot 1 : priorité de remboursement des dettes.
+        r#"{"type":"definirPrioriteDettes","ordre":["auto","visa"]}"#,
+        r#"{"type":"definirPrioriteDettes","ordre":[]}"#,
     ];
     for json in exemples {
         let c: Result<ChangementPaie, _> = serde_json::from_str(json);
@@ -279,6 +282,7 @@ fn contrat_d_echange_avec_l_interface_pour_les_six_changements() {
         cartes: Vec::new(),
         comptes: Vec::new(),
         depenses: Vec::new(),
+        priorite_dettes: Vec::new(),
     })
     .unwrap();
     assert_eq!(donnees["salaires"][0]["aPartirDu"], "2027-01-15");

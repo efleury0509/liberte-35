@@ -270,6 +270,8 @@ export interface DonneesPaie {
   comptes: CompteStocke[];
   /** Étape A : dépenses à prévoir. */
   depenses?: DepenseStockee[];
+  /** Lot 1 : priorité de remboursement (prêts et carte), la première d'abord ; vide : aucune. */
+  prioriteDettes?: string[];
 }
 
 export type ChangementPaie =
@@ -279,6 +281,8 @@ export type ChangementPaie =
   | { type: 'definirException'; exception: ExceptionStockee }
   | { type: 'retirerException'; dateOrigine: string }
   | { type: 'definirSeuil'; seuil: number | null }
+  /** Lot 1 : ordre de priorité des dettes ; une liste vide retire les priorités. */
+  | { type: 'definirPrioriteDettes'; ordre: string[] }
   | { type: 'definirElement'; element: ElementStocke }
   | { type: 'supprimerElement'; id: string }
   | { type: 'definirAjustement'; ajustement: AjustementStocke }
@@ -315,6 +319,8 @@ export interface ResumeCopie {
   elements: number;
   confirmations: number;
   entreesJournal: number;
+  /** Lot 1 : première paie du calendrier de la copie ; null sans calendrier. */
+  debutPaies?: string | null;
 }
 
 export interface CopieListee {
@@ -462,6 +468,7 @@ export function creerApercu(): Plateforme {
     elements: i.donnees.elements.length,
     confirmations: i.donnees.confirmations.length,
     entreesJournal: i.journal.length,
+    debutPaies: i.donnees.profil?.depart ?? null,
   });
   const decaler = (jours: number) => ajouterJours(aujourdhui(), jours) as string;
 

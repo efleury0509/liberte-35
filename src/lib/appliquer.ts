@@ -51,6 +51,15 @@ function appliquerUn(d: DonneesPaie, c: ChangementPaie): void {
     case 'definirSeuil':
       d.seuil = c.seuil;
       break;
+    case 'definirPrioriteDettes': {
+      // Mêmes refus que le stockage : une dette vide, en double ou inconnue.
+      if (new Set(c.ordre).size !== c.ordre.length || c.ordre.some((id) => id.trim() === '')) refus('L’ordre de priorité contient une dette vide ou en double.');
+      for (const id of c.ordre) {
+        if (!(d.prets ?? []).some((p) => p.id === id) && !(d.cartes ?? []).some((k) => k.id === id)) refus(`Priorité : la dette « ${id} » n’existe pas.`);
+      }
+      d.prioriteDettes = [...c.ordre];
+      break;
+    }
     case 'definirElement': {
       if (c.element.libelle.trim() === '') refus('Un revenu ou une dépense doit avoir un nom.');
       if (c.element.montants.some((m) => m.montant < 0)) refus('Un montant ne peut pas être négatif.');
@@ -275,6 +284,8 @@ function inverseUn(d: DonneesPaie, c: ChangementPaie): ChangementPaie[] {
     }
     case 'definirSeuil':
       return [{ type: 'definirSeuil', seuil: d.seuil }];
+    case 'definirPrioriteDettes':
+      return [{ type: 'definirPrioriteDettes', ordre: [...(d.prioriteDettes ?? [])] }];
     case 'definirElement': {
       const avant = d.elements.find((e) => e.id === c.element.id);
       return [avant ? { type: 'definirElement', element: avant } : { type: 'supprimerElement', id: c.element.id }];

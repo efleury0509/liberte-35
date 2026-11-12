@@ -385,3 +385,49 @@ fn p6_mise_a_niveau_de_la_structure_5_vers_6() {
     creer(&mut s, pret_minimal("auto"));
     assert_eq!(s.lire_paie().unwrap().prets.len(), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Lot 1 : priorité de remboursement, choisie à la main (paramètre d'affichage).
+
+fn priorite(s: &mut Stockage, ordre: &[&str]) -> Resultat<DonneesPaie> {
+    s.appliquer_changements_paie(
+        &[ChangementPaie::DefinirPrioriteDettes {
+            ordre: ordre.iter().map(|x| x.to_string()).collect(),
+        }],
+        &journal(),
+    )
+}
+
+#[test]
+fn lot1_priorite_des_dettes_gardee_relue_puis_retiree_sans_toucher_aux_dettes() {
+    let d = TempDir::new().unwrap();
+    let mut s = ouvrir(&d);
+    creer(&mut s, pret_minimal("auto"));
+    creer(&mut s, pret_minimal("perso"));
+    let avant = s.lire_paie().unwrap();
+    assert!(avant.priorite_dettes.is_empty(), "aucune priorité inventée");
+    let apres = priorite(&mut s, &["perso", "auto"]).unwrap();
+    assert_eq!(
+        apres.priorite_dettes,
+        vec!["perso".to_string(), "auto".to_string()]
+    );
+    // Rien d'autre ne change : éléments, prêts, confirmations.
+    assert_eq!(apres.elements, avant.elements);
+    assert_eq!(apres.prets, avant.prets);
+    assert_eq!(apres.confirmations, avant.confirmations);
+    assert!(priorite(&mut s, &[]).unwrap().priorite_dettes.is_empty());
+}
+
+#[test]
+fn lot1_priorite_refuse_une_dette_inconnue_ou_en_double_sans_rien_ecrire() {
+    let d = TempDir::new().unwrap();
+    let mut s = ouvrir(&d);
+    creer(&mut s, pret_minimal("auto"));
+    priorite(&mut s, &["auto"]).unwrap();
+    assert!(priorite(&mut s, &["auto", "auto"]).is_err());
+    assert!(priorite(&mut s, &["fantome"]).is_err());
+    assert_eq!(
+        s.lire_paie().unwrap().priorite_dettes,
+        vec!["auto".to_string()]
+    );
+}

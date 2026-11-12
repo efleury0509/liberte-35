@@ -74,6 +74,10 @@ describe('resumeTexte', () => {
       'paie pas encore configurée · aucun élément · aucune confirmation · aucun changement au journal',
     );
   });
+  it('Lot 1 : le début du calendrier rend la copie reconnaissable', () => {
+    expect(resumeTexte(resume({ debutPaies: '2025-01-02' }))).toBe('paies depuis le 2 janv. 2025 · 3 éléments · 4 confirmations · 12 changements au journal');
+    expect(resumeTexte(resume({ debutPaies: null }))).toBe('3 éléments · 4 confirmations · 12 changements au journal');
+  });
 });
 
 const copie = (c: Partial<CopieListee>): CopieListee => ({
