@@ -5,6 +5,7 @@
   import { onMount, tick } from 'svelte';
   import Apercu from '../Apercu.svelte';
   import ReservesCompte from './ReservesCompte.svelte';
+  import Illustration from '../base/Illustration.svelte';
   import CarteBandeau from '../base/CarteBandeau.svelte';
   import BarreProgression from '../base/BarreProgression.svelte';
   import LigneMontant from '../base/LigneMontant.svelte';
@@ -655,6 +656,10 @@
   {#if erreurChargement}
     <p role="alert" class="erreur">{erreurChargement}</p>
   {:else if donnees}
+    <!-- Illustrations (maquette B approuvée) : la loutre jardinière à côté des totaux ;
+         en fenêtre étroite, elle passe après les comptes. -->
+    <div class="mise-en-page">
+    <div class="loutre" data-testid="illustration-epargne"><Illustration nom="loutre-epargne" largeur={1672} hauteur={941} /></div>
     {#if total && synthese}
       <div class="synthese bandeau-prune" data-testid="total-epargne">
         <div class="kpi principal-kpi">
@@ -677,6 +682,7 @@
       </div>
     {/if}
 
+    <div class="zone-comptes">
     <div class="entete">
       <h2>Mes comptes</h2>
       <button type="button" class="principal" onclick={() => ouvrir('ajout')}>Ajouter un compte</button>
@@ -731,6 +737,8 @@
         </div>
       </details>
     {/if}
+    </div>
+    </div>
   {/if}
 </section>
 
@@ -765,13 +773,67 @@
     max-width: var(--largeur-contenu);
     font-size: var(--texte-courant);
   }
-  .synthese {
+  /* Totaux à gauche, loutre à droite ; comptes en dessous, deux par ligne. */
+  .mise-en-page {
     display: grid;
-    grid-template-columns: 1.4fr 1fr 1fr 2fr;
-    gap: var(--espace-6);
+    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-areas: 'totaux loutre' 'comptes comptes';
+    column-gap: var(--espace-6);
+    align-items: start;
+  }
+  .zone-comptes {
+    grid-area: comptes;
+    min-width: 0;
+  }
+  .loutre {
+    grid-area: loutre;
+    margin-bottom: var(--espace-6);
+  }
+  /* L'illustration entière, jamais déformée ni recadrée. */
+  .loutre :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1672 / 941;
+    object-fit: contain;
+    border-radius: 16px;
+    box-shadow: var(--ombre-carte);
+  }
+  .synthese {
+    grid-area: totaux;
+    display: grid;
+    grid-template-columns: 1.3fr 1fr 1fr;
+    row-gap: var(--espace-3);
+    column-gap: var(--espace-6);
     align-items: center;
+    align-self: stretch;
+    align-content: center;
     margin: 0 0 var(--espace-6);
     padding: var(--espace-4) var(--espace-8);
+  }
+  .synthese .notes {
+    grid-column: 1 / -1;
+  }
+  .synthese .kpi:nth-child(3) {
+    border-right: none;
+  }
+  @media (max-width: 1180px) {
+    .mise-en-page {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: 'totaux' 'comptes' 'loutre';
+    }
+    .loutre {
+      max-width: 520px;
+    }
+    .synthese {
+      grid-template-columns: 1.4fr 1fr 1fr 2fr;
+    }
+    .synthese .notes {
+      grid-column: auto;
+    }
+    .synthese .kpi:nth-child(3) {
+      border-right: 2px solid color-mix(in srgb, var(--couleur-bandeau-texte) 25%, transparent);
+    }
   }
   .kpi {
     display: flex;

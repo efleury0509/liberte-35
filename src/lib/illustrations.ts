@@ -8,6 +8,8 @@ import loutreBienvenue from '../assets/illustrations/loutre_bienvenue_accueil.pn
 // Dépenses : la loutre gestionnaire (2e version approuvée), en tête de la
 // colonne de droite ; métadonnées d'origine retirées, pixels identiques.
 import loutreDepenses from '../assets/illustrations/loutre_gestionnaire_depenses.png';
+// Épargne : la loutre jardinière, à côté du bandeau des totaux (maquette B).
+import loutreEpargne from '../assets/illustrations/loutre_jardiniere_epargne.png';
 
 export type NomIllustration =
   | 'cafe-glace'
@@ -15,6 +17,7 @@ export type NomIllustration =
   | 'loutre'
   | 'loutre-bienvenue'
   | 'loutre-depenses'
+  | 'loutre-epargne'
   | 'loutre-savante'
   | 'paysage-liberte'
   | 'popcorn'
@@ -42,6 +45,10 @@ export const ILLUSTRATIONS: Record<NomIllustration, Illustration> = {
   'loutre-depenses': {
     alt: 'Une loutre en coton ouaté mauve vérifie un long reçu, entourée d’un carnet « Budget mensuel », d’une calculatrice, d’une tirelire et de son café glacé.',
     fichier: loutreDepenses,
+  },
+  'loutre-epargne': {
+    alt: 'Une loutre jardinière arrose des pots étiquetés Fonds d’urgence, Projets à venir, CELI, REER et Réserves.',
+    fichier: loutreEpargne,
   },
   'loutre-savante': { alt: '', fichier: null },
   'paysage-liberte': { alt: '', fichier: null },
