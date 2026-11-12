@@ -21,8 +21,11 @@
 
 <article class="carte-v1 {variante} fond-{fond ?? teinte}" data-variante={variante}>
   <header>
-    {#if icone}<span class="icone-entete"><Icone {icone} taille={variante === 'bandeau' ? 30 : 34} /></span>{/if}
-    <TitrePastille {teinte}>{titre}</TitrePastille>
+    <!-- 0.19.1 : l'icône reste collée au titre, même quand il passe à la ligne. -->
+    <span class="tete">
+      {#if icone}<span class="icone-entete"><Icone {icone} taille={variante === 'bandeau' ? 30 : 34} /></span>{/if}
+      <TitrePastille {teinte}>{titre}</TitrePastille>
+    </span>
     {#if badge}<span class="badge">{@render badge()}</span>{/if}
   </header>
   <div class="corps">{@render children()}</div>
@@ -55,6 +58,20 @@
     background: var(--couleur-bandeau);
     color: var(--couleur-bandeau-texte);
   }
+  /* Le titre peut rétrécir (et passer à la ligne) ; l'icône, jamais. */
+  .tete {
+    display: flex;
+    align-items: center;
+    gap: var(--espace-3);
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .tete > :global(.titre-pastille) {
+    min-width: 0;
+  }
+  .icone-entete {
+    flex-shrink: 0;
+  }
   .badge {
     margin-left: auto;
     flex-shrink: 0;
@@ -73,7 +90,8 @@
     padding: var(--espace-4) var(--espace-6);
     border: var(--epaisseur-bordure) solid var(--couleur-bordure);
   }
-  .teintee header {
+  .teintee header,
+  .teintee .tete {
     display: contents;
   }
   .teintee .icone-entete {
