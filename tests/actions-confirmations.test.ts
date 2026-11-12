@@ -12,7 +12,7 @@ import { proposerFin, proposerFrequence, proposerMontant, proposerSuppression, p
 import { versElementStocke } from '../src/actions/elementsStockes';
 import { proposerAjustement, proposerRetrait } from '../src/actions/occurrences';
 import { ErreurSaisie, proposerException, proposerProfil, versNoyau } from '../src/actions/paie';
-import { cyclesAffiches } from '../src/actions/analyse';
+import { aVerifierAvant, cyclesAffiches } from '../src/actions/analyse';
 import { appliquerChangements, donneesVides, inverser } from '../src/lib/appliquer';
 import type { DonneesPaie } from '../src/lib/plateforme';
 import { dateCivile as d } from '../src/noyau/dates';
@@ -203,7 +203,10 @@ describe('Protection des faits confirmés (P)', () => {
 describe('Cycles précédents (étape 5)', () => {
   const vue = (precedents: number) => {
     const n = versNoyau(donnees());
-    return cyclesAffiches(n.profil!, { exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, confirmations: n.confirmations, seuil: n.seuil }, JOUR, 13, precedents);
+    const entree = { exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, confirmations: n.confirmations, seuil: n.seuil };
+    const v = cyclesAffiches(n.profil!, entree, JOUR, 13, precedents);
+    // H1 : le rappel est calculé à part, sur tout l'historique.
+    return { ...v, aVerifierAvant: aVerifierAvant(n.profil!, entree, JOUR, v.cycles[0]!.debut) };
   };
 
   it('par défaut, l’écran commence au cycle actuel et compte ce qui reste à vérifier avant', () => {

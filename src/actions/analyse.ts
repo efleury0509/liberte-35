@@ -18,6 +18,16 @@ import { montantOuACompleter, versNoyau, type DonneesNoyau } from './paie';
 export const NOMBRE_CYCLES = 13;
 
 /**
+ * Premier jour du calendrier : la date de départ, ou la toute première paie
+ * si une exception l'a versée avant (0.4.3).
+ */
+function debutDuCalendrier(profil: ProfilPaie, exceptions: Parameters<typeof paiesEntre>[1]): DateCivile {
+  const depart = profil.frequence.depart;
+  const premiere = paiesEntre(profil, exceptions, ajouterJours(depart, -31), ajouterJours(depart, 31))[0]?.date ?? depart;
+  return premiere < depart ? premiere : depart;
+}
+
+/**
  * Cycles affichés : le cycle actuel et les suivants (13 par défaut ; « Voir
  * les paies suivantes » en ajoute 13 à chaque fois). On ne calcule que la
  * fenêtre affichée : aucun calendrier illimité.
@@ -29,14 +39,14 @@ export function cyclesAffiches(
   nombre: number = NOMBRE_CYCLES,
   /** Étape 5 : cycles précédents affichés en plus, avant le cycle actuel. */
   precedents = 0,
-): { plan: ReturnType<typeof planifier>; cycles: Cycle[]; courant: DateCivile | null; aVerifierAvant: number } {
+): { plan: ReturnType<typeof planifier>; cycles: Cycle[]; courant: DateCivile | null } {
   const depart = profil.frequence.depart;
   // 0.4.3 : la première paie peut être versée avant la date de départ du
   // calendrier ; l'affichage commence alors à sa date réelle.
-  const premiere = paiesEntre(profil, entree.exceptions ?? [], ajouterJours(depart, -31), ajouterJours(depart, 31))[0]?.date ?? depart;
-  const debutCalendrier = premiere < depart ? premiere : depart;
-  // Étape 5 : on calcule aussi les cycles des derniers mois, pour savoir s'il
-  // y reste des éléments à vérifier (jamais avant le début du calendrier).
+  const debutCalendrier = debutDuCalendrier(profil, entree.exceptions ?? []);
+  // Quelques mois avant le cycle actuel suffisent à l'affichage (jamais avant
+  // le début du calendrier). Le rappel des éléments à vérifier, lui, regarde
+  // tout l'historique : voir aVerifierAvant (H1).
   const recul = ajouterJours(jour, -200 - precedents * 32);
   const debut = depart > jour ? debutCalendrier : recul < debutCalendrier ? debutCalendrier : recul;
   // Assez large pour « nombre » cycles mensuels, plus la marge du début.
@@ -46,8 +56,25 @@ export function cyclesAffiches(
   const i = Math.max(0, iActuel - precedents);
   const cycles = plan.cycles.slice(i, iActuel + nombre);
   const actuel = plan.cycles.find((c) => c.debut <= jour && c.fin >= jour);
-  const aVerifierAvant = plan.cycles.slice(0, i).reduce((n, c) => n + c.aVerifier, 0);
-  return { plan, cycles, courant: actuel?.paie.dateOrigine ?? null, aVerifierAvant };
+  return { plan, cycles, courant: actuel?.paie.dateOrigine ?? null };
+}
+
+/**
+ * H1 : nombre d'éléments à vérifier dans toutes les paies versées avant
+ * `avant` (le début du premier cycle affiché), depuis le début du
+ * calendrier, quelle que soit leur ancienneté. Les statuts sont ceux du plan
+ * (A2) : un élément non confirmé n'est jamais considéré comme payé.
+ */
+export function aVerifierAvant(
+  profil: ProfilPaie,
+  entree: Omit<Parameters<typeof planifier>[0], 'profil'>,
+  jour: DateCivile,
+  avant: DateCivile,
+): number {
+  const debut = debutDuCalendrier(profil, entree.exceptions ?? []);
+  const fin = ajouterJours(avant, -1);
+  if (fin < debut) return 0;
+  return planifier({ ...entree, aujourdhui: jour, profil }, debut, fin).cycles.reduce((n, c) => n + c.aVerifier, 0);
 }
 
 export interface Analyse {

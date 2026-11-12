@@ -14,6 +14,7 @@
     type Proposition,
   } from '../../actions/paie';
   import { cyclesAffiches, NOMBRE_CYCLES } from '../../actions/elements';
+  import { aVerifierAvant } from '../../actions/analyse';
   import {
     lireOccurrence,
     proposerAjustement,
@@ -151,13 +152,10 @@
       return { plan, cycles: plan.cycles, courant: null, aVerifierAvant: 0 };
     }
     if (!noyau?.profil) return null;
-    return cyclesAffiches(
-      noyau.profil,
-      { exceptions: noyau.exceptions, elements: noyau.elements, ajustements: noyau.ajustements, confirmations: noyau.confirmations, seuil: noyau.seuil, couvertures: noyau.couvertures },
-      jour,
-      nombreCycles,
-      nombrePrecedents,
-    );
+    const entree = { exceptions: noyau.exceptions, elements: noyau.elements, ajustements: noyau.ajustements, confirmations: noyau.confirmations, seuil: noyau.seuil, couvertures: noyau.couvertures };
+    const v = cyclesAffiches(noyau.profil, entree, jour, nombreCycles, nombrePrecedents);
+    // H1 : le rappel compte tout l'historique, quelle que soit son ancienneté.
+    return { ...v, aVerifierAvant: v.cycles[0] ? aVerifierAvant(noyau.profil, entree, jour, v.cycles[0].debut) : 0 };
   }
 
   const salaireActuel = $derived(noyau?.profil ? salaireAffiche(noyau.profil.montants, jour) : A_COMPLETER);
