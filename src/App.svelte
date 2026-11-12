@@ -9,6 +9,7 @@
   import MonEpargne from './composants/epargne/MonEpargne.svelte';
   import DepensesAPrevoir from './composants/depenses/DepensesAPrevoir.svelte';
   import Accueil from './composants/accueil/Accueil.svelte';
+  import Illustration from './composants/base/Illustration.svelte';
   import type { CibleMesPaies } from './actions/accueil';
   import { SECTION_PAR_DEFAUT, trouverSection, type IdSection } from './lib/navigation';
   import { obtenirPlateforme, type EtatApplication } from './lib/plateforme';
@@ -111,6 +112,11 @@
     {/if}
 
     {#if section}
+      {#if section.id === 'mes-paies'}
+        <!-- Illustrations (maquette A approuvée) : la loutre organisatrice flotte à
+             droite du titre et des boutons de Mes paies, sur le fond crème. -->
+        <div class="loutre-paies" data-testid="illustration-paies"><Illustration nom="loutre-paies" largeur={1672} hauteur={941} /></div>
+      {/if}
       {#if section.id !== 'vue-ensemble'}
         <EnTeteSection id="titre-section" titre={section.libelle} sousTitre={section.sousTitre} illustration={section.illustration} />
       {/if}
@@ -159,6 +165,20 @@
     overflow: hidden;
   }
 
+  /* La loutre de Mes paies flotte à droite : le titre, le sous-titre et les
+     boutons se rangent à sa gauche ; les paies passent dessous (clear). */
+  .loutre-paies {
+    float: right;
+    width: min(360px, 38%);
+    margin: 0 0 var(--espace-4) var(--espace-6);
+  }
+  .loutre-paies :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1672 / 941;
+    object-fit: contain;
+  }
   main {
     position: relative;
     min-height: 0;

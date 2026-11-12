@@ -9,7 +9,6 @@
   import Pastille from '../base/Pastille.svelte';
   import BarreProgression from '../base/BarreProgression.svelte';
   import Icone from '../base/Icone.svelte';
-  import Illustration from '../base/Illustration.svelte';
   import type { Cycle, Ligne } from '../../noyau/cycles';
   import { formaterDateCourte, type DateCivile } from '../../noyau/dates';
   import { formaterMontant, type Cents } from '../../noyau/montants';
@@ -40,7 +39,7 @@
   };
 </script>
 
-{#snippet principale(c: Cycle, titre: string, teinte: 'sauge' | 'peche', illustration: 'licorne' | 'calendrier')}
+{#snippet principale(c: Cycle, titre: string, teinte: 'sauge' | 'peche')}
   <div class="paie-principale" data-testid="paie-principale" data-cycle-carte={c.paie.dateOrigine}>
     <CarteBandeau {titre} {teinte} icone={CalendarDays}>
       {#snippet badge()}
@@ -59,7 +58,6 @@
             <BarreProgression valeur={c.disponible} cible={c.revenus} libelle="Part des revenus encore disponible" teinte={teinte === 'sauge' ? 'fraiche' : 'chaude'} sansPourcentage />
           {/if}
         </div>
-        <span class="ill"><Illustration nom={illustration} largeur={104} hauteur={92} /></span>
       </div>
       <p class="equation" data-testid="equation">
         <span><span class="discret-eq">Revenus</span> <strong>{texte(c.revenus)}</strong></span>
@@ -114,8 +112,8 @@
 {#if quatre.length > 0}
   <section class="quatre-paies" aria-label="Mes quatre prochaines paies">
     <div class="deux">
-      {@render principale(quatre[0]!, titres[0], 'sauge', 'licorne')}
-      {#if quatre[1]}{@render principale(quatre[1], titres[1], 'peche', 'calendrier')}{/if}
+      {@render principale(quatre[0]!, titres[0], 'sauge')}
+      {#if quatre[1]}{@render principale(quatre[1], titres[1], 'peche')}{/if}
     </div>
     {#if quatre.length > 2}
       <div class="deux apercus">
@@ -135,9 +133,11 @@
     margin: 0 0 var(--espace-8);
     font-size: var(--texte-courant);
   }
+  /* Côte à côte quand chaque carte a au moins 400 px ; sinon l'une sous
+     l'autre, pour que rien ne déborde (fenêtre étroite). */
   .deux {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr));
     gap: var(--espace-6);
   }
   .apercus {
@@ -154,10 +154,6 @@
     flex-direction: column;
     gap: var(--espace-3);
     min-width: 0;
-  }
-  .ill {
-    display: flex;
-    flex-shrink: 0;
   }
   .equation {
     display: flex;

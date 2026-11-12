@@ -522,7 +522,7 @@
 {/if}
 
 {#if vue && ongletPaies === 'prochaines'}
-  <div role="tabpanel" id="panneau-paies-prochaines" aria-labelledby="onglet-paies-prochaines">
+  <div role="tabpanel" class="sous-loutre" id="panneau-paies-prochaines" aria-labelledby="onglet-paies-prochaines">
   {#if !exemple && vue.aVerifierAvant > 0}
     <p class="rappel-passees" data-testid="a-verifier-avant">
       {vue.aVerifierAvant === 1 ? '1 élément à vérifier' : `${vue.aVerifierAvant} éléments à vérifier`} dans les paies précédentes.
@@ -541,7 +541,7 @@
 {/if}
 
 {#if vue && ongletPaies === 'toutes'}
-  <div role="tabpanel" id="panneau-paies-toutes" aria-labelledby="onglet-paies-toutes">
+  <div role="tabpanel" class="sous-loutre" id="panneau-paies-toutes" aria-labelledby="onglet-paies-toutes">
   <h2 class="titre-tableau">Toutes mes paies</h2>
   {#if !exemple}
     <div class="choix-vue" role="group" aria-label="Paies à afficher">
@@ -1278,6 +1278,15 @@
   }
   .outil-exemple {
     margin: 0 0 var(--espace-4);
+  }
+  /* À côté de la loutre (flottante, à droite) : ces blocs se rangent à sa
+     gauche sans passer dessous ; les paies commencent sous elle. */
+  .bandeau-exemple,
+  section[aria-labelledby='titre-config'] {
+    display: flow-root;
+  }
+  .sous-loutre {
+    clear: both;
   }
   .bandeau-exemple {
     padding: var(--espace-2) var(--espace-4);

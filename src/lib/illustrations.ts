@@ -10,6 +10,9 @@ import loutreBienvenue from '../assets/illustrations/loutre_bienvenue_accueil.pn
 import loutreDepenses from '../assets/illustrations/loutre_gestionnaire_depenses.png';
 // Épargne : la loutre jardinière, à côté du bandeau des totaux (maquette B).
 import loutreEpargne from '../assets/illustrations/loutre_jardiniere_epargne.png';
+// Mes paies : la loutre organisatrice, à droite du titre et des boutons
+// (maquette A) ; bords d'origine adoucis, posée sur le crème sans cadre.
+import loutrePaies from '../assets/illustrations/loutre_organisatrice_paies.png';
 
 export type NomIllustration =
   | 'cafe-glace'
@@ -18,6 +21,7 @@ export type NomIllustration =
   | 'loutre-bienvenue'
   | 'loutre-depenses'
   | 'loutre-epargne'
+  | 'loutre-paies'
   | 'loutre-savante'
   | 'paysage-liberte'
   | 'popcorn'
@@ -49,6 +53,10 @@ export const ILLUSTRATIONS: Record<NomIllustration, Illustration> = {
   'loutre-epargne': {
     alt: 'Une loutre jardinière arrose des pots étiquetés Fonds d’urgence, Projets à venir, CELI, REER et Réserves.',
     fichier: loutreEpargne,
+  },
+  'loutre-paies': {
+    alt: 'Une loutre organisatrice fait un clin d’œil en cochant Paie, Factures et Épargne dans son agenda, à côté d’un calendrier et de son café glacé.',
+    fichier: loutrePaies,
   },
   'loutre-savante': { alt: '', fichier: null },
   'paysage-liberte': { alt: '', fichier: null },
