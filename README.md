@@ -156,6 +156,10 @@ et dans le cahier fonctionnel de référence.
   entière ; soleil d'en-tête retiré ; plus de débordement horizontal à
   1024 px. Aucun calcul, aucune règle ni structure de données changés
   (toujours 9).
+- Illustrations — Épargne, fabrication Essai (version 0.19.0) : loutre
+  jardinière à droite du bandeau des totaux, entière ; comptes toujours deux
+  par ligne ; soleil d'en-tête retiré. Aucun calcul, aucune règle ni
+  structure de données changés (toujours 9).
 
 ## Organisation du code
 
