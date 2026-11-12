@@ -170,6 +170,11 @@ et dans le cahier fonctionnel de référence.
   soleil d'en-tête et emplacements vides des cartes retirés ; cartes de paie
   l'une sous l'autre quand la place manque (plus de débordement à 1024 px).
   Aucun calcul, aucune règle ni structure de données changés (toujours 9).
+- Illustrations — Dettes, fabrication Essai (version 0.21.0) : paysage
+  panoramique « Liberté financière » à droite du titre (540 × 180 au plus),
+  soleil d'en-tête retiré ; « Solde actuel » d'un prêt sur toute la largeur de
+  la carte, le complément sur sa propre ligne. Aucun calcul, aucune règle ni
+  structure de données changés (toujours 9).
 
 ## Organisation du code
 
