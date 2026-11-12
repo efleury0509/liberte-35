@@ -160,6 +160,11 @@ et dans le cahier fonctionnel de référence.
   jardinière à droite du bandeau des totaux, entière ; comptes toujours deux
   par ligne ; soleil d'en-tête retiré. Aucun calcul, aucune règle ni
   structure de données changés (toujours 9).
+- Corrections d'affichage, fabrication Essai (version 0.19.1) : bandeau des
+  totaux d'Épargne adaptatif (montants jamais coupés, une ou deux lignes selon
+  la place, note sous les montants) ; titres de cartes longs sur plusieurs
+  lignes au lieu d'être coupés. Aucun calcul, aucune règle ni structure de
+  données changés (toujours 9).
 
 ## Organisation du code
 

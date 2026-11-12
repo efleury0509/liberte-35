@@ -26,8 +26,8 @@ describe('Numéro de version', () => {
     expect(JSON.parse(lire('src-tauri/tauri.essai.conf.json')).version).toBeUndefined();
   });
 
-  it('est celui de la fabrication Essai de l’illustration d’Épargne : 0.19.0', () => {
-    expect(paquet).toBe('0.19.0');
+  it('est celui de la fabrication Essai des corrections d’affichage d’Épargne et des cartes : 0.19.1', () => {
+    expect(paquet).toBe('0.19.1');
   });
 
   it('la fabrication vérifie le numéro avant de publier (U2)', () => {
