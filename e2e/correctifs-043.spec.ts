@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { voirProchaines, voirTout } from './onglets';
 
 // Version 0.4.3 : parcours de la paie déplacée (corrections 1, 2, 3, 5).
 
@@ -9,12 +10,15 @@ async function preparer(page: Page) {
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.getByRole('button', { name: 'Enregistrer' }).click();
   if (await page.getByTestId('apercu').count()) await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
+  await voirTout(page);
   await expect(page.locator('tr[data-cycle="2027-04-29"]')).toBeVisible();
 }
 
 async function deplacer(page: Page, ligne: string, date: string) {
+  await voirTout(page);
   const b = page.locator(`tr[data-cycle="${ligne}"]`).getByRole('button', { name: 'Détails' });
   if ((await b.getAttribute('aria-expanded')) !== 'true') await b.click();
+  await voirTout(page);
   const detail = page.getByTestId('detail-cycle');
   // Correction 1 : le formulaire de paie est replié tant qu'on ne le demande pas.
   await expect(detail.getByLabel('Date réelle de versement')).toHaveCount(0);
@@ -34,9 +38,11 @@ test('déplacer la 3e paie d’avril : aperçu obligatoire, puis ligne bien visi
   await expect(apercu).toContainText('Cycle de cette paie : 14 jours → 3 jours (du 10 mai au 12 mai).');
   await apercu.getByRole('button', { name: 'Enregistrer' }).click();
   // Correction 3 : la paie déplacée reste repérable par sa date d'origine.
+  await voirTout(page);
   const ligne = page.locator('tr[data-cycle="2027-05-10"]');
   await expect(ligne).toContainText('10 mai 2027');
   await expect(ligne).toContainText('prévue le 29 avr.');
+  await voirTout(page);
   await expect(page.locator('[data-testid="cycles"] tbody tr[data-cycle]')).toHaveCount(13);
 });
 
@@ -48,6 +54,7 @@ test('remettre la paie à sa date d’origine : aperçu, puis retour exact au ca
   const apercu = page.getByTestId('apercu');
   await expect(apercu).toContainText('Cycle de cette paie : 3 jours → 14 jours (du 29 avr. au 12 mai).');
   await apercu.getByRole('button', { name: 'Enregistrer' }).click();
+  await voirTout(page);
   const ligne = page.locator('tr[data-cycle="2027-04-29"]');
   await expect(ligne).toContainText('29 avr. 2027');
   await expect(ligne).not.toContainText('prévue le');
@@ -55,6 +62,7 @@ test('remettre la paie à sa date d’origine : aperçu, puis retour exact au ca
 
 test('le formulaire d’ajustement d’une ligne et celui de la paie ne s’affichent jamais ensemble (une fenêtre à la fois)', async ({ page }) => {
   await preparer(page);
+  await voirProchaines(page);
   await page.getByRole('button', { name: 'Ajouter un revenu ou une dépense' }).click();
   const f = page.getByTestId('formulaire-element');
   await f.getByLabel('Nature').selectOption({ label: 'Revenu' });
@@ -63,7 +71,9 @@ test('le formulaire d’ajustement d’une ligne et celui de la paie ne s’affi
   await f.getByLabel('Quand').selectOption({ label: 'Une seule fois' });
   await f.getByLabel('Date').fill('2027-05-10');
   await f.getByRole('button', { name: 'Enregistrer' }).click();
+  await voirTout(page);
   await page.locator('tr[data-cycle="2027-04-29"]').getByRole('button', { name: 'Détails' }).click();
+  await voirTout(page);
   const detail = page.getByTestId('detail-cycle');
   await detail.locator('tr', { hasText: 'Remboursement' }).getByRole('button', { name: 'Ajuster' }).click();
   const fenetre = page.getByTestId('fenetre-formulaire');
@@ -79,6 +89,7 @@ test('le formulaire d’ajustement d’une ligne et celui de la paie ne s’affi
 
 test('bandeaux : « Enregistré » se ferme à la demande, « Annulé » disparaît seul', async ({ page }) => {
   await preparer(page);
+  await voirProchaines(page);
   await page.getByRole('button', { name: 'Ajouter un revenu ou une dépense' }).click();
   const f = page.getByTestId('formulaire-element');
   await f.getByLabel('Nom').fill('Abonnement');
@@ -91,6 +102,7 @@ test('bandeaux : « Enregistré » se ferme à la demande, « Annulé » dispara
   await enregistre.getByRole('button', { name: 'Fermer' }).click();
   await expect(enregistre).toHaveCount(0);
 
+  await voirProchaines(page);
   await page.getByRole('button', { name: 'Ajouter un revenu ou une dépense' }).click();
   await f.getByLabel('Nom').fill('Abonnement 2');
   await f.getByLabel('Montant ($, facultatif)').fill('20');

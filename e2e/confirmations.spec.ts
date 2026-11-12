@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { voirProchaines, voirTout } from './onglets';
 
 // Étape 5 : confirmations, dans l'aperçu en mémoire. Aujourd'hui = 10 mars 2027.
 const ESP = ' ';
@@ -10,6 +11,7 @@ async function enregistrer(page: Page, zone = page.locator('body')) {
 }
 
 async function ajouter(page: Page, o: { nature?: string; nom: string; montant: string; genre?: string; quand: string; date?: string; incertain?: boolean }) {
+  await voirProchaines(page);
   await page.getByRole('button', { name: 'Ajouter un revenu ou une dépense' }).click();
   const f = page.getByTestId('formulaire-element');
   await f.getByLabel('Nature').selectOption({ label: o.nature ?? 'Dépense' });
@@ -35,6 +37,7 @@ async function preparer(page: Page) {
 
 const ligneCycle = (page: Page, debut: string) => page.locator(`tr[data-cycle="${debut}"]`);
 async function details(page: Page, debut: string) {
+  await voirTout(page);
   // Aujourd'hui = 10 mars : les cycles de février sont des cycles précédents.
   if ((await ligneCycle(page, debut).count()) === 0) await page.getByRole('button', { name: 'Voir les paies précédentes' }).click();
   const b = ligneCycle(page, debut).getByRole('button', { name: 'Détails' });
@@ -42,18 +45,25 @@ async function details(page: Page, debut: string) {
   return page.getByTestId('detail-cycle');
 }
 
-test('le tableau des cycles est juste sous « Ma paie », avant les listes', async ({ page }) => {
+test('V1 lot 6b : le tableau des cycles est dans « Toutes mes paies » ; les cartes, « Ma paie » et les revenus dans « Mes prochaines paies »', async ({ page }) => {
   await preparer(page);
-  const tableau = (await page.getByTestId('cycles').boundingBox())!.y;
-  const revenus = (await page.getByTestId('bloc-revenus').boundingBox())!.y;
-  expect(tableau).toBeLessThan(revenus);
+  await expect(page.getByRole('tab', { name: 'Mes prochaines paies' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('paie-principale')).toHaveCount(2);
+  await expect(page.getByTestId('bloc-revenus')).toBeVisible();
+  await expect(page.getByTestId('cycles')).toHaveCount(0);
+  await voirTout(page);
+  await expect(page.getByTestId('cycles')).toBeVisible();
+  await expect(page.getByTestId('paie-principale')).toHaveCount(0);
+  await expect(page.getByTestId('bloc-revenus')).toHaveCount(0);
 });
 
 test('confirmer d’un clic, puis « Annuler » : retour exact à « À vérifier »', async ({ page }) => {
   await preparer(page);
   // Cycles précédents : une phrase discrète les signale.
-  await expect(page.getByTestId('a-verifier-avant')).toContainText('éléments à vérifier dans les cycles précédents');
-  await page.getByTestId('a-verifier-avant').getByRole('button', { name: 'Les afficher' }).click();
+  // V1 lot 6b : le rappel reste visible sous « Mes prochaines paies » et mène à « Toutes mes paies ».
+  await expect(page.getByTestId('a-verifier-avant')).toContainText('éléments à vérifier dans les paies précédentes');
+  await page.getByTestId('a-verifier-avant').getByRole('button', { name: 'Les afficher dans « Toutes mes paies »' }).click();
+  await expect(page.getByRole('tab', { name: 'Toutes mes paies' })).toHaveAttribute('aria-selected', 'true');
   // M2 (18 févr.) : paie et loyer du 1er mars sont à vérifier.
   await expect(ligneCycle(page, '2027-02-18').getByTestId('a-verifier')).toHaveText('2 à vérifier');
   const detail = await details(page, '2027-02-18');

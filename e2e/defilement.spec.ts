@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { voirTout } from './onglets';
 
 // V1 lot 6a : une seule zone défilante (la zone principale) ; la page ne
 // défile jamais et la barre latérale reste en place.
@@ -28,9 +29,11 @@ test('une seule zone défilante, la barre latérale fixe, sur chaque section', a
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto('/?aujourdhui=2027-01-10');
   await page.getByRole('button', { name: 'Voir l’exemple fictif' }).click();
+  await expect(page.getByTestId('paie-principale').first()).toBeVisible();
+  expect((await verifier(page, 'Mes prochaines paies (exemple)')).principale).toBe(true);
+  await voirTout(page);
   await expect(page.locator('tr[data-cycle]').first()).toBeVisible();
-  const mesPaies = await verifier(page, 'Mes paies (exemple)');
-  expect(mesPaies.principale).toBe(true);
+  expect((await verifier(page, 'Toutes mes paies (exemple)')).principale).toBe(true);
   for (const section of ['Dépenses', 'Épargne', 'Dettes', 'Paramètres']) {
     await page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: section, exact: true }).click();
     await verifier(page, section);

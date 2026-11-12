@@ -308,11 +308,9 @@
 
   const contexteCycle = (c: Cycle) => `Paie du ${formaterDateCourte(c.paie.date)} · cycle du ${formaterDateCourte(c.debut)} au ${formaterDateCourte(c.fin)}`;
 
-  /** « Voir le détail complet » depuis les cartes : ouvre le cycle dans le tableau. */
-  async function voirCycle(dateOrigine: DateCivile) {
-    if (choisi !== dateOrigine) choisirCycle(dateOrigine);
-    await tick();
-    document.querySelector('[data-testid="detail-cycle"]')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+  /** « Voir le détail complet » depuis les cartes : la paie dans une grande fenêtre (V1 lot 6b). */
+  function voirCycle(dateOrigine: DateCivile) {
+    ouvrirFenetre(dateOrigine);
   }
 
   function choisirCycle(dateOrigine: DateCivile) {
@@ -342,6 +340,7 @@
   function basculerExemple() {
     exemple = !exemple;
     choisi = null;
+    fenetre = null;
     proposition = null;
     edition = 'aucune';
   }
@@ -369,6 +368,74 @@
   let formContribution: string | null = $state(null);
   let formulaireRegle = $state(false);
   const formulaireOuvert = $derived(formulaireRegle || edition !== 'aucune' || occurrence !== null || formConfirmation !== null || formContribution !== null || formSupplement !== null || modifPaie);
+  /** V1 lot 6b : un formulaire d'action du détail d'un cycle est ouvert. */
+  const sousFormulaireOuvert = $derived(occurrence !== null || formConfirmation !== null || formContribution !== null || formSupplement !== null || modifPaie);
+
+  // V1 lot 6b : deux onglets, et le détail d'une paie (ou d'une opération)
+  // dans une grande fenêtre, sans quitter l'aperçu des paies.
+  type OngletPaies = 'prochaines' | 'toutes';
+  const ONGLETS_PAIES: { id: OngletPaies; libelle: string }[] = [
+    { id: 'prochaines', libelle: 'Mes prochaines paies' },
+    { id: 'toutes', libelle: 'Toutes mes paies' },
+  ];
+  let ongletPaies: OngletPaies = $state('prochaines');
+  interface CibleFenetre {
+    cycle: DateCivile;
+    ligne: { elementId: string; origine: DateCivile } | null;
+  }
+  let fenetre = $state(null) as CibleFenetre | null;
+  const cycleFenetre: Cycle | null = $derived.by(() => {
+    const f = fenetre as CibleFenetre | null;
+    return f && vue ? (vue.cycles.find((x) => x.paie.dateOrigine === f.cycle) ?? null) : null;
+  });
+  const ligneFenetre: Ligne | null = $derived.by(() => {
+    const cible = (fenetre as CibleFenetre | null)?.ligne;
+    return cible && cycleFenetre ? (cycleFenetre.lignes.find((l) => l.elementId === cible.elementId && l.origine === cible.origine) ?? null) : null;
+  });
+
+  function fermerSousFormulaires() {
+    occurrence = null;
+    formConfirmation = null;
+    formContribution = null;
+    formSupplement = null;
+    modifPaie = false;
+    erreurSaisie = null;
+  }
+  function ouvrirFenetre(cycle: DateCivile, ligne: Ligne | null = null) {
+    fermerSousFormulaires();
+    proposition = null;
+    fenetre = { cycle, ligne: ligne ? { elementId: ligne.elementId, origine: ligne.origine } : null };
+  }
+  function fermerFenetre() {
+    fermerSousFormulaires();
+    fenetre = null;
+  }
+  function choisirOnglet(id: OngletPaies) {
+    ongletPaies = id;
+    fenetre = null;
+  }
+  function clavierOnglets(e: KeyboardEvent, i: number) {
+    let j = i;
+    if (e.key === 'ArrowRight') j = (i + 1) % ONGLETS_PAIES.length;
+    else if (e.key === 'ArrowLeft') j = (i - 1 + ONGLETS_PAIES.length) % ONGLETS_PAIES.length;
+    else if (e.key === 'Home') j = 0;
+    else if (e.key === 'End') j = ONGLETS_PAIES.length - 1;
+    else return;
+    e.preventDefault();
+    choisirOnglet(ONGLETS_PAIES[j]!.id);
+    document.getElementById(`onglet-paies-${ongletPaies}`)?.focus();
+  }
+  /** La nature d'une opération, en mots (détail d'une opération). */
+  function typeLigne(l: Ligne): string {
+    if (l.nature === 'revenu') return 'Revenu';
+    if (donnees && !exemple) {
+      if (estPret(donnees, l.elementId)) return 'Paiement de prêt';
+      if (estPaiementCarte(donnees, l.elementId)) return 'Paiement de la carte de crédit';
+      if (estContribution(donnees, l.elementId)) return 'Contribution d’épargne';
+      if (estDepenseAPrevoir(donnees, l.elementId)) return 'Dépense à prévoir';
+    }
+    return l.genre === 'enveloppe' ? 'Enveloppe variable' : 'Dépense';
+  }
   let fConCompte = $state('');
   let fConMontant = $state('');
   let fConDate = $state('');
@@ -417,7 +484,51 @@
 {/if}
 
 {#if vue}
-  <QuatrePaies cycles={vue.cycles} courant={vue.courant} libelle={(l) => (donnees && !exemple ? libelleLigne(donnees, l) : l.libelle)} onvoir={voirCycle} />
+  <div class="onglets" role="tablist" aria-label="Affichage de mes paies">
+    {#each ONGLETS_PAIES as o, i (o.id)}
+      <button
+        type="button"
+        role="tab"
+        id={`onglet-paies-${o.id}`}
+        aria-selected={ongletPaies === o.id}
+        aria-controls={`panneau-paies-${o.id}`}
+        tabindex={ongletPaies === o.id ? 0 : -1}
+        class:actif={ongletPaies === o.id}
+        onclick={() => choisirOnglet(o.id)}
+        onkeydown={(e) => clavierOnglets(e, i)}>{o.libelle}</button
+      >
+    {/each}
+  </div>
+{/if}
+
+{#if vue && ongletPaies === 'prochaines'}
+  <div role="tabpanel" id="panneau-paies-prochaines" aria-labelledby="onglet-paies-prochaines">
+  {#if !exemple && vue.aVerifierAvant > 0}
+    <p class="rappel-passees" data-testid="a-verifier-avant">
+      {vue.aVerifierAvant === 1 ? '1 élément à vérifier' : `${vue.aVerifierAvant} éléments à vérifier`} dans les paies précédentes.
+      <button
+        type="button"
+        class="petit"
+        onclick={() => {
+          nombrePrecedents += 2;
+          choisirOnglet('toutes');
+        }}>Les afficher dans « Toutes mes paies »</button
+      >
+    </p>
+  {/if}
+  <QuatrePaies
+    cycles={vue.cycles}
+    courant={vue.courant}
+    libelle={(l) => (donnees && !exemple ? libelleLigne(donnees, l) : l.libelle)}
+    onvoir={voirCycle}
+    onligne={(cycle, l) => ouvrirFenetre(cycle, l)}
+  />
+  <p class="discret">Le disponible planifié est le résultat de la planification : ce n’est pas le solde de ton compte.</p>
+  </div>
+{/if}
+
+{#if vue && ongletPaies === 'toutes'}
+  <div role="tabpanel" id="panneau-paies-toutes" aria-labelledby="onglet-paies-toutes">
   <h2 class="titre-tableau">Toutes mes paies</h2>
   {#if vue.plan.avantPremierCycle.length > 0}
     <p class="discret" data-testid="avant-premier-cycle">
@@ -454,9 +565,10 @@
   <p class="discret">
     Le disponible planifié est le résultat de la planification : ce n’est pas le solde de ton compte.
   </p>
+  </div>
 {/if}
 
-{#if !exemple && donnees?.profil}
+{#if !exemple && donnees?.profil && ongletPaies === 'prochaines'}
   <section class="carte" aria-labelledby="titre-paie">
     <h2 id="titre-paie">Ma paie</h2>
     <p data-testid="description-profil">{decrireFrequence(donnees.profil)}</p>
@@ -519,7 +631,7 @@
   </section>
 {/if}
 
-{#if exemple || donnees?.profil}
+{#if (exemple || donnees?.profil) && ongletPaies === 'prochaines'}
   <RevenusDepenses
     elements={exemple ? ELEMENTS_EXEMPLE : (donnees?.elements ?? []).filter((e) => !estDette(e.id))}
     {donnees}
@@ -550,6 +662,24 @@
 {:else if messageAnnulation}
   <p class="enregistre" role="status" data-testid="annule">{messageAnnulation}</p>
 {/if}
+{#if fenetre && cycleFenetre}
+  {@const c = cycleFenetre}
+  <FenetreFormulaire
+    large
+    titre={ligneFenetre ? `« ${donnees && !exemple ? libelleLigne(donnees, ligneFenetre) : ligneFenetre.libelle} »` : `Paie du ${formaterDateLongue(c.paie.date)}`}
+    contexte={contexteCycle(c)}
+    erreur={proposition || sousFormulaireOuvert ? null : erreurSaisie}
+    retourEnfants={ligneFenetre ? '← Retour au détail de l’opération' : '← Retour au détail de la paie'}
+    onabandonner={fermerFenetre}
+  >
+    {#if ligneFenetre && !sousFormulaireOuvert}
+      {@render detailOperation(c, ligneFenetre)}
+    {:else}
+      {@render corpsDetail(c, true)}
+    {/if}
+  </FenetreFormulaire>
+{/if}
+
 {#if proposition}
   <Apercu
     {proposition}
@@ -692,6 +822,9 @@
             onvoirdepenses?.(id);
             return;
           }
+          // V1 lot 6b : les revenus se gèrent sous « Mes prochaines paies ».
+          fenetre = null;
+          ongletPaies = 'prochaines';
           aGerer = null;
           queueMicrotask(() => (aGerer = id));
         }}>Modifier la règle…</button
@@ -767,11 +900,69 @@
   </form>
 {/snippet}
 
+{#snippet detailOperation(c: Cycle, l: Ligne)}
+  {@const couv = couvertureDe(l)}
+  {@const sortie = l.nature === 'depense'}
+  <section class="operation" data-testid="detail-operation">
+    <dl class="cles-operation">
+      <div>
+        <dt>Montant</dt>
+        <dd class="montant-operation" class:inconnu={l.montant === null}>{sortie && l.montant !== null ? '−' : ''}{l.montant === null ? 'À compléter' : formaterMontant(l.montant)}</dd>
+      </div>
+      <div>
+        <dt>Date prévue</dt>
+        <dd>{l.echeance ? formaterDateLongue(l.echeance) : `Dans le cycle du ${formaterDateCourte(c.debut)} au ${formaterDateCourte(c.fin)}`}</dd>
+      </div>
+      <div>
+        <dt>Statut</dt>
+        <dd>{@render statutLigne(l)}</dd>
+      </div>
+      <div>
+        <dt>Nature</dt>
+        <dd>{typeLigne(l)}{l.estimation ? ' — estimation' : ''}</dd>
+      </div>
+    </dl>
+    {#if l.ajuste || l.manuel || couv}
+      <p class="notes-operation">{@render marques(l)}{#if couv}<span class="note" data-testid="couverture-ligne">{couv}</span>{/if}</p>
+    {/if}
+    {#if exemple}
+      <p class="discret">Exemple fictif : rien ne peut être confirmé ni modifié ici.</p>
+    {:else}
+      <div class="actions-operation">
+        {@render actionsLigne(c, l)}
+      </div>
+      <p class="liens-operation">
+        {#if donnees && estPret(donnees, l.elementId)}
+          <button type="button" class="lien" onclick={() => onvoirpret?.(l.elementId)}>Voir le prêt</button>
+        {:else if donnees && estPaiementCarte(donnees, l.elementId)}
+          <button type="button" class="lien" onclick={() => onvoircarte?.()}>Voir la carte</button>
+        {:else if donnees && estContribution(donnees, l.elementId)}
+          <button type="button" class="lien" onclick={() => onvoircompte?.(compteDeLigne(l.elementId)?.id ?? '')}>Voir le compte</button>
+        {:else if l.nature === 'depense'}
+          <button type="button" class="lien" onclick={() => onvoirdepenses?.(estDepenseAPrevoir(donnees!, l.elementId) ? undefined : l.elementId)}>Voir dans Dépenses</button>
+        {/if}
+      </p>
+    {/if}
+    <p class="tout-le-detail">
+      <button type="button" class="lien" data-testid="voir-toute-la-paie" onclick={() => ouvrirFenetre(c.paie.dateOrigine)}>Voir tout le détail de cette paie →</button>
+    </p>
+  </section>
+{/snippet}
+
 {#snippet detail(c: Cycle)}
+  {@render corpsDetail(c, false)}
+{/snippet}
+
+<!-- V1 lot 6b : le même détail sert au tableau « Toutes mes paies » et à la
+     grande fenêtre ; dans la fenêtre, un formulaire ouvert prend la place du
+     tableau (« ← Retour au détail de la paie »), sans fenêtre superposée. -->
+{#snippet corpsDetail(c: Cycle, enFenetre: boolean)}
   {@const confirmables = (c.paieStatut !== 'confirme' ? 1 : 0) + c.lignes.filter((l) => (l.statut === 'aVenir' || l.statut === 'aVerifier') && !l.incertain).length}
-  <section class="carte" aria-labelledby="titre-detail" data-testid="detail-cycle">
+  {@const tableauVisible = !(enFenetre && sousFormulaireOuvert)}
+  <section class="carte" class:en-fenetre={enFenetre} aria-labelledby={enFenetre ? undefined : 'titre-detail'} aria-label={enFenetre ? `Cycle du ${formaterDateLongue(c.debut)} au ${formaterDateLongue(c.fin)}` : undefined} data-testid="detail-cycle">
+    {#if tableauVisible}
     <div class="entete-detail">
-      <h2 id="titre-detail">Cycle du {formaterDateLongue(c.debut)} au {formaterDateLongue(c.fin)}</h2>
+      {#if !enFenetre}<h2 id="titre-detail">Cycle du {formaterDateLongue(c.debut)} au {formaterDateLongue(c.fin)}</h2>{/if}
       {#if !exemple && confirmables > 0}
         <button type="button" onclick={() => proposer(() => proposerToutConfirmer(donnees!, c.paie.dateOrigine, jour))}>Tout confirmer…</button>
       {/if}
@@ -925,6 +1116,7 @@
         {/if}
       </tbody>
     </table>
+    {/if}
     {#if formContribution === c.paie.dateOrigine}
       <FenetreFormulaire titre="Contribution ponctuelle" contexte={contexteCycle(c)} erreur={proposition ? null : erreurSaisie} onabandonner={() => (formContribution = null)}>
       <form
@@ -986,12 +1178,13 @@
         {@render formulaireConfirmation()}
       </FenetreFormulaire>
     {/if}
-    {#if c.nonComptes > 0}
+    {#if c.nonComptes > 0 && tableauVisible}
       <p class="discret">Non compté : {formaterMontant(c.nonComptes)} de revenus incertains, en attente de confirmation.</p>
     {/if}
 
     {#if !exemple}
       {#if !modifPaie}
+        {#if tableauVisible}
         <p>
           <button
             type="button"
@@ -1004,6 +1197,7 @@
             }}>Modifier la date ou le montant de cette paie…</button
           >
         </p>
+        {/if}
       {:else}
         <FenetreFormulaire titre="Modifier cette paie seulement" contexte={contexteCycle(c)} erreur={proposition ? null : erreurSaisie} onabandonner={() => (modifPaie = false)}>
         <div class="modif-paie">
@@ -1034,6 +1228,83 @@
   .carte {
     margin: 0 0 var(--espace-6);
     max-width: var(--largeur-contenu);
+  }
+  .onglets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--espace-2);
+    margin: 0 0 var(--espace-5);
+  }
+  .onglets button {
+    border: 2px solid var(--couleur-bordure-forte);
+    background: var(--couleur-surface);
+    color: var(--couleur-texte);
+    font-weight: 700;
+  }
+  .onglets button.actif {
+    background: var(--prune-700);
+    border-color: var(--prune-700);
+    color: var(--creme-50);
+  }
+  .rappel-passees {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--espace-3);
+    margin: 0 0 var(--espace-4);
+    padding: var(--espace-2) var(--espace-4);
+    border-radius: var(--arrondi);
+    background: var(--couleur-attention-fond);
+    color: var(--couleur-attention);
+    font-weight: 700;
+    max-width: var(--largeur-contenu);
+  }
+  .carte.en-fenetre {
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+  }
+  .cles-operation {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--espace-3) var(--espace-6);
+    margin: 0 0 var(--espace-4);
+  }
+  .cles-operation dt {
+    font-size: var(--texte-petit);
+    font-weight: 700;
+    color: var(--couleur-texte-discret);
+  }
+  .cles-operation dd {
+    margin: var(--espace-1) 0 0;
+  }
+  .montant-operation {
+    font-family: var(--police-titre);
+    font-size: var(--titre-carte);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .inconnu {
+    color: var(--etat-a-completer-texte);
+  }
+  .notes-operation {
+    margin: 0 0 var(--espace-4);
+  }
+  .actions-operation :global(.actions-ligne) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--espace-3);
+    align-items: center;
+  }
+  .liens-operation,
+  .tout-le-detail {
+    margin: var(--espace-4) 0 0;
+  }
+  .tout-le-detail {
+    padding-top: var(--espace-3);
+    border-top: 1px solid var(--couleur-bordure);
   }
   .titre-tableau {
     margin: 0 0 var(--espace-2);

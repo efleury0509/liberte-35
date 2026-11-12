@@ -2,7 +2,11 @@
   // Fenêtre centrée pour un formulaire de création ou de modification (V1) :
   // le contexte de l'élément en tête, les champs, des actions claires, et
   // « Abandonner » (ou Échap) qui ferme sans rien enregistrer.
-  import { onMount, type Snippet } from 'svelte';
+  //
+  // V1 lot 6b : jamais une fenêtre par-dessus une autre. Une fenêtre ouverte
+  // à l'intérieur d'une autre (ex. « Ajuster » dans le détail d'une paie)
+  // prend la place du contenu, avec « ← Retour » ; Échap la referme seule.
+  import { getContext, onDestroy, onMount, setContext, type Snippet } from 'svelte';
 
   interface Props {
     titre: string;
@@ -10,38 +14,80 @@
     contexte?: string | null;
     erreur?: string | null;
     onabandonner: () => void;
+    /** Grande fenêtre (détail d'une paie). */
+    large?: boolean;
+    /** Libellé du retour quand la fenêtre est incrustée dans une autre. */
+    retour?: string;
+    /** Libellé du retour proposé aux fenêtres ouvertes à l'intérieur de celle-ci. */
+    retourEnfants?: string;
     children: Snippet;
   }
-  let { titre, contexte = null, erreur = null, onabandonner, children }: Props = $props();
+  let { titre, contexte = null, erreur = null, onabandonner, large = false, retour, retourEnfants = '← Retour', children }: Props = $props();
   let fenetre: HTMLDivElement | undefined = $state();
   const id = `titre-fenetre-${Math.random().toString(36).slice(2, 8)}`;
 
+  interface Hote {
+    enfants: number;
+    retour: string;
+    rendreFocus: () => void;
+  }
+  const CLE = 'fenetre-formulaire-hote';
+  const hote = getContext<Hote | undefined>(CLE);
+  /** Incrustée : ouverte à l'intérieur d'une autre fenêtre. */
+  const incrustee = hote !== undefined;
+  const moi: Hote = $state({ enfants: 0, retour: '← Retour', rendreFocus: () => premierChamp() });
+  $effect(() => {
+    moi.retour = retourEnfants;
+  });
+  setContext(CLE, moi);
+  const libelleRetour = $derived(retour ?? hote?.retour ?? '← Retour');
+
+  function premierChamp() {
+    fenetre?.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea, button:not(.retour):not(.fermer-x)')?.focus();
+  }
   onMount(() => {
-    fenetre?.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea, button')?.focus();
+    if (hote) hote.enfants += 1;
+    premierChamp();
+  });
+  onDestroy(() => {
+    if (hote) {
+      hote.enfants -= 1;
+      queueMicrotask(() => hote.rendreFocus());
+    }
   });
   function touche(e: KeyboardEvent) {
-    // L'aperçu, s'il est ouvert par-dessus, gère sa propre touche Échap.
-    if (e.key === 'Escape' && !document.querySelector('[data-testid="apercu"]')) {
-      e.preventDefault();
-      onabandonner();
-    }
+    // L'aperçu, s'il est ouvert par-dessus, gère sa propre touche Échap ;
+    // une fenêtre incrustée se referme avant celle qui la contient.
+    if (e.key !== 'Escape' || document.querySelector('[data-testid="apercu"]') || moi.enfants > 0) return;
+    e.preventDefault();
+    onabandonner();
   }
 </script>
 
 <svelte:window onkeydown={touche} />
 
-<div class="voile" aria-hidden="true" onclick={onabandonner}></div>
-<div class="fenetre-formulaire" role="dialog" aria-modal="true" aria-labelledby={id} data-testid="fenetre-formulaire" bind:this={fenetre}>
-  <header>
-    <h2 {id}>{titre}</h2>
-    {#if contexte}<p class="contexte">{contexte}</p>{/if}
-    <button type="button" class="fermer-x" aria-label="Abandonner sans enregistrer" onclick={onabandonner}>×</button>
-  </header>
-  <div class="corps">
+{#if incrustee}
+  <div class="incrustee" role="group" aria-labelledby={id} data-testid="fenetre-incrustee" bind:this={fenetre}>
+    <p class="ligne-retour"><button type="button" class="lien retour" onclick={onabandonner}>{libelleRetour}</button></p>
+    <h3 {id}>{titre}</h3>
+    {#if contexte}<p class="contexte-incruste">{contexte}</p>{/if}
     {@render children()}
     {#if erreur}<p role="alert" class="erreur" data-testid="erreur-saisie">{erreur}</p>{/if}
   </div>
-</div>
+{:else}
+  <div class="voile" aria-hidden="true" onclick={onabandonner}></div>
+  <div class="fenetre-formulaire" class:large role="dialog" aria-modal="true" aria-labelledby={id} data-testid="fenetre-formulaire" bind:this={fenetre} tabindex="-1">
+    <header>
+      <h2 {id}>{titre}</h2>
+      {#if contexte}<p class="contexte">{contexte}</p>{/if}
+      <button type="button" class="fermer-x" aria-label="Abandonner sans enregistrer" onclick={onabandonner}>×</button>
+    </header>
+    <div class="corps">
+      {@render children()}
+      {#if erreur}<p role="alert" class="erreur" data-testid="erreur-saisie">{erreur}</p>{/if}
+    </div>
+  </div>
+{/if}
 
 <style>
   .voile {
@@ -65,6 +111,32 @@
     border-radius: var(--arrondi-grand);
     box-shadow: var(--ombre-flottante);
     overflow: hidden;
+  }
+  .fenetre-formulaire.large {
+    width: min(1100px, calc(100vw - var(--largeur-barre) - 2 * var(--espace-8)));
+  }
+  .fenetre-formulaire:focus {
+    outline: none;
+  }
+  .incrustee :global(form) {
+    margin-top: 0;
+  }
+  .incrustee :global(form.formulaire > p),
+  .incrustee :global(form.formulaire > details) {
+    flex-basis: 100%;
+    margin: 0;
+  }
+  .ligne-retour {
+    margin: 0 0 var(--espace-3);
+  }
+  .incrustee h3 {
+    margin: 0;
+    font-size: var(--titre-bloc);
+  }
+  .contexte-incruste {
+    margin: var(--espace-1) 0 var(--espace-4);
+    font-size: var(--texte-petit);
+    color: var(--couleur-texte-discret);
   }
   header {
     position: relative;

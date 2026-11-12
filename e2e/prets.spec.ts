@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { voirProchaines, voirTout } from './onglets';
 
 // Étape 7a : les prêts au quotidien, dans l'aperçu en mémoire. Données fictives.
 // Aujourd'hui = 15 janvier 2027 ; profil aux deux semaines dès le 7 janvier.
@@ -12,6 +13,7 @@ async function preparer(page: Page) {
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();
   await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
+  await voirProchaines(page);
   await expect(page.getByTestId('description-profil')).toBeVisible();
 }
 
@@ -43,7 +45,9 @@ test('F1, C1, C4 : un prêt créé avec quatre renseignements apparaît dans Mes
   // C7 : le prêt n'est pas parmi les dépenses fixes de Mes paies.
   await nav(page, 'Mes paies');
   for (const bloc of ['bloc-revenus', 'panneau-fixes', 'panneau-enveloppes']) await expect(page.getByTestId(bloc).getByText('Prêt auto (fictif)')).toHaveCount(0);
+  await voirTout(page);
   await page.locator('tr[data-cycle="2027-01-07"]').getByRole('button', { name: 'Détails' }).click();
+  await voirTout(page);
   const ligne = page.getByTestId('detail-cycle').locator('tr[data-dette="oui"]');
   await expect(ligne).toHaveCount(1);
   await expect(ligne).toContainText('Paiement — Prêt auto (fictif) (dû le 14 janv.)');
@@ -54,7 +58,9 @@ test('C5, P4, H0, F4, S3 : confirmer dans Mes paies, voir l’historique, compl�
   await preparer(page);
   await ajouterPretMinimal(page);
   await nav(page, 'Mes paies');
+  await voirTout(page);
   await page.locator('tr[data-cycle="2027-01-07"]').getByRole('button', { name: 'Détails' }).click();
+  await voirTout(page);
   const ligne = page.getByTestId('detail-cycle').locator('tr[data-dette="oui"]');
   await ligne.getByRole('button', { name: 'Confirmer Prêt auto (fictif)' }).click();
   await expect(ligne.getByTestId('statut')).toContainText('Confirmé le');
@@ -194,7 +200,9 @@ test('7b-1 : prochains versements, somme prévue jusqu’à l’échéance, ce q
 
   // Q51 : la confirmation d'un versement s'inscrit sous « Prêt « … » ».
   await nav(page, 'Mes paies');
+  await voirTout(page);
   await page.locator('tr[data-cycle="2027-01-07"]').getByRole('button', { name: 'Détails' }).click();
+  await voirTout(page);
   await page.getByTestId('detail-cycle').locator('tr[data-dette="oui"]').getByRole('button', { name: /^Confirmer/ }).first().click();
   await expect(page.getByTestId('enregistre')).toContainText('Confirmer « Prêt auto (fictif) »');
 });

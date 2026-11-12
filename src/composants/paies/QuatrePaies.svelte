@@ -13,26 +13,24 @@
   import type { Cycle, Ligne } from '../../noyau/cycles';
   import { formaterDateCourte, type DateCivile } from '../../noyau/dates';
   import { formaterMontant, type Cents } from '../../noyau/montants';
+  import { autresOperations, principales, texteAutresOperations } from '../../lib/operations';
 
   interface Props {
     cycles: Cycle[];
     courant: DateCivile | null;
     /** Libellé lisible d'une ligne (prêt, carte, compte…). */
     libelle: (l: Ligne) => string;
+    /** Ouvre le détail complet de la paie (grande fenêtre). */
     onvoir: (dateOrigine: DateCivile) => void;
+    /** V1 lot 6b : ouvre le détail d'une opération de la carte. */
+    onligne?: (dateOrigine: DateCivile, l: Ligne) => void;
   }
-  let { cycles, courant, libelle, onvoir }: Props = $props();
+  let { cycles, courant, libelle, onvoir, onligne }: Props = $props();
 
   const debut = $derived(Math.max(0, courant === null ? 0 : cycles.findIndex((c) => c.paie.dateOrigine === courant)));
   const quatre = $derived(cycles.slice(debut, debut + 4));
   const texte = (m: Cents | null) => (m === null ? 'À compléter' : formaterMontant(m));
   const periode = (c: Cycle) => `${formaterDateCourte(c.debut)} → ${formaterDateCourte(c.fin)}`;
-  /** Les dépenses principales : les montants inconnus d'abord (à compléter), puis les plus grosses. */
-  const principales = (c: Cycle) =>
-    c.lignes
-      .filter((l) => l.nature === 'depense' && !l.retiree)
-      .sort((a, b) => (a.montant === null ? -1 : b.montant === null ? 1 : b.montant - a.montant))
-      .slice(0, 4);
   const STATUT: Record<string, { etat: 'confirme' | 'prevu' | 'alerte' | 'neutre'; texte: string }> = {
     confirme: { etat: 'confirme', texte: 'Payé' },
     aVerifier: { etat: 'alerte', texte: 'À vérifier' },
@@ -76,11 +74,19 @@
         {:else}
           <ul>
             {#each principales(c) as l (`${l.elementId}|${l.origine}`)}
-              <LigneMontant libelle={libelle(l)} montant={l.statut === 'confirme' && l.confirmation ? l.confirmation.montant : l.montant}>
+              <LigneMontant
+                libelle={libelle(l)}
+                montant={l.statut === 'confirme' && l.confirmation ? l.confirmation.montant : l.montant}
+                onclic={onligne ? () => onligne(c.paie.dateOrigine, l) : undefined}
+                titreClic={`Détail de « ${libelle(l)} » — ${STATUT[l.statut]?.texte ?? ''}`}
+              >
                 {#snippet fin()}<Pastille etat={STATUT[l.statut]?.etat ?? 'neutre'}>{STATUT[l.statut]?.texte ?? ''}</Pastille>{/snippet}
               </LigneMontant>
             {/each}
           </ul>
+        {/if}
+        {#if texteAutresOperations(autresOperations(c))}
+          <p class="autres"><button type="button" class="lien" data-testid="autres-operations" onclick={() => onvoir(c.paie.dateOrigine)}>{texteAutresOperations(autresOperations(c))}</button></p>
         {/if}
       </div>
       <p class="action">
@@ -120,6 +126,10 @@
 {/if}
 
 <style>
+  .autres {
+    margin: var(--espace-2) 0 0;
+    font-size: var(--texte-dense);
+  }
   .quatre-paies {
     margin: 0 0 var(--espace-8);
     font-size: var(--texte-courant);

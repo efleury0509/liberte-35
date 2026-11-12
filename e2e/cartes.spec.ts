@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { voirProchaines, voirTout } from './onglets';
 
 // Étape 8 : la carte Visa, dans l'aperçu en mémoire. Données fictives.
 // Aujourd'hui = 15 janvier 2027 ; profil aux deux semaines dès le 7 janvier.
@@ -13,6 +14,7 @@ async function preparer(page: Page) {
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();
   await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
+  await voirProchaines(page);
   await expect(page.getByTestId('description-profil')).toBeVisible();
 }
 
@@ -40,6 +42,7 @@ async function ajouterReleve(page: Page) {
 }
 
 const detail = async (page: Page, cycle: string) => {
+  await voirTout(page);
   await page.locator(`tr[data-cycle="${cycle}"]`).getByRole('button', { name: 'Détails' }).click();
   return page.getByTestId('detail-cycle');
 };

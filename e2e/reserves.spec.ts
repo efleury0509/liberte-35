@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { voirProchaines, voirTout } from './onglets';
 
 // Étape A : réserves et dépenses à prévoir, dans l'aperçu en mémoire. Données fictives.
 // Aujourd'hui = 2 janvier 2027 ; paies aux deux semaines dès le 7 janvier.
@@ -13,6 +14,7 @@ async function preparer(page: Page) {
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();
   await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
+  await voirProchaines(page);
   await expect(page.getByTestId('description-profil')).toBeVisible();
   await nav(page, 'Épargne');
   await page.getByRole('button', { name: 'Ajouter un compte' }).click();
@@ -94,7 +96,9 @@ test('P1, P2 : contribution répartie ; confirmée dans Mes paies, la part arriv
   await expect(page.getByTestId('repartition')).toHaveText($('100,00 $ → « Fonds d’urgence »'));
 
   await nav(page, 'Mes paies');
+  await voirTout(page);
   await page.locator('tr[data-cycle="2027-01-07"]').getByRole('button', { name: 'Détails' }).click();
+  await voirTout(page);
   const ligne = page.getByTestId('detail-cycle').locator('tr[data-epargne="contribution"]');
   await expect(ligne).toHaveCount(1);
   await ligne.getByRole('button', { name: `Confirmer Contribution — ${CELI}` }).click();
@@ -129,7 +133,9 @@ test('D4, U1, U5 : Pneus couverts par leur réserve ; payés avec un seul aperç
   await affecter(page, 'Pneus', '900');
 
   await nav(page, 'Mes paies');
+  await voirTout(page);
   await page.locator('tr[data-cycle="2027-04-15"]').getByRole('button', { name: 'Détails' }).click();
+  await voirTout(page);
   const ligne = page.getByTestId('detail-cycle').locator('tr[data-a-prevoir="oui"]');
   await expect(ligne).toContainText('Pneus');
   await expect(ligne.getByTestId('couverture-ligne')).toHaveText('couverte par la réserve');
@@ -150,7 +156,9 @@ test('D4, U1, U5 : Pneus couverts par leur réserve ; payés avec un seul aperç
   await expect(fiche(page).getByTestId('valeur')).toHaveText($('1 100,00 $'));
 
   await nav(page, 'Mes paies');
+  await voirTout(page);
   await page.locator('tr[data-cycle="2027-04-15"]').getByRole('button', { name: 'Détails' }).click();
+  await voirTout(page);
   await page.getByTestId('detail-cycle').locator('tr[data-a-prevoir="oui"]').getByRole('button', { name: 'Annuler la confirmation' }).click();
   await expect(page.getByTestId('apercu')).toContainText('y revient');
   await expect(page.getByTestId('apercu')).toHaveAttribute('data-variante', 'annulation');
@@ -177,7 +185,9 @@ test('U4 : « Confirmer sans utiliser la réserve » laisse la réserve intacte'
   await affecter(page, 'Pneus', '900');
 
   await nav(page, 'Mes paies');
+  await voirTout(page);
   await page.locator('tr[data-cycle="2027-04-15"]').getByRole('button', { name: 'Détails' }).click();
+  await voirTout(page);
   const ligne = page.getByTestId('detail-cycle').locator('tr[data-a-prevoir="oui"]');
   await ligne.getByRole('button', { name: 'Confirmer autrement…' }).click();
   const c = page.getByTestId('formulaire-confirmation');

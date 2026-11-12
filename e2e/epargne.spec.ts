@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { voirProchaines, voirTout } from './onglets';
 
 // Étape 9 : Mon épargne, dans l'aperçu en mémoire. Données fictives.
 // Aujourd'hui = 15 janvier 2027 ; profil aux deux semaines dès le 7 janvier.
@@ -13,6 +14,7 @@ async function preparer(page: Page) {
   await page.getByLabel('Montant net habituel ($, facultatif)').fill('2100');
   await page.locator('form').getByRole('button', { name: 'Enregistrer' }).first().click();
   await page.getByTestId('apercu').getByRole('button', { name: 'Enregistrer' }).click();
+  await voirProchaines(page);
   await expect(page.getByTestId('description-profil')).toBeVisible();
 }
 
@@ -58,7 +60,9 @@ test('C, V : contribution à chaque paie dans Mes paies ; confirmée, elle s’a
   await expect(fiche.getByTestId('contributions')).toContainText($('100,00 $'));
 
   await nav(page, 'Mes paies');
+  await voirTout(page);
   await page.locator('tr[data-cycle="2027-01-07"]').getByRole('button', { name: 'Détails' }).click();
+  await voirTout(page);
   const detail = page.getByTestId('detail-cycle');
   const ligne = detail.locator('tr[data-epargne="contribution"]');
   await expect(ligne).toHaveCount(1);
