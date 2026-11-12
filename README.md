@@ -175,6 +175,10 @@ et dans le cahier fonctionnel de référence.
   soleil d'en-tête retiré ; « Solde actuel » d'un prêt sur toute la largeur de
   la carte, le complément sur sa propre ligne. Aucun calcul, aucune règle ni
   structure de données changés (toujours 9).
+- Correction, fabrication Essai (version 0.21.1) : le menu « Actions » (prêts,
+  carte de crédit, réserves) s'affiche au premier plan, entier, vers le haut
+  si la place manque ; il n'est plus coupé par sa carte. Aucun calcul, aucune
+  règle ni structure de données changés (toujours 9).
 
 ## Organisation du code
 

@@ -26,8 +26,8 @@ describe('Numéro de version', () => {
     expect(JSON.parse(lire('src-tauri/tauri.essai.conf.json')).version).toBeUndefined();
   });
 
-  it('est celui de la fabrication Essai de l’illustration de Dettes : 0.21.0', () => {
-    expect(paquet).toBe('0.21.0');
+  it('est celui de la fabrication Essai de la correction du menu « Actions » : 0.21.1', () => {
+    expect(paquet).toBe('0.21.1');
   });
 
   it('la fabrication vérifie le numéro avant de publier (U2)', () => {
