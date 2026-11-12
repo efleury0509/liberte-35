@@ -25,8 +25,12 @@
     plateforme: Plateforme;
     onouvrirpaies: (cible: CibleMesPaies | null) => void;
     onjournal: () => void;
+    /** 0.22.0 : la configuration guidée commencée, à reprendre (null : rien à proposer). */
+    invitation?: { etape: number; libelle: string } | null;
+    onreprendre?: () => void;
+    onmasquer?: () => void;
   }
-  let { plateforme, onouvrirpaies, onjournal }: Props = $props();
+  let { plateforme, onouvrirpaies, onjournal, invitation = null, onreprendre, onmasquer }: Props = $props();
 
   const jour = aujourdhui();
   let donnees: DonneesPaie | null = $state(null);
@@ -85,6 +89,26 @@
   </section>
 {/snippet}
 
+{#snippet reprise()}
+  {#if invitation}
+    <section class="reprise" aria-labelledby="titre-reprise" data-testid="reprise-configuration">
+      <div>
+        <h2 id="titre-reprise">{invitation.etape <= 1 ? 'Configurer Liberté 35' : 'Reprendre ma configuration'}</h2>
+        <p>
+          {#if invitation.etape <= 1}Le guide t’accompagne pas à pas : ta paie, tes dépenses, tes dettes et ton épargne.{:else}Tu t’étais arrêtée à l’étape {invitation.etape} sur 6 : {invitation.libelle}.{/if}
+        </p>
+        <div class="progression" aria-hidden="true"><span style:width={`${Math.round(((invitation.etape - 1) / 5) * 100)}%`}></span></div>
+      </div>
+      <div class="boutons-reprise">
+        <button type="button" class="principal" onclick={() => onreprendre?.()} data-testid="reprendre-configuration">
+          {invitation.etape <= 1 ? 'Commencer ma configuration' : 'Reprendre'} <Icone icone={ArrowRight} taille={18} />
+        </button>
+        <button type="button" class="lien" onclick={() => onmasquer?.()} data-testid="masquer-reprise">Ne plus afficher ici</button>
+      </div>
+    </section>
+  {/if}
+{/snippet}
+
 {#snippet carte(r: ResumePaie, teinte: 'sauge' | 'peche')}
   {@const c = r.cycle}
   <div class="carte-paie" data-testid="carte-accueil" data-cycle-carte={c.paie.dateOrigine}>
@@ -131,9 +155,14 @@
   <p class="discret">Chargement…</p>
 {:else if vue.paies.length === 0}
   {@render bienvenue(vue.phrase)}
-  <p><button type="button" class="principal" onclick={() => onouvrirpaies(null)}>Configurer ma paie <Icone icone={ArrowRight} taille={18} /></button></p>
+  {#if invitation}
+    {@render reprise()}
+  {:else}
+    <p><button type="button" class="principal" onclick={() => onouvrirpaies(null)}>Configurer ma paie <Icone icone={ArrowRight} taille={18} /></button></p>
+  {/if}
 {:else}
   {@render bienvenue(vue.phrase)}
+  {@render reprise()}
 
   <div class="surveiller" data-testid="a-surveiller">
     {#if vue.surveiller.length === 0}
@@ -205,6 +234,50 @@
 {/if}
 
 <style>
+  /* 0.22.0 : invitation à reprendre la configuration guidée. */
+  .reprise {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--espace-6);
+    flex-wrap: wrap;
+    margin: 0 0 var(--espace-6);
+    padding: var(--espace-5) var(--espace-6);
+    background: var(--sorbet-peche-pale);
+    border: 2px solid var(--sorbet-orange);
+    border-radius: var(--arrondi-carte);
+  }
+  .reprise h2 {
+    margin: 0 0 var(--espace-1);
+    font-size: 22px;
+  }
+  .reprise p {
+    margin: 0;
+  }
+  .progression {
+    height: 10px;
+    width: min(320px, 100%);
+    margin-top: var(--espace-3);
+    background: var(--progression-fond);
+    border-radius: var(--arrondi-pilule);
+    overflow: hidden;
+  }
+  .progression span {
+    display: block;
+    height: 100%;
+    background: var(--progression-remplie);
+  }
+  .boutons-reprise {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--espace-2);
+  }
+  .boutons-reprise .principal {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--espace-2);
+  }
   /* Bienvenue : la loutre (1 671 × 941) entière, à côté de la date. */
   .bienvenue {
     display: grid;

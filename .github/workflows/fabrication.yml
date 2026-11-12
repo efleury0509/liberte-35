@@ -64,6 +64,9 @@ jobs:
       - name: Fabriquer l'installateur Essai
         run: npm run fabriquer:essai
 
+      - name: Fabriquer l'installateur Essai vierge (répétitions de première utilisation)
+        run: npm run fabriquer:essai-vierge
+
       - name: Fabriquer l'installateur officiel
         run: npm run fabriquer:officielle
 
@@ -72,7 +75,16 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: liberte-35-essai-${{ steps.version.outputs.version }}
-          path: target/release/bundle/nsis/*Essai*-setup.exe
+          path: target/release/bundle/nsis/*Essai_*-setup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publier l'installateur Essai vierge
+        if: steps.version.outputs.publier == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: liberte-35-essai-vierge-${{ steps.version.outputs.version }}
+          path: target/release/bundle/nsis/*Essai vierge_*-setup.exe
           if-no-files-found: error
           retention-days: 30
 

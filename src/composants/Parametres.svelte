@@ -16,8 +16,10 @@
     onrestauration: () => void;
     /** 0.16.0 : « Voir le journal » depuis l'Accueil ouvre l'onglet Journal. */
     ongletInitial?: 'sauvegardes' | 'export' | 'installation' | 'journal';
+    /** 0.22.0 : rouvrir la configuration guidée (elle ajoute seulement). */
+    onguide?: () => void;
   }
-  let { etat, erreur, plateforme, onrestauration, ongletInitial = 'sauvegardes' }: Props = $props();
+  let { etat, erreur, plateforme, onrestauration, ongletInitial = 'sauvegardes', onguide }: Props = $props();
   const T = TEXTES.parametres;
 
   type Onglet = 'sauvegardes' | 'export' | 'installation' | 'journal';
@@ -96,6 +98,13 @@
         </dl>
       {/if}
     </section>
+    {#if onguide && !erreur}
+      <section class="guide" aria-labelledby="titre-guide-parametres" data-testid="parametres-guide">
+        <h2 id="titre-guide-parametres">Configuration guidée</h2>
+        <p class="discret">Le guide pas à pas : ta paie, tes dépenses, tes dettes et ton épargne. Il ajoute seulement : il ne modifie ni ne supprime rien de ce qui est déjà enregistré.</p>
+        <button type="button" onclick={onguide} data-testid="ouvrir-guide">Ouvrir la configuration guidée</button>
+      </section>
+    {/if}
   {:else if onglet === 'journal' && !erreur}
     <JournalChangements {plateforme} />
   {:else if etat && !erreur}
@@ -108,6 +117,14 @@
 </div>
 
 <style>
+  .guide {
+    margin-top: var(--espace-8);
+    padding-top: var(--espace-6);
+    border-top: var(--epaisseur-bordure) solid var(--couleur-bordure);
+  }
+  .guide h2 {
+    margin-top: 0;
+  }
   .onglets {
     display: flex;
     flex-wrap: wrap;

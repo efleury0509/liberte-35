@@ -10,6 +10,7 @@
 //!   modifié ni effacé.
 
 mod export;
+mod guide;
 mod horloge;
 mod migrations;
 mod paie;
@@ -21,6 +22,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
 pub use export::ResumeExport;
+pub use guide::ConfigurationGuidee;
 pub use horloge::{formater_utc, Horloge, HorlogeFixe, HorlogeSysteme};
 use migrations::{derniere_version, Migration, MIGRATIONS};
 pub use paie::{
@@ -641,6 +643,8 @@ mod tests_confirmations;
 mod tests_elements;
 #[cfg(test)]
 mod tests_export;
+#[cfg(test)]
+mod tests_guide;
 #[cfg(test)]
 mod tests_journal;
 #[cfg(test)]

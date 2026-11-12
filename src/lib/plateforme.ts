@@ -342,6 +342,18 @@ export interface PeriodeJournal {
   fin: string;
 }
 
+/**
+ * Configuration guidée (0.22.0) : où en est le guide de première
+ * utilisation. Un réglage d'affichage seulement (aucune donnée financière,
+ * aucune entrée au journal). Absent (null) : jamais ouvert ni écarté.
+ */
+export interface ConfigurationGuidee {
+  /** enCours : commencé ou en pause ; terminee ; masquee : invitation retirée de l'Accueil. */
+  statut: 'enCours' | 'terminee' | 'masquee';
+  /** Dernière étape ouverte, de 1 (Bienvenue) à 6 (Récapitulatif). */
+  etape: number;
+}
+
 // Étape 6 : sauvegardes et export (identiques aux types Rust).
 export type SourceCopie =
   | { genre: 'jour'; nom: string }
@@ -431,6 +443,9 @@ export interface Plateforme {
   /** Lecture seule : nombre d'entrées dans chaque période. */
   compterJournal(periodes: PeriodeJournal[]): Promise<number[]>;
   appliquerChangementsPaie(changements: ChangementPaie[], journal: EntreeJournal[]): Promise<DonneesPaie>;
+  /** 0.22.0 : état de la configuration guidée (null : jamais ouverte). */
+  lireConfigurationGuidee(): Promise<ConfigurationGuidee | null>;
+  definirConfigurationGuidee(configuration: ConfigurationGuidee): Promise<void>;
   etatSauvegardes(): Promise<EtatSauvegardes>;
   apercuRestauration(source: SourceCopie): Promise<ApercuRestauration>;
   /** Fenêtre « Ouvrir » ; null si elle est fermée sans choisir. */
@@ -458,6 +473,8 @@ const plateformeTauri: Plateforme = {
   compterJournal: (periodes) => invoke<number[]>('compter_journal', { periodes }),
   appliquerChangementsPaie: (changements, journal) =>
     invoke<DonneesPaie>('appliquer_changements_paie', { changements, journal }),
+  lireConfigurationGuidee: () => invoke<ConfigurationGuidee | null>('lire_configuration_guidee'),
+  definirConfigurationGuidee: (configuration) => invoke<void>('definir_configuration_guidee', { configuration }),
   etatSauvegardes: () => invoke<EtatSauvegardes>('etat_sauvegardes'),
   apercuRestauration: (source) => invoke<ApercuRestauration>('apercu_restauration', { source }),
   choisirFichierCopie: () => invoke<ApercuRestauration | null>('choisir_fichier_copie'),
@@ -480,6 +497,11 @@ const plateformeTauri: Plateforme = {
 // Pour les tests de l'interface seulement : « ?simuler=erreur » dans
 // l'adresse de l'aperçu simule un fichier de données illisible.
 // N'existe pas dans l'application installée.
+function parametreGuide(): string | null {
+  if (typeof location === 'undefined') return null;
+  return new URLSearchParams(location.search).get('guide');
+}
+
 function simulation(): string | null {
   if (typeof location === 'undefined') return null;
   return new URLSearchParams(location.search).get('simuler');
@@ -495,6 +517,10 @@ export function creerApercu(): Plateforme {
   let donnees: DonneesPaie = donneesVides();
   type ChangementComplet = ChangementJournal & Partial<Pick<EntreeJournal, 'ancienneValeur' | 'nouvelleValeur' | 'motif'>>;
   let journal: ChangementComplet[] = [];
+  // 0.22.0 : dans l'aperçu, le guide est considéré comme déjà terminé (les
+  // essais d'interface partent d'un aperçu vide sans le voir s'ouvrir) ;
+  // « ?guide=premiere » simule une toute première utilisation.
+  let guide: ConfigurationGuidee | null = parametreGuide() === 'premiere' ? null : { statut: 'terminee', etape: 6 };
   const copiesDuJour = new Map<string, Instantane & { lisible: boolean }>();
   let precautions: (Instantane & { nom: string; motif: 'restauration' | 'miseANiveau' })[] = [];
   const abonnes = new Set<(a: AvisCopie) => void>();
@@ -656,6 +682,13 @@ export function creerApercu(): Plateforme {
       // Dans l'aperçu, la copie suit tout de suite (pas de délai).
       copierLeJour();
       return cloner(donnees);
+    },
+    lireConfigurationGuidee: async () => (guide ? { ...guide } : null),
+    definirConfigurationGuidee: async (c) => {
+      if (!['enCours', 'terminee', 'masquee'].includes(c.statut) || !Number.isInteger(c.etape) || c.etape < 1 || c.etape > 6) {
+        throw 'État de configuration guidée invalide : rien n’a été enregistré.';
+      }
+      guide = { statut: c.statut, etape: c.etape };
     },
     etatSauvegardes: async () => {
       const jours = listeJours();

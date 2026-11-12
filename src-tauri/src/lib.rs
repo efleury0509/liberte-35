@@ -5,9 +5,9 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use l35_stockage::{
-    ApercuRestauration, ChangementPaie, CopieFaite, DonneesPaie, FiltreJournal, HorlogeSysteme,
-    ListeDesCopies, NouvelleEntree, PageJournal, PeriodeJournal, Profil, ResultatRestauration,
-    ResumeExport, SourceCopie, Stockage,
+    ApercuRestauration, ChangementPaie, ConfigurationGuidee, CopieFaite, DonneesPaie,
+    FiltreJournal, HorlogeSysteme, ListeDesCopies, NouvelleEntree, PageJournal, PeriodeJournal,
+    Profil, ResultatRestauration, ResumeExport, SourceCopie, Stockage,
 };
 use serde::Serialize;
 use tauri::{Emitter, Manager};
@@ -202,6 +202,24 @@ fn compter_journal(
     avec_stockage(&etat, |s| s.compter_journal(&periodes))
 }
 
+/// Configuration guidée (0.22.0) : où en est le guide. Absent : jamais ouvert.
+#[tauri::command]
+fn lire_configuration_guidee(
+    etat: tauri::State<'_, EtatApp>,
+) -> Result<Option<ConfigurationGuidee>, String> {
+    avec_stockage(&etat, |s| s.lire_configuration_guidee())
+}
+
+/// Configuration guidée (0.22.0) : un réglage d'affichage seulement ; les
+/// données saisies dans le guide passent par appliquer_changements_paie.
+#[tauri::command]
+fn definir_configuration_guidee(
+    etat: tauri::State<'_, EtatApp>,
+    configuration: ConfigurationGuidee,
+) -> Result<(), String> {
+    avec_stockage(&etat, |s| s.definir_configuration_guidee(&configuration))
+}
+
 #[tauri::command]
 fn etat_sauvegardes(etat: tauri::State<'_, EtatApp>) -> Result<EtatSauvegardes, String> {
     let copies = avec_stockage(&etat, |s| s.lister_copies())?;
@@ -346,6 +364,8 @@ pub fn lancer() {
             lire_paie,
             lire_journal,
             compter_journal,
+            lire_configuration_guidee,
+            definir_configuration_guidee,
             appliquer_changements_paie,
             etat_sauvegardes,
             apercu_restauration,

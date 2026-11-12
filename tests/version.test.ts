@@ -24,6 +24,7 @@ describe('Numéro de version', () => {
 
   it('la configuration d’essai ne le remplace pas', () => {
     expect(JSON.parse(lire('src-tauri/tauri.essai.conf.json')).version).toBeUndefined();
+    expect(JSON.parse(lire('src-tauri/tauri.essai-vierge.conf.json')).version).toBeUndefined();
   });
 
   it('est celui de la fabrication Essai de la correction du menu « Actions » : 0.21.1', () => {
@@ -33,7 +34,8 @@ describe('Numéro de version', () => {
   it('la fabrication vérifie le numéro avant de publier (U2)', () => {
     const fabrication = lire('.github/workflows/fabrication.yml');
     expect(fabrication).toContain('node scripts/verifier_version.mjs');
-    expect(fabrication.match(/if: steps\.version\.outputs\.publier == 'true'/g)).toHaveLength(3);
+    // Trois installateurs publiés (Essai, Essai vierge, officiel) et l'étiquette de version.
+    expect(fabrication.match(/if: steps\.version\.outputs\.publier == 'true'/g)).toHaveLength(4);
     expect(fabrication).toContain('name: liberte-35-essai-${{ steps.version.outputs.version }}');
   });
 

@@ -10,9 +10,12 @@
   import DepensesAPrevoir from './composants/depenses/DepensesAPrevoir.svelte';
   import Accueil from './composants/accueil/Accueil.svelte';
   import Illustration from './composants/base/Illustration.svelte';
+  import ConfigurationGuidee from './composants/guide/ConfigurationGuidee.svelte';
+  import { invitationAccueil, ouvrirAuDemarrage } from './actions/guide';
   import type { CibleMesPaies } from './actions/accueil';
   import { SECTION_PAR_DEFAUT, trouverSection, type IdSection } from './lib/navigation';
-  import { obtenirPlateforme, type EtatApplication } from './lib/plateforme';
+  import { obtenirPlateforme, type ConfigurationGuidee as EtatGuide, type EtatApplication } from './lib/plateforme';
+  import { aujourdhui } from './lib/aujourdhui';
   import { TEXTES } from './lib/textes.fr';
 
   const plateforme = obtenirPlateforme();
@@ -55,9 +58,67 @@
     ongletParametres = 'journal';
     sectionActive = 'parametres';
   }
+  function choisir(id: IdSection) {
+    pretOuvert = null;
+    compteOuvert = null;
+    depenseAGerer = null;
+    ciblePaies = null;
+    ongletParametres = 'sauvegardes';
+    sectionActive = id;
+  }
   function voirCompte(id: string) {
     compteOuvert = id;
     sectionActive = 'mon-epargne';
+  }
+
+  // 0.22.0 : configuration guidée. Elle ne s'ouvre seule qu'une fois, sur une
+  // installation réellement vierge ; ensuite, l'Accueil invite à la reprendre
+  // et Paramètres permet de la rouvrir. Son état n'est qu'un réglage
+  // d'affichage : un échec d'écriture ne bloque rien.
+  let guide: EtatGuide | null = $state(null);
+  let guideOuvert = $state(false);
+  let etapeGuide = $state(1);
+  const invitation = $derived(invitationAccueil(guide));
+  async function retenirGuide(g: EtatGuide) {
+    guide = g;
+    try {
+      await plateforme.definirConfigurationGuidee(g);
+    } catch {
+      // L'état reste en mémoire pour cette session ; les données ne sont pas concernées.
+    }
+  }
+  function ouvrirGuide(etape: number) {
+    etapeGuide = etape;
+    guideOuvert = true;
+    void retenirGuide({ statut: 'enCours', etape });
+  }
+  function fermerGuide(section: IdSection = 'vue-ensemble') {
+    guideOuvert = false;
+    choisir(section);
+    void chargerEtat();
+  }
+  /** Une restauration remplace aussi l'état du guide : on le relit, sans ouverture automatique. */
+  async function rechargerApresRestauration() {
+    await chargerEtat();
+    try {
+      guide = await plateforme.lireConfigurationGuidee();
+    } catch {
+      // On garde l'état connu.
+    }
+  }
+  async function verifierPremiereUtilisation() {
+    try {
+      const [config, donnees] = await Promise.all([plateforme.lireConfigurationGuidee(), plateforme.lirePaie()]);
+      guide = config;
+      if (etat && ouvrirAuDemarrage(config, donnees, etat.nombreEntreesJournal)) {
+        // La bienvenue s'affiche sans rien écrire : tant que rien n'est fait,
+        // l'installation reste vierge.
+        etapeGuide = 1;
+        guideOuvert = true;
+      }
+    } catch {
+      guide = null;
+    }
   }
 
   async function chargerEtat() {
@@ -74,7 +135,9 @@
   let avisCopie: string | null = $state(null);
 
   onMount(() => {
-    void chargerEtat();
+    void chargerEtat().then(() => {
+      if (!erreur) void verifierPremiereUtilisation();
+    });
     return plateforme.surAvisCopie((a) => {
       if (a.reussie) avisCopie = null;
       else if (a.nouvelAvis) avisCopie = a.erreur;
@@ -82,20 +145,27 @@
   });
 </script>
 
-<div class="application">
-  <BarreLaterale
-    active={sectionActive}
-    profil={etat?.profil}
-    version={etat?.versionApplication}
-    onchoisir={(id) => {
-      pretOuvert = null;
-      compteOuvert = null;
-      depenseAGerer = null;
-      ciblePaies = null;
-      ongletParametres = 'sauvegardes';
-      sectionActive = id;
+{#if guideOuvert}
+  <ConfigurationGuidee
+    {plateforme}
+    jour={aujourdhui()}
+    etapeInitiale={etapeGuide}
+    onetape={(n) => void retenirGuide({ statut: 'enCours', etape: n })}
+    onpause={() => {
+      // « Explorer d'abord » depuis la bienvenue : le guide reste à reprendre.
+      if (guide?.statut !== 'enCours') void retenirGuide({ statut: 'enCours', etape: 1 });
+      fermerGuide();
     }}
+    onterminer={() => {
+      void retenirGuide({ statut: 'terminee', etape: 6 });
+      fermerGuide();
+    }}
+    onsection={(s) => fermerGuide(s)}
+    onchangement={chargerEtat}
   />
+{:else}
+<div class="application">
+  <BarreLaterale active={sectionActive} profil={etat?.profil} version={etat?.versionApplication} onchoisir={choisir} />
 
   <main id="contenu" tabindex="-1" aria-labelledby="titre-section">
     {#if erreur}
@@ -126,13 +196,20 @@
       {/if}
       {#if section.id === 'vue-ensemble'}
         {#if !erreur}
-          <Accueil {plateforme} onouvrirpaies={ouvrirPaies} onjournal={voirJournal} />
+          <Accueil
+            {plateforme}
+            onouvrirpaies={ouvrirPaies}
+            onjournal={voirJournal}
+            {invitation}
+            onreprendre={() => ouvrirGuide(invitation?.etape ?? 1)}
+            onmasquer={() => void retenirGuide({ statut: 'masquee', etape: guide?.etape ?? 1 })}
+          />
         {:else}
           <h1 id="titre-section" class="visuellement-cache">Accueil</h1>
         {/if}
       {:else if section.id === 'parametres'}
         {#key ongletParametres}
-          <Parametres {etat} {erreur} {plateforme} onrestauration={chargerEtat} ongletInitial={ongletParametres} />
+          <Parametres {etat} {erreur} {plateforme} onrestauration={rechargerApresRestauration} ongletInitial={ongletParametres} onguide={() => ouvrirGuide(guide?.statut === 'enCours' ? guide.etape : 1)} />
         {/key}
       {:else if section.id === 'mes-paies' && !erreur}
         {#key ouverturePaies}
@@ -156,6 +233,7 @@
     {/if}
   </main>
 </div>
+{/if}
 
 <style>
   /* V1 lot 6a : exactement la hauteur de la fenêtre ; la barre reste fixe et

@@ -16,6 +16,7 @@
     "e2e": "playwright test",
     "tauri": "tauri",
     "fabriquer:essai": "tauri build --bundles nsis --config src-tauri/tauri.essai.conf.json",
+    "fabriquer:essai-vierge": "tauri build --bundles nsis --config src-tauri/tauri.essai-vierge.conf.json",
     "fabriquer:officielle": "tauri build --bundles nsis"
   },
   "devDependencies": {

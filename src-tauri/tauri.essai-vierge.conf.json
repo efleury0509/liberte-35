@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Liberté 35 Essai vierge",
+  "identifier": "ca.liberte35.vierge.essai",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Liberté 35 Essai vierge — données fictives",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 640
+      }
+    ]
+  }
+}
