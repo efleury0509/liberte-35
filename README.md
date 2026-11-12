@@ -165,6 +165,11 @@ et dans le cahier fonctionnel de référence.
   la place, note sous les montants) ; titres de cartes longs sur plusieurs
   lignes au lieu d'être coupés. Aucun calcul, aucune règle ni structure de
   données changés (toujours 9).
+- Illustrations — Mes paies, fabrication Essai (version 0.20.0) : loutre
+  organisatrice à droite du titre et des boutons, sur le crème, sans cadre ;
+  soleil d'en-tête et emplacements vides des cartes retirés ; cartes de paie
+  l'une sous l'autre quand la place manque (plus de débordement à 1024 px).
+  Aucun calcul, aucune règle ni structure de données changés (toujours 9).
 
 ## Organisation du code
 
