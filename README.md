@@ -179,6 +179,15 @@ et dans le cahier fonctionnel de référence.
   carte de crédit, réserves) s'affiche au premier plan, entier, vers le haut
   si la place manque ; il n'est plus coupé par sa carte. Aucun calcul, aucune
   règle ni structure de données changés (toujours 9).
+- Configuration guidée, fabrication (version 0.22.0) : à la toute première
+  utilisation, une page de bienvenue puis un guide en six écrans (paie,
+  dépenses et autres revenus, dettes, épargne, récapitulatif), qu'on peut
+  quitter et reprendre depuis l'Accueil ou Paramètres. Le guide réutilise les
+  formulaires, aperçus, journal et « Annuler » existants ; il ajoute
+  seulement. Son étape est gardée dans les paramètres (structure toujours 9,
+  aucune entrée au journal). Nouvelle installation « Essai vierge »
+  (`ca.liberte35.vierge.essai`), séparée de l'Essai et de l'officielle, pour
+  répéter la première utilisation. Aucun calcul ni règle financière changés.
 
 ## Organisation du code
 
@@ -193,20 +202,23 @@ et dans le cahier fonctionnel de référence.
 | `tests/`, `e2e/` | Tests de l'interface (Vitest) et parcours dans un navigateur (Playwright). |
 | `docs/` | Reconstruction à long terme et règles de sécurité. |
 
-## Deux installations séparées
+## Trois installations séparées
 
 | Installation | Identifiant | Usage |
 | --- | --- | --- |
 | Liberté 35 Essai | `ca.liberte35.essai` | Développement et tests, données fictives seulement |
+| Liberté 35 Essai vierge | `ca.liberte35.vierge.essai` | Répétitions de la première utilisation, données fictives seulement |
 | Liberté 35 | `ca.liberte35.officiel` | Vraies données, après le lancement officiel |
 
-Chacune a son propre dossier de données. Le stockage refuse d'ouvrir un
-fichier qui appartient à l'autre installation.
+Chacune a son propre dossier de données (nommé d'après son identifiant) et
+son propre dossier de programme, raccourci et désinstallation (nommés
+d'après son nom). Le stockage refuse d'ouvrir un fichier d'essai dans
+l'installation officielle, et inversement.
 
 ## Fabrication
 
 Chaque envoi sur la branche `main` déclenche GitHub Actions
-(`.github/workflows/fabrication.yml`) : tous les tests, puis les deux
+(`.github/workflows/fabrication.yml`) : tous les tests, puis les trois
 installateurs Windows, disponibles dans l'onglet Actions sous « Artifacts ».
 
 Pour reconstruire l'application sans GitHub ni Claude, voir

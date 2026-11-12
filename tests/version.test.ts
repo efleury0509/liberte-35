@@ -27,8 +27,8 @@ describe('Numéro de version', () => {
     expect(JSON.parse(lire('src-tauri/tauri.essai-vierge.conf.json')).version).toBeUndefined();
   });
 
-  it('est celui de la fabrication Essai de la correction du menu « Actions » : 0.21.1', () => {
-    expect(paquet).toBe('0.21.1');
+  it('est celui de la fabrication de la configuration guidée : 0.22.0', () => {
+    expect(paquet).toBe('0.22.0');
   });
 
   it('la fabrication vérifie le numéro avant de publier (U2)', () => {
