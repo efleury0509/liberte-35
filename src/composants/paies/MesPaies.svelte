@@ -16,6 +16,7 @@
   import { cyclesAffiches, NOMBRE_CYCLES } from '../../actions/elements';
   import { aVerifierAvant, paiesTerminees } from '../../actions/analyse';
   import HistoriquePaies from './HistoriquePaies.svelte';
+  import BilanPaie from './BilanPaie.svelte';
   import { anneeParDefaut, anneesHistorique } from '../../lib/historique';
   import {
     lireOccurrence,
@@ -983,6 +984,10 @@
   {@const tableauVisible = !(enFenetre && sousFormulaireOuvert)}
   <section class="carte" class:en-fenetre={enFenetre} aria-labelledby={enFenetre ? undefined : 'titre-detail'} aria-label={enFenetre ? `Cycle du ${formaterDateLongue(c.debut)} au ${formaterDateLongue(c.fin)}` : undefined} data-testid="detail-cycle">
     {#if tableauVisible}
+    {#if enFenetre && !exemple && donnees && c.fin < jour}
+      <!-- H3 : une paie terminée commence par son mini-bilan. -->
+      <BilanPaie cycle={c} libelle={(l) => libelleLigne(donnees!, l)} />
+    {/if}
     <div class="entete-detail">
       {#if !enFenetre}<h2 id="titre-detail">Cycle du {formaterDateLongue(c.debut)} au {formaterDateLongue(c.fin)}</h2>{/if}
       {#if !exemple && confirmables > 0}
