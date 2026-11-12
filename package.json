@@ -1,7 +1,7 @@
 {
   "name": "liberte-35",
   "private": true,
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Liberté 35 — outil personnel de planification financière, local et hors ligne.",
   "type": "module",
   "license": "UNLICENSED",

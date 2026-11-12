@@ -145,6 +145,12 @@ et dans le cahier fonctionnel de référence.
   seule, par pages de 50, filtré par section, dates et heures lisibles.
   Aucun calcul financier, aucune règle ni structure de données changés
   (toujours 9).
+- Journal par pages et périodes, fabrication Essai (version 0.17.0) :
+  pages de 50 (« ← Plus récents » / « Plus anciens → », indicateur de
+  page), filtres année puis mois en heure locale, combinés à la section,
+  appliqués avant la pagination, « Réinitialiser les filtres ». Lecture
+  seule ; aucun calcul, aucune règle ni structure de données changés
+  (toujours 9).
 
 ## Organisation du code
 
