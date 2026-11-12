@@ -232,6 +232,11 @@
     proposition = null;
     erreurSaisie = null;
   }
+  /** Affichage seulement : « montant au … » puis « payés depuis, … ». */
+  function partiesSolde(t: string): [string, string | null] {
+    const i = t.indexOf(' — ');
+    return i < 0 ? [t, null] : [t.slice(0, i), t.slice(i + 3)];
+  }
 </script>
 
 {#snippet details(v: VuePret)}
@@ -437,9 +442,13 @@
                   <dt>Prochain versement</dt>
                   <dd>{v.prochainVersement ?? 'Aucun versement planifié'}</dd>
                 </div>
-                <div>
+                <!-- 0.21 : le solde sur toute la largeur ; le complément (payé depuis,
+                     répartition) sur sa propre ligne, plus discret. Même texte. -->
+                <div class="solde-actuel">
                   <dt>Solde actuel</dt>
-                  <dd class:inconnu={v.soldeActuel === 'À compléter'}>{v.soldeActuel}</dd>
+                  <dd class:inconnu={v.soldeActuel === 'À compléter'} data-testid="solde-actuel-carte">
+                    <span class="solde-montant">{partiesSolde(v.soldeActuel)[0]}</span>{#if partiesSolde(v.soldeActuel)[1]}<span class="solde-suite"><span class="visuellement-cache">{' — '}</span>{partiesSolde(v.soldeActuel)[1]}</span>{/if}
+                  </dd>
                 </div>
               </dl>
               {#if v.note}<p class="attention">{v.note}</p>{/if}
@@ -663,6 +672,8 @@
 
 <style>
   .colonnes {
+    /* Sous le paysage de l'en-tête (flottant à droite). */
+    clear: both;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 360px;
     gap: var(--espace-6);
@@ -725,6 +736,19 @@
   }
   .inconnu {
     color: var(--etat-a-completer-texte);
+  }
+  .solde-actuel {
+    grid-column: 1 / -1;
+  }
+  .solde-montant {
+    display: block;
+  }
+  .solde-suite {
+    display: block;
+    margin-top: 2px;
+    font-weight: 400;
+    font-size: var(--texte-dense);
+    color: var(--couleur-texte-discret);
   }
   .actions-pret {
     display: flex;

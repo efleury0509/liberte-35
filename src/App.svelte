@@ -116,6 +116,10 @@
         <!-- Illustrations (maquette A approuvée) : la loutre organisatrice flotte à
              droite du titre et des boutons de Mes paies, sur le fond crème. -->
         <div class="loutre-paies" data-testid="illustration-paies"><Illustration nom="loutre-paies" largeur={1672} hauteur={941} /></div>
+      {:else if section.id === 'mes-dettes'}
+        <!-- Illustrations (maquette A approuvée) : le paysage « Liberté financière »
+             à droite du titre de Dettes, entier, 540 × 180 au plus. -->
+        <div class="paysage-dettes" data-testid="illustration-dettes"><Illustration nom="paysage-dettes" largeur={2172} hauteur={724} /></div>
       {/if}
       {#if section.id !== 'vue-ensemble'}
         <EnTeteSection id="titre-section" titre={section.libelle} sousTitre={section.sousTitre} illustration={section.illustration} />
@@ -178,6 +182,19 @@
     height: auto;
     aspect-ratio: 1672 / 941;
     object-fit: contain;
+  }
+  .paysage-dettes {
+    float: right;
+    width: min(540px, 58%);
+    margin: 0 0 var(--espace-5) var(--espace-6);
+  }
+  .paysage-dettes :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2172 / 724;
+    object-fit: contain;
+    border-radius: 16px;
   }
   main {
     position: relative;
