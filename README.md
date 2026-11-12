@@ -123,6 +123,13 @@ et dans le cahier fonctionnel de référence.
   cliquables vers le détail de l'opération ; détail complet d'une paie dans
   une grande fenêtre, sans fenêtre superposée. Aucun calcul ni structure de
   données changés (toujours 9).
+- Historique des paies, fabrication Essai (version 0.14.0) : rappel « à
+  vérifier » sur tout l'historique (H1) ; paies terminées par année et par
+  mois dans « Toutes mes paies » (H2) ; mini-bilan prévu / confirmé d'une
+  paie terminée (H3) ; aperçu obligatoire dès qu'une règle touche une paie
+  passée, blocage si les conséquences ne peuvent pas être calculées,
+  redécoupage du calendrier chiffré (H4). Aucune règle financière ni
+  structure de données changées (toujours 9).
 
 ## Organisation du code
 
