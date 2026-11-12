@@ -2,7 +2,7 @@
 // Mes paies et ne fait que choisir quoi montrer. Données fictives.
 import { describe, expect, it } from 'vitest';
 import { comptesPaie, vueAccueil, MAX_BIENTOT } from '../src/actions/accueil';
-import { cyclesAffiches } from '../src/actions/analyse';
+import { aVerifierAvant, cyclesAffiches } from '../src/actions/analyse';
 import { proposerAjoutCarte } from '../src/actions/cartes';
 import { proposerConfirmation } from '../src/actions/confirmations';
 import { proposerAjout, type SaisieElement } from '../src/actions/elements';
@@ -116,13 +116,47 @@ describe('Accueil — mêmes chiffres que Mes paies', () => {
     expect(v.autresBientot).toBe(0);
   });
 
-  it('Bientôt ne montre rien de daté d’avant aujourd’hui', () => {
+  it('Bientôt : une sortie passée non confirmée n’y est pas, reste à vérifier et n’est jamais tenue pour payée', () => {
     const d = avec(exemple(), { libelle: 'Transport (fictif)', montant: '40', quand: 'chaquePaie', date: '' });
-    const v = vueAccueil(d, J('2027-01-10'));
-    const transport = v.bientot.flatMap((g) => g.lignes).filter((l) => l.libelle === 'Transport (fictif)');
-    // Celui de la paie du 7 janv. (passée) n'y est pas ; celui du 21 janv., oui.
-    expect(transport.map((l) => l.date)).toEqual(['2027-01-21']);
-    expect(v.bientot.flatMap((g) => g.lignes).every((l) => l.date >= '2027-01-10')).toBe(true);
+    const v = vueAccueil(d, J('2027-01-13'));
+    const lignes = v.bientot.flatMap((g) => g.lignes);
+    // Cellulaire du 12 janv. : passé, non confirmé → « à vérifier », pas « bientôt ».
+    expect(lignes.some((l) => l.libelle === 'Cellulaire (fictif)')).toBe(false);
+    const cellulaire = v.paies[0]!.cycle.lignes.find((l) => l.libelle === 'Cellulaire (fictif)')!;
+    expect(cellulaire.statut).toBe('aVerifier');
+    expect(v.paies[0]!.comptes.confirmees).toBe(0);
+    expect(v.surveiller.find((p) => p.cle === 'a-verifier-actuelle')!.texte).toBe('2 éléments à vérifier dans ta paie actuelle');
+    // Transport sans date propre : à faire pendant sa paie, « d’ici » sa fin.
+    const transport = lignes.filter((l) => l.libelle === 'Transport (fictif)');
+    expect(transport.map((l) => [l.date, l.sansDate])).toEqual([
+      ['2027-01-20', true],
+      ['2027-02-03', true],
+    ]);
+    expect(lignes.every((l) => l.sansDate || l.date >= '2027-01-13')).toBe(true);
+  });
+
+  it('« Tout est en ordre » seulement quand rien n’est à vérifier, à compléter ni sous le seuil', () => {
+    const variantes: DonneesPaie[] = [
+      exemple(),
+      { ...exemple(), salaires: [] },
+      appliquer(exemple(), proposerSeuil(exemple(), '2000')),
+      appliquer(exemple(), proposerAjoutCarte(exemple(), { nom: 'Visa (fictive)', prochaine: '2027-01-25', limite: '', taux: '' }, J('2026-12-01'))),
+    ];
+    let enOrdre = 0;
+    for (const d of variantes)
+      for (const j of ['2027-01-02', '2027-01-06', '2027-01-10', '2027-01-21', '2027-02-10']) {
+        const v = vueAccueil(d, J(j));
+        const n = versNoyau(d);
+        const passees = aVerifierAvant(n.profil!, { exceptions: n.exceptions, elements: n.elements, ajustements: n.ajustements, confirmations: n.confirmations, seuil: n.seuil, couvertures: n.couvertures }, J(j), v.paies[0]!.cycle.debut);
+        const probleme = passees > 0 || v.paies.some((p) => p.comptes.aVerifier > 0 || p.comptes.aCompleter > 0 || p.cycle.disponible === null || p.cycle.signal !== null);
+        if (v.phrase.includes('Tout est en ordre')) {
+          enOrdre += 1;
+          expect(probleme, `${j}`).toBe(false);
+          expect(v.surveiller).toEqual([]);
+        } else expect(v.surveiller.length).toBeGreaterThan(0);
+        if (probleme) expect(v.phrase).not.toContain('Tout est en ordre');
+      }
+    expect(enOrdre).toBeGreaterThan(0); // le cas calme existe bien
   });
 
   it('carte : l’échéance sans montant est « à choisir », jamais 0 $', () => {

@@ -41,7 +41,10 @@ export interface PointSurveiller {
 }
 
 export interface LigneBientot {
+  /** Jour prévu ; pour une sortie sans date propre, la fin de sa paie. */
   date: DateCivile;
+  /** Vrai quand la sortie n'a pas de date propre : « d'ici le … ». */
+  sansDate: boolean;
   libelle: string;
   montant: Cents | null;
   etat: 'prevu' | 'a-completer';
@@ -99,7 +102,7 @@ const dateDe = (c: Cycle, l: Ligne) => l.echeance ?? c.paie.date;
 function ligneBientot(d: DonneesPaie, c: Cycle, l: Ligne): LigneBientot {
   const carte = estPaiementCarte(d, l.elementId);
   const cible: CibleMesPaies = { type: 'paie', date: c.paie.dateOrigine, ligne: { elementId: l.elementId, origine: l.origine } };
-  const base = { date: dateDe(c, l), libelle: libelleLigne(d, l), montant: l.montant, cible };
+  const base = { date: l.echeance ?? c.fin, sansDate: l.echeance === null, libelle: libelleLigne(d, l), montant: l.montant, cible };
   if (l.montant === null) return { ...base, etat: 'a-completer', statut: carte ? 'Montant à choisir' : 'À compléter' };
   if (l.couvert === null) return { ...base, etat: 'a-completer', statut: 'Couverture à compléter' };
   if (l.couvert > 0) return { ...base, etat: 'prevu', statut: l.couvert >= l.montant ? 'Avec la réserve' : 'En partie avec la réserve' };
@@ -156,10 +159,16 @@ export function vueAccueil(d: DonneesPaie, jour: DateCivile): VueAccueil {
   const bientot: GroupeBientot[] = [];
   deux.forEach((c, i) => {
     const lignes = c.lignes
-      // Seulement ce qui arrive à partir d'aujourd'hui (une sortie liée à une paie
-      // déjà versée reste dans les comptes de la carte, pas dans « Bientôt »).
-      .filter((l) => visible(l) && l.nature === 'depense' && l.statut === 'aVenir' && dateDe(c, l) >= jour)
-      .sort((a, b) => (dateDe(c, a) < dateDe(c, b) ? -1 : dateDe(c, a) > dateDe(c, b) ? 1 : 0));
+      // « À venir » selon Mes paies : sa date (ou, sans date propre, la fin de sa
+      // paie) n'est pas passée. Une sortie datée d'avant aujourd'hui et non
+      // confirmée est « à vérifier » : elle n'est jamais ici, jamais tenue pour
+      // payée, et reste comptée dans « À surveiller » et dans sa paie.
+      .filter((l) => visible(l) && l.nature === 'depense' && l.statut === 'aVenir')
+      .sort((a, b) => {
+        const da = a.echeance ?? c.fin;
+        const db = b.echeance ?? c.fin;
+        return da < db ? -1 : da > db ? 1 : 0;
+      });
     total += lignes.length;
     const montrees = lignes.slice(0, reste);
     reste -= montrees.length;

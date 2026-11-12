@@ -164,7 +164,7 @@
           <ul class="liste">
             {#each g.lignes as l (`${l.date}|${l.libelle}`)}
               <li>
-                <span class="quand">{dateBientot(l.date)}</span>
+                <span class="quand">{l.sansDate ? `d’ici le ${formaterDateCourte(l.date)}` : dateBientot(l.date)}</span>
                 <button type="button" class="nom lien" onclick={() => onouvrirpaies(l.cible)}>{l.libelle}</button>
                 <span class="montant" class:inconnu={l.montant === null}>{texte(l.montant)}</span>
                 <Pastille etat={l.etat}>{l.statut}</Pastille>

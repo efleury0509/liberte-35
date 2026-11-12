@@ -46,14 +46,19 @@
     align-items: center;
     gap: var(--espace-3);
   }
+  /* 0.16.0 : fenêtre étroite, la pastille passe à la ligne au lieu d'être coupée. */
   .bandeau header {
+    flex-wrap: wrap;
+    row-gap: var(--espace-2);
     min-height: var(--hauteur-bandeau-carte);
-    padding: 0 var(--espace-4);
+    padding: var(--espace-2) var(--espace-4);
     background: var(--couleur-bandeau);
     color: var(--couleur-bandeau-texte);
   }
   .badge {
     margin-left: auto;
+    flex-shrink: 0;
+    max-width: 100%;
   }
   .bandeau .corps {
     padding: var(--espace-4) var(--espace-6) var(--espace-5);

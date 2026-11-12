@@ -132,3 +132,30 @@ test('journal : derniers changements, onglet Journal, filtres, entrée telle qu�
   await expect(journal.getByTestId('journal-vide')).toHaveText('Aucun changement dans cette section.');
   await expect(journal.getByRole('button', { name: 'Voir les changements plus anciens' })).toHaveCount(0);
 });
+
+test('fenêtre minimale (1024 × 640) : les pastilles des cartes restent entières, Accueil et Mes paies', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 640 });
+  await configurer(page, '2027-01-16', '2025-06-05');
+  const entieres = async () => {
+    const cartes = page.locator('article.carte-v1.bandeau');
+    const n = await cartes.count();
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) {
+      const carte = cartes.nth(i);
+      if (!(await carte.isVisible())) continue;
+      const boite = (await carte.boundingBox())!;
+      for (const p of await carte.locator('header .badge .pastille').all()) {
+        const b = (await p.boundingBox())!;
+        expect(b.x).toBeGreaterThanOrEqual(boite.x);
+        expect(b.x + b.width).toBeLessThanOrEqual(boite.x + boite.width + 0.5);
+      }
+    }
+  };
+  await nav(page, 'Accueil');
+  await expect(page.getByTestId('carte-accueil').first()).toContainText('à vérifier');
+  await entieres();
+  // « À surveiller » reste visible sans défiler.
+  expect((await page.getByTestId('bandeau-surveiller').boundingBox())!.y).toBeLessThan(640);
+  await ouvrirMesPaies(page);
+  await entieres();
+});

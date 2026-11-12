@@ -15,9 +15,7 @@ function fichiers(dossier: string): string[] {
 
 describe('Fonctionnement hors ligne', () => {
   it('aucune adresse Internet dans le code de l’interface', () => {
-    // Les images sont des données, pas du code : la loutre de bienvenue porte
-    // ses métadonnées d'origine (adresses jamais contactées), gardées telles quelles.
-    const sources = [...fichiers('src'), 'index.html'].filter((f) => !/\.(png|jpe?g|webp)$/i.test(f));
+    const sources = [...fichiers('src'), 'index.html'];
     const fautifs = sources.filter((f) => /https?:\/\//.test(readFileSync(f, 'utf8')));
     expect(fautifs).toEqual([]);
   });
