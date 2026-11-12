@@ -110,6 +110,13 @@ et dans le cahier fonctionnel de référence.
   pour revenir sur un paiement, choix explicite de la source d'un paiement lié
   à une réserve. Aucun calcul ni structure de données changés (toujours 9).
   Polices sous licence OFL : voir le dossier `licences/`.
+- V1, fabrication Essai (version 0.12.0) : formulaires de création et de
+  modification dans des fenêtres centrées partout ; Épargne (comptes côte à
+  côte, synthèse, « Déplacer de l'argent », menu « Actions » des réserves) ;
+  Mes paies (deux paies côte à côte, aperçus des 3e et 4e) ; section
+  « Dépenses » regroupée avec filtres ; Dettes (rythme des versements,
+  prochains paiements, progression « À compléter ») ; Paramètres en onglets.
+  Aucun calcul ni structure de données changés (toujours 9).
 
 ## Organisation du code
 
