@@ -14,6 +14,7 @@ import {
   proposerRenseignements,
   proposerSuppressionPret,
   proposerVersement,
+  reductionSolde,
   vuePret,
   type SaisiePret,
 } from '../src/actions/prets';
@@ -442,5 +443,34 @@ describe('Journal', () => {
       { section: 'Mes dettes', objet: 'Prêt « Prêt auto (fictif) »', champ: 'création', ancienneValeur: null, nouvelleValeur: $('205,00 $ — aux deux semaines à partir du 14 janv. 2027'), motif: null },
     ]);
     expect(p.apercu).toBe(false);
+  });
+});
+
+describe('Lot 1 — le solde de départ reste la référence', () => {
+  it('mises à jour, correction et « Annuler » ne touchent jamais le solde de départ', () => {
+    let { d, id } = avecPret(base(), SAISIE_A); // départ : 6 000 $ au 15 janv. 2027
+    const depart = { date: '2027-01-15', montant: 6_000_00 };
+    const reduction = (x: DonneesPaie) => reductionSolde(x.prets.find((p) => p.id === id)!.soldes);
+
+    d = appliquer(d, proposerMiseAJourSolde(d, id, '2027-03-15', '5600', 'relevé', J('2027-03-16')));
+    expect(reduction(d)).toMatchObject({ etat: 'reduit', pourcent: 6, depart });
+
+    // Correction : un solde plus récent devient le dernier ; le départ ne bouge pas.
+    const avantCorrection = d;
+    const correction = proposerMiseAJourSolde(d, id, '2027-03-20', '5500', 'correction', J('2027-03-21'));
+    d = appliquer(d, correction);
+    expect(reduction(d)).toMatchObject({ etat: 'reduit', pourcent: 8, depart, dernier: { date: '2027-03-20', montant: 5_500_00 } });
+    expect(d.prets.find((p) => p.id === id)!.soldes).toHaveLength(3);
+
+    // « Annuler » retire seulement la correction.
+    d = appliquerChangements(d, inverser(avantCorrection, correction.changements));
+    expect(d.prets.find((p) => p.id === id)!.soldes).toEqual(avantCorrection.prets.find((p) => p.id === id)!.soldes);
+
+    // Les renseignements ne réécrivent pas un solde déjà déclaré.
+    d = appliquer(d, proposerRenseignements(d, id, { minimum: '190', echeanceFinale: '', taux: '9,90', solde: '1', soldeLe: '2027-04-01' }, J('2027-04-02')));
+    expect(reduction(d)).toMatchObject({ depart });
+
+    // Même date qu'un solde existant : refusé, rien n'est remplacé.
+    expect(() => proposerMiseAJourSolde(d, id, '2027-01-15', '1', '', J('2027-04-02'))).toThrow(ErreurSaisie);
   });
 });
