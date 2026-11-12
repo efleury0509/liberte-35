@@ -117,6 +117,12 @@ et dans le cahier fonctionnel de référence.
   « Dépenses » regroupée avec filtres ; Dettes (rythme des versements,
   prochains paiements, progression « À compléter ») ; Paramètres en onglets.
   Aucun calcul ni structure de données changés (toujours 9).
+- V1, fabrication Essai (version 0.13.0) : une seule zone défilante, barre
+  latérale fixe, barre de défilement discrète ; Mes paies en deux onglets
+  (« Mes prochaines paies », « Toutes mes paies ») ; lignes des cartes
+  cliquables vers le détail de l'opération ; détail complet d'une paie dans
+  une grande fenêtre, sans fenêtre superposée. Aucun calcul ni structure de
+  données changés (toujours 9).
 
 ## Organisation du code
 
