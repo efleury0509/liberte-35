@@ -5,12 +5,16 @@
 // embarqué tel quel (1 671 × 941, aucun recadrage ni retouche).
 
 import loutreBienvenue from '../assets/illustrations/loutre_bienvenue_accueil.png';
+// Dépenses : la loutre gestionnaire (2e version approuvée), en tête de la
+// colonne de droite ; métadonnées d'origine retirées, pixels identiques.
+import loutreDepenses from '../assets/illustrations/loutre_gestionnaire_depenses.png';
 
 export type NomIllustration =
   | 'cafe-glace'
   | 'licorne'
   | 'loutre'
   | 'loutre-bienvenue'
+  | 'loutre-depenses'
   | 'loutre-savante'
   | 'paysage-liberte'
   | 'popcorn'
@@ -34,6 +38,10 @@ export const ILLUSTRATIONS: Record<NomIllustration, Illustration> = {
   'loutre-bienvenue': {
     alt: 'Une loutre à lunettes roses salue d’un clin d’œil, devant un tableau où est écrit « Bonjour ! ».',
     fichier: loutreBienvenue,
+  },
+  'loutre-depenses': {
+    alt: 'Une loutre en coton ouaté mauve vérifie un long reçu, entourée d’un carnet « Budget mensuel », d’une calculatrice, d’une tirelire et de son café glacé.',
+    fichier: loutreDepenses,
   },
   'loutre-savante': { alt: '', fichier: null },
   'paysage-liberte': { alt: '', fichier: null },

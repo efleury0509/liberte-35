@@ -29,6 +29,7 @@
   import { estPaiementCarte } from '../../actions/cartes';
   import { estContribution } from '../../actions/comptes';
   import RevenusDepenses from '../paies/RevenusDepenses.svelte';
+  import Illustration from '../base/Illustration.svelte';
   import FenetreFormulaire from '../base/FenetreFormulaire.svelte';
   import CarteBandeau from '../base/CarteBandeau.svelte';
   import { CalendarClock } from '@lucide/svelte';
@@ -487,6 +488,8 @@
         {/if}
       </div>
       <aside class="contexte" aria-label="Les 12 prochains mois">
+        <!-- Illustrations (maquette A approuvée) : la loutre gestionnaire en tête de la colonne. -->
+        <div class="loutre" data-testid="illustration-depenses"><Illustration nom="loutre-depenses" largeur={1671} hauteur={941} /></div>
         <CarteBandeau titre="Les 12 prochains mois" teinte="beurre" icone={CalendarClock}>
           {#if annee && annee.mois.length > 0}
       <div data-testid="douze-mois">
@@ -625,6 +628,22 @@
   .contexte {
     position: sticky;
     top: var(--espace-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--espace-5);
+  }
+  /* L'illustration entière, jamais déformée ni recadrée. */
+  .loutre :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1671 / 941;
+    object-fit: contain;
+    border-radius: 16px;
+    box-shadow: var(--ombre-carte);
+  }
+  .principale {
+    min-width: 0;
   }
   .mois {
     font-family: var(--police);
@@ -638,11 +657,15 @@
     font-size: var(--titre-carte);
   }
   @media (max-width: 1180px) {
+    /* minmax(0, 1fr) : la colonne ne s'élargit plus au-delà de la fenêtre. */
     .colonnes {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
     .contexte {
       position: static;
+    }
+    .loutre {
+      max-width: 520px;
     }
   }
 </style>
