@@ -232,6 +232,40 @@
   /** Réserves actives avec un solde, pour « Pris sur » et la fermeture. */
   const reservesAvecSolde = (id: string) => (donnees ? vueReserves(donnees, id, jour).actives.filter((r) => r.solde > 0) : []);
   const synthese = $derived(donnees ? syntheseEpargne(donnees) : null);
+
+  // Bandeau des totaux (0.19.x) : la disposition suit la place réelle du
+  // bandeau et la largeur réelle des montants, jamais coupés ni rapetissés.
+  //  - « ligne » : les trois montants sur une ligne ;
+  //  - « deux-lignes » : « Total suivi » seul, puis les deux autres côte à côte ;
+  //  - « colonne » : un montant par ligne (montants exceptionnellement longs).
+  type DispositionTotaux = 'ligne' | 'deux-lignes' | 'colonne';
+  let bandeauTotaux: HTMLDivElement | undefined = $state();
+  let largeurTotaux = $state(0);
+  let disposition: DispositionTotaux = $state('ligne');
+  /** Séparateur entre deux montants : marge intérieure, filet et écart. */
+  const SEPARATEUR = 16 + 2 + 24;
+  function choisirDisposition(): DispositionTotaux {
+    if (!bandeauTotaux) return 'ligne';
+    const style = getComputedStyle(bandeauTotaux);
+    const interieur = bandeauTotaux.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const [w1, w2, w3] = [...bandeauTotaux.querySelectorAll<HTMLElement>('.kpi-montant')].map((m) => m.offsetWidth);
+    if (w1 === undefined || w2 === undefined || w3 === undefined) return 'ligne';
+    if (w1 + w2 + w3 + 2 * SEPARATEUR <= interieur) return 'ligne';
+    if (w1 <= interieur && w2 + w3 + SEPARATEUR <= interieur) return 'deux-lignes';
+    return 'colonne';
+  }
+  $effect(() => {
+    // Relu quand la place ou un montant change.
+    void largeurTotaux;
+    void total?.montant;
+    void synthese?.reserve;
+    void synthese?.nonReserve;
+    void tick().then(() => (disposition = choisirDisposition()));
+  });
+  onMount(() => {
+    // Les polices finissent parfois de charger après le premier affichage.
+    void document.fonts?.ready.then(() => (disposition = choisirDisposition()));
+  });
   const TEINTES: Teinte[] = ['sauge', 'peche', 'lilas', 'rose', 'beurre'];
   const reservesDuCompte = (id: string) => (donnees ? vueReserves(donnees, id, jour) : null);
   const contexte = (v: VueCompte) => `${v.nom} · valeur suivie ${v.valeur}`;
@@ -661,7 +695,7 @@
     <div class="mise-en-page">
     <div class="loutre" data-testid="illustration-epargne"><Illustration nom="loutre-epargne" largeur={1672} hauteur={941} /></div>
     {#if total && synthese}
-      <div class="synthese bandeau-prune" data-testid="total-epargne">
+      <div class="synthese bandeau-prune {disposition}" data-testid="total-epargne" data-disposition={disposition} bind:this={bandeauTotaux} bind:clientWidth={largeurTotaux}>
         <div class="kpi principal-kpi">
           <span class="etiquette">Total suivi</span>
           <span class="kpi-montant">{total.montant ?? 'À compléter'}</span>
@@ -802,7 +836,6 @@
   .synthese {
     grid-area: totaux;
     display: grid;
-    grid-template-columns: 1.3fr 1fr 1fr;
     row-gap: var(--espace-3);
     column-gap: var(--espace-6);
     align-items: center;
@@ -811,11 +844,43 @@
     margin: 0 0 var(--espace-6);
     padding: var(--espace-4) var(--espace-8);
   }
+  /* Jamais plus étroit que son montant : le montant n'est jamais coupé. */
+  .synthese .kpi-montant {
+    align-self: flex-start;
+    white-space: nowrap;
+  }
   .synthese .notes {
     grid-column: 1 / -1;
   }
-  .synthese .kpi:nth-child(3) {
+  .synthese.ligne {
+    grid-template-columns: minmax(min-content, 1.3fr) minmax(min-content, 1fr) minmax(min-content, 1fr);
+  }
+  .synthese.ligne .kpi:nth-child(3) {
     border-right: none;
+  }
+  .synthese.deux-lignes {
+    grid-template-columns: minmax(min-content, 1fr) minmax(min-content, 1fr);
+  }
+  .synthese.deux-lignes .kpi:first-child {
+    grid-column: 1 / -1;
+    border-right: none;
+  }
+  .synthese.deux-lignes .kpi:nth-child(3) {
+    border-right: none;
+  }
+  .synthese.colonne {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .synthese.colonne .kpi {
+    border-right: none;
+    padding-right: 0;
+  }
+  /* Dernier recours (montant plus large que tout le bandeau) : il passe à la
+     ligne plutôt que d'être coupé. */
+  .synthese.colonne .kpi-montant {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    max-width: 100%;
   }
   @media (max-width: 1180px) {
     .mise-en-page {
@@ -824,15 +889,6 @@
     }
     .loutre {
       max-width: 520px;
-    }
-    .synthese {
-      grid-template-columns: 1.4fr 1fr 1fr 2fr;
-    }
-    .synthese .notes {
-      grid-column: auto;
-    }
-    .synthese .kpi:nth-child(3) {
-      border-right: 2px solid color-mix(in srgb, var(--couleur-bandeau-texte) 25%, transparent);
     }
   }
   .kpi {
